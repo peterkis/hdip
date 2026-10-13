@@ -173,7 +173,7 @@
 - 关闭运营关系或停用院区时，若仍有在用单元依赖它，阻止确认并列出受影响单元，须先对这些单元重新绑定或退出。
 - 必填项范围：首版只对名称等核心项必填，其余以字段矩阵为准逐步收紧。
 - 后端语言：Python（FastAPI），见第 11 节。
-- ReUI 组件采用 Radix 版本，全项目统一。
+- 组件底层采用 Base UI（shadcn 风格 base-mira，图标 hugeicons），全项目统一；ReUI 组件同样选 Base UI 版本。（2026-10-13 由 Radix 改为 Base UI）
 
 **时间与时区**：本应用只在一个小地域使用，所有日期和时间都按本地时间处理，不引入时区。日期用 date，时间戳用 timestamp without time zone，不使用 timestamptz，前后端统一。写入时间由数据库取本地当前时间（LOCALTIMESTAMP）；为避免数据库主机系统时区设成 UTC 而写错，应用连接数据库时固定使用本地时区（配置项 HDIP\_TIMEZONE，默认 Asia/Shanghai），这只决定“现在是几点”，存进去的值仍不带时区。
 
@@ -184,7 +184,7 @@
 | 层 | 选型 | 说明 |
 | --- | --- | --- |
 | 前端 | React + TypeScript + Vite（单页应用，无 SSR） | 内网管理端，不需要服务端渲染 |
-| UI | ReUI（Radix 版本）+ Tailwind CSS | ReUI 是 shadcn/ui 生态的开源组件注册表，组件按需复制进项目，无运行时依赖；可直接用其 Data Grid、Filters、Date Selector |
+| UI | shadcn/ui（Base UI 版本，base-mira 风格）+ ReUI + Tailwind CSS | 组件按需复制进项目，无运行时依赖；需要时可用 ReUI 的 Data Grid、Filters、Date Selector（Base UI 版本） |
 | 数据请求 | TanStack Query | 查看日期作为查询键的一部分；确认后使相关查询失效重取 |
 | 后端 | Python + FastAPI + Pydantic v2 | 沿用已有的 FastAPI 经验 |
 | 数据访问 | SQLAlchemy 2.0 + Alembic | 原生支持日期范围类型与排他约束；约束和索引在迁移里手写 SQL |

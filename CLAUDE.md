@@ -8,6 +8,8 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
+- **进度**：第 ① 步已完成（剧本 1 有后端测试 `api/tests/test_script1.py`，并在浏览器里走通）。下一步是第 ②。
+- 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
 - 业务尚不明确、随时可能调整：优先小而可改的实现，不做提前抽象。
 
@@ -26,11 +28,13 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 ## 写入只经变更申请
 
-- 状态：草稿 → 已提交 → 已确认（生效）/ 已退回。提交与确认是两次独立动作，各自记录人和时间。
+- 状态：草稿 → 已提交 → 已确认（生效）/ 已退回；草稿和已提交可由创建人**撤销**（因为无物理删除）。已确认、已退回、已撤销是终态，数据库触发器禁止再改；退回或撤销的申请可“复制为新草稿”。提交与确认是两次独立动作，各自记录人和时间。
 - 一张申请可含多项变更，确认时在**一个事务**里全部应用，失败整体回滚（拆分、合并、“新建部门 + 新建服务单元”都靠它）。
 - 不提供“创建即生效”的捷径，**初始导入也是一张批量申请**，确认一次。
-- 同一人可提交并确认（`HDIP_ALLOW_SELF_CONFIRM`，默认开），但确认这一步不能省。
-- 确认时重新校验，校验不过不能确认；退回必须写原因。确认页展示前后差异。
+- 同一人可提交并确认（`approval_rule.allow_self_confirm`，默认开），但确认这一步不能省。
+- 提交前、确认页、确认时用同一段代码（`services/apply.py`）：提交与查看时在 SAVEPOINT 里预演再回滚，确认时真正写入；校验不过不能提交/确认。退回必须写原因。
+- 变更项按 `kind` 区分（`schemas/items.py`，如 `campus.create`、`operator_relation.close`）。对象之间**用 code 引用**，所以同一张申请里后一项可引用前一项新建的对象；运营关系无 code，关闭时用 id。新增一种变更 = 加 schema + `HANDLERS` 里的处理函数 + `approval_rule` 种子 + 测试。
+- 数据库拒绝时由 `CONSTRAINT_MESSAGES` 把约束名翻译成中文。新约束请显式命名并补上翻译。
 - API 只暴露“创建/提交/确认/退回申请”和只读查询，**不提供业务表的直接增改接口**。
 - 前后内容存 JSONB。确认规则（谁能确认哪类变更）按对象类型 × 动作配置在 `approval_rule`，改规则不改代码。
 
@@ -38,10 +42,13 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - 统一称**“部门”**，不用“科室”。服务单元必须挂所属部门；单元只引用部门 id，不复制部门名称。
 - 部门 MVP 无版本表，改动记录在变更申请里（为将来补版本表回填）；状态预留“弃用”“被替代”。
-- 运营关系：每行自带期间，端点（主体、院区）不可改；调整 = 关闭旧行 + 新建行。同一院区在重叠期间最多一个主要运营方，且只有“运营”类型可为主要运营方。
+- 运营关系：每行自带期间，端点（主体、院区）不可改；调整 = 关闭旧行 + 新建行。同一院区在重叠期间最多一个主要运营方，且只有“运营”类型可为主要运营方。关系类型码：`OPERATE/REGISTER/MANAGE/CHARGE`。
+- 院区运营状态码沿用旧仓库：`PLANNING`（筹建）→ `TRIAL_RUNNING`（试运行）→ `RUNNING`（运行）→ `SUSPENDED`（停用），只能前进，停用后不可恢复。节点角色在 `option_item`（`campus_node_role`：`HEADQUARTERS/HIGH_TECH/CITY_CENTER`）。
+- 修订只作用于最新版本，生效日须晚于其开始日；内容无变化的修订被拒绝。修订项只写改动的字段，写 `null` 表示清空。
+- 版本表、身份表、运营关系由触发器 `hdip_guard_update` 保护：只允许把 `valid_to` 从空设为某日（关系另可写关闭信息），其余一律不可改。
 - 服务单元每个版本须满足：所属部门在用；院区非停用；运营主体与该院区有覆盖整个单元期间的“运营”关系。
 - 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。
-- 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元。
+- 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元（第 ② 步在 `apply.py` 中标注“第 2 步补”的两处实现）。
 - 拆分/合并：旧单元退出，后继用新身份新代码，写 `service_unit_lineage`。
 - 为将来守住：部门上不写院区和管理方式；名称与代码不拼院区；单元代码不由“部门代码 + 院区”拼出；管理归属与核算归属分开。
 
@@ -52,17 +59,24 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 ## 技术栈与目录
 
 ```
-api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv 管理
+api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv 管理，Python 版本见 api/.python-version
   src/hdip_api/
-    core/           配置（HDIP_ 前缀环境变量）、数据库连接
-    routes/         路由，前缀 /api
+    core/           配置（HDIP_ 前缀环境变量）、数据库连接、错误、开发期身份
+    models.py       ORM 映射（表结构以迁移为准）
+    schemas/        items.py 变更项；read.py 查询与申请的响应
+    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询
+    routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口
   scripts/export_openapi.py   导出 web/openapi.json
-  tests/            pytest，需要可连的 PostgreSQL
+  tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
 migrations/         Alembic 迁移（api/alembic.ini 指向这里），约束与索引手写 SQL
 db/init/            docker 首次初始化：建 hdip_app 角色（无 DELETE）
-web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query
-  src/api/fetcher.ts          orval 统一请求函数
+web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query + React Router
+  src/api/fetcher.ts          orval 统一请求函数（带 X-HDIP-User，出错抛 ApiError）
   src/api/generated/          orval 生成，禁止手改
+  src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改
+  src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿
+  src/pages/                  院区、主体、变更申请页面
+  src/lib/                    码值中文名（format.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档
 ```
 
@@ -70,7 +84,8 @@ docs/               设计文档
 - 迁移用 `hdip_owner` 执行（`HDIP_MIGRATION_DATABASE_URL`），应用用 `hdip_app`（`HDIP_DATABASE_URL`）。新表的权限依赖 `ALTER DEFAULT PRIVILEGES`，所以**新表必须由 `hdip_owner` 创建**。
 - 契约链路：改后端接口 → `make gen` →（导出 OpenAPI + orval 生成）→ 前端用生成的 `useXxx` hooks。每个路由写明 `operation_id`，生成的 hook 名由它决定。
 - “查看日期”作为 TanStack Query 查询键的一部分；确认申请后使相关查询失效重取。
-- UI 组件用 ReUI（**Radix 版本**，全项目统一）+ shadcn/ui 体系，组件按需复制进 `web/src/components/`。尚未初始化：首次需要组件时在 `web/` 下执行 `npx shadcn@latest init`（选 Radix），再在 `components.json` 的 `registries` 加 `"@reui": "https://reui.io/r/{style}/{name}.json"`，用 `npx shadcn@latest add @reui/<name>` 添加。路径别名 `@/` → `web/src/`，`cn()` 在 `src/lib/utils.ts`。
+- UI 组件用 shadcn/ui 的 **Base UI 版本**（`components.json`：style `base-mira`，图标 hugeicons），全项目统一。加组件：在 `web/` 下 `npx shadcn@latest add <name>`。Base UI 组件用 `render` 属性替换元素（不是 Radix 的 `asChild`）。主题变量在 `src/index.css`。需要 ReUI 组件时选 Base UI 版本：在 `components.json` 的 `registries` 加 `"@reui": "https://reui.io/r/{style}/{name}.json"` 后 `npx shadcn@latest add @reui/<name>`（先确认 ReUI 是否提供 base-mira 风格）。路径别名 `@/` → `web/src/`，`cn()` 在 `src/lib/utils.ts`。
+- 表单弹窗只在打开时挂载（`{open && <XxxDialog open … />}`），关闭即丢弃状态。
 - 界面文案用中文；代码标识符用英文，与设计文档第 3 节表名一致（`institution`、`campus`、`operator_relation`、`department`、`service_unit`、`service_unit_lineage`、`change_request`、`option_item`、`approval_rule`）。
 
 ## 常用命令
@@ -85,8 +100,9 @@ make test      # 后端测试
 make check     # ruff + 前端类型检查
 ```
 
-首次：`cp .env.example .env`，`cd api && uv sync`，`cd web && npm install`。
+首次：`cp .env.example .env`，`cd api && uv sync`（uv 按 `.python-version` 自动装 Python 3.13），`cd web && npm install`。拉取新迁移后执行 `make migrate`。
 
 ## 待确认
 
-- 认证与用户来源：默认 MVP 用最简本地账号 + 三个角色（维护人、确认人、只读），预留对接内网门户登录。实现前先和维护者确认。
+- 认证与用户来源：目前是**开发期身份**——前端在请求头 `X-HDIP-User` 带用户名，后端只认 `app_user` 里启用的用户（种子：solo 维护+确认、maintainer、confirmer、viewer）。这不是安全措施。正式方案（本地账号或内网门户登录）确定后只替换 `api/src/hdip_api/core/auth.py` 与 `web/src/lib/session.ts`。
+- 主体性质目前是自由文本（旧仓库为“按登记证照确认”），是否改为选项待定。

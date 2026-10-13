@@ -7,7 +7,7 @@
 
 ## 快速开始
 
-需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+。
+需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+。Python 版本由 uv 按 `api/.python-version`（3.13）自动安装，无需另装。
 
 ```bash
 cp .env.example .env

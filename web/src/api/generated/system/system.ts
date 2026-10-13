@@ -45,18 +45,6 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export type getHealthResponse200 = {
-  data: Health
-  status: 200
-}
-
-export type getHealthResponseSuccess = (getHealthResponse200) & {
-  headers: Headers;
-};
-;
-
-export type getHealthResponse = (getHealthResponseSuccess)
-
 export const getGetHealthUrl = () => {
 
 
@@ -68,9 +56,9 @@ export const getGetHealthUrl = () => {
 /**
  * @summary Health
  */
-export const getHealth = async ( options?: Parameters<typeof hdipFetch>[1]): Promise<getHealthResponse> => {
+export const getHealth = async ( options?: Parameters<typeof hdipFetch>[1]): Promise<Health> => {
 
-  return hdipFetch<getHealthResponse>(getGetHealthUrl(),
+  return hdipFetch<Health>(getGetHealthUrl(),
   {
     ...options,
     method: 'GET'

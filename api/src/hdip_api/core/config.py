@@ -17,8 +17,6 @@ class Settings(BaseSettings):
     migration_database_url: str = "postgresql+psycopg://hdip_owner:hdip_owner@localhost:5432/hdip"
     # 只决定数据库会话里“现在是几点”（LOCALTIMESTAMP），存储的值仍不带时区。
     timezone: str = "Asia/Shanghai"
-    # 允许同一人提交并确认（设计文档第 4 节，默认开）。
-    allow_self_confirm: bool = True
     cors_origins: list[str] = ["http://localhost:5173"]
 
 

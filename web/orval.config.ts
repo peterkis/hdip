@@ -14,6 +14,8 @@ export default defineConfig({
       clean: true,
       override: {
         mutator: { path: './src/api/fetcher.ts', name: 'hdipFetch' },
+        // 直接返回响应体；出错时 hdipFetch 抛 ApiError，不进入 data
+        fetch: { includeHttpResponseReturnType: false },
       },
     },
   },
