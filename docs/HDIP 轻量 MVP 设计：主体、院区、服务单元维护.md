@@ -188,7 +188,7 @@
 | 数据请求 | TanStack Query | 查看日期作为查询键的一部分；确认后使相关查询失效重取 |
 | 后端 | Python + FastAPI + Pydantic v2 | 沿用已有的 FastAPI 经验 |
 | 数据访问 | SQLAlchemy 2.0 + Alembic | 原生支持日期范围类型与排他约束；约束和索引在迁移里手写 SQL |
-| 数据库 | PostgreSQL | 排他约束、部分唯一索引、事务 |
+| 数据库 | PostgreSQL 18 | 排他约束、部分唯一索引、事务 |
 | 接口契约 | FastAPI 自动生成 OpenAPI，再用 orval 生成 TypeScript 类型与 TanStack Query hooks | 前后端语言不同，靠契约生成保持一致 |
 
 **为什么后端选 Python 而不是 Node**

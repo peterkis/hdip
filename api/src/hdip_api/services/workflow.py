@@ -14,6 +14,13 @@ from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
 
 ROLE_LABELS = {"maintainer": "维护人", "confirmer": "确认人", "viewer": "只读"}
+STATUS_LABELS = {
+    "draft": "草稿",
+    "submitted": "已提交",
+    "confirmed": "已确认",
+    "returned": "已退回",
+    "cancelled": "已撤销",
+}
 
 
 def parse_items(cr: ChangeRequest) -> list[ChangeItem]:
@@ -38,7 +45,7 @@ def get_for_update(s: Session, change_id: int) -> ChangeRequest:
 
 def _require_status(cr: ChangeRequest, *statuses: str) -> None:
     if cr.status not in statuses:
-        raise BusinessError(f"当前状态为 {cr.status}，不能执行此操作", 409)
+        raise BusinessError(f"当前状态为“{STATUS_LABELS[cr.status]}”，不能执行此操作", 409)
 
 
 def _require_creator(cr: ChangeRequest, user: AppUser) -> None:
@@ -47,20 +54,34 @@ def _require_creator(cr: ChangeRequest, user: AppUser) -> None:
 
 
 # ------------------------------------------------------------------ 确认权限
+def _rules_for(s: Session, cr: ChangeRequest) -> list[tuple[str, ApprovalRule | None]]:
+    kinds = sorted({i["kind"] for i in cr.items})
+    rules = {f"{r.object_type}.{r.action}": r for r in s.scalars(select(ApprovalRule)).all()}
+    return [(kind, rules.get(kind)) for kind in kinds]
+
+
 def confirm_block_reason(s: Session, cr: ChangeRequest, user: AppUser) -> str | None:
     """返回 None 表示该用户可以确认；否则返回原因。"""
     if cr.status != "submitted":
         return "只有已提交的申请可以确认"
-    kinds = {i["kind"] for i in cr.items}
-    rules = {f"{r.object_type}.{r.action}": r for r in s.scalars(select(ApprovalRule)).all()}
-    for kind in sorted(kinds):
-        rule = rules.get(kind)
+    for _kind, rule in _rules_for(s, cr):
         role = rule.confirmer_role if rule else "confirmer"
         if role not in user.roles:
             return f"需要{ROLE_LABELS[role]}角色才能确认"
         allow_self = rule.allow_self_confirm if rule else True
         if not allow_self and cr.submitted_by == user.id:
             return "该类变更不允许提交人自己确认，请由其他确认人确认"
+    return None
+
+
+def return_block_reason(s: Session, cr: ChangeRequest, user: AppUser) -> str | None:
+    """退回与确认看同一份 approval_rule：有权确认该类变更的角色才能退回（不受自确认开关限制）。"""
+    if cr.status != "submitted":
+        return "只有已提交的申请可以退回"
+    for _kind, rule in _rules_for(s, cr):
+        role = rule.confirmer_role if rule else "confirmer"
+        if role not in user.roles:
+            return f"需要{ROLE_LABELS[role]}角色才能退回"
     return None
 
 
@@ -123,8 +144,9 @@ def confirm(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
 def return_request(s: Session, user: AppUser, change_id: int, reason: str) -> ChangeRequest:
     cr = get_for_update(s, change_id)
     _require_status(cr, "submitted")
-    if "confirmer" not in user.roles:
-        raise Forbidden("需要确认人角色才能退回")
+    reason_blocked = return_block_reason(s, cr, user)
+    if reason_blocked:
+        raise Forbidden(reason_blocked)
     reason = (reason or "").strip()
     if not reason:
         raise BusinessError("退回必须写原因")

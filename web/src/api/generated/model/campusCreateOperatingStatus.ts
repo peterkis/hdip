@@ -12,5 +12,4 @@ export const CampusCreateOperatingStatus = {
   PLANNING: 'PLANNING',
   TRIAL_RUNNING: 'TRIAL_RUNNING',
   RUNNING: 'RUNNING',
-  SUSPENDED: 'SUSPENDED',
 } as const;

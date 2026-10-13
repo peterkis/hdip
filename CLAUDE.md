@@ -45,7 +45,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 运营关系：每行自带期间，端点（主体、院区）不可改；调整 = 关闭旧行 + 新建行。同一院区在重叠期间最多一个主要运营方，且只有“运营”类型可为主要运营方。关系类型码：`OPERATE/REGISTER/MANAGE/CHARGE`。
 - 院区运营状态码沿用旧仓库：`PLANNING`（筹建）→ `TRIAL_RUNNING`（试运行）→ `RUNNING`（运行）→ `SUSPENDED`（停用），只能前进，停用后不可恢复。节点角色在 `option_item`（`campus_node_role`：`HEADQUARTERS/HIGH_TECH/CITY_CENTER`）。
 - 修订只作用于最新版本，生效日须晚于其开始日；内容无变化的修订被拒绝。修订项只写改动的字段，写 `null` 表示清空。
-- 版本表、身份表、运营关系由触发器 `hdip_guard_update` 保护：只允许把 `valid_to` 从空设为某日（关系另可写关闭信息），其余一律不可改。
+- 版本表、身份表、运营关系由触发器 `hdip_guard_update` 保护：只允许把 `valid_to` 从空设为某日（关系另可在同一次 UPDATE 里写关闭信息），结束后整行不可再改。
 - 服务单元每个版本须满足：所属部门在用；院区非停用；运营主体与该院区有覆盖整个单元期间的“运营”关系。
 - 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。
 - 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元（第 ② 步在 `apply.py` 中标注“第 2 步补”的两处实现）。
@@ -69,7 +69,8 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
   scripts/export_openapi.py   导出 web/openapi.json
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
 migrations/         Alembic 迁移（api/alembic.ini 指向这里），约束与索引手写 SQL
-db/init/            docker 首次初始化：建 hdip_app 角色（无 DELETE）
+db/local-setup.sh   本机 PostgreSQL 18 建 hdip_owner/hdip_app 与库（make db-init）
+db/init/            备选 docker（make db-docker）首次初始化：建 hdip_app 角色
 web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query + React Router
   src/api/fetcher.ts          orval 统一请求函数（带 X-HDIP-User，出错抛 ApiError）
   src/api/generated/          orval 生成，禁止手改
@@ -91,7 +92,8 @@ docs/               设计文档
 ## 常用命令
 
 ```bash
-make db        # 启动 PostgreSQL 16（docker compose）
+make db        # 启动本机 PostgreSQL 18（brew services）
+make db-init   # 首次：按 .env 建账号与 hdip 库（只动 hdip 相关对象）
 make migrate   # alembic upgrade head
 make api       # 后端 http://localhost:8000（/docs 查看接口）
 make web       # 前端 http://localhost:5173（/api 代理到后端）
@@ -100,7 +102,7 @@ make test      # 后端测试
 make check     # ruff + 前端类型检查
 ```
 
-首次：`cp .env.example .env`，`cd api && uv sync`（uv 按 `.python-version` 自动装 Python 3.13），`cd web && npm install`。拉取新迁移后执行 `make migrate`。
+首次：`cp .env.example .env` 并改密码，`make db && make db-init`，`cd api && uv sync`（uv 按 `.python-version` 自动装 Python 3.13），`cd web && npm install`。拉取新迁移后执行 `make migrate`。
 
 ## 待确认
 

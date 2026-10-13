@@ -250,3 +250,68 @@ def test_audit_timestamps_have_no_timezone(api):
     cr = api.apply(inst_create())
     for key in ("created_at", "submitted_at", "confirmed_at"):
         assert "+" not in cr[key] and not cr[key].endswith("Z")
+
+
+# ------------------------------------------------------------------ 第 ① 步复查后补的反例
+def test_relation_close_info_written_once(api, app_engine):
+    api.apply(inst_create(), campus_create(), relation_create())
+    rel_id = api.get("/api/operator-relations", params={"as_of": "2026-10-01"}).json()[0]["id"]
+    api.apply({"kind": "operator_relation.close", "relation_id": rel_id, "valid_to": "2026-12-31"})
+    with app_engine.connect() as c:
+        for sql in (
+            "UPDATE operator_relation SET closed_by = closed_by + 1",
+            "UPDATE operator_relation SET closed_at = closed_at + interval '1 day'",
+            "UPDATE operator_relation SET valid_to = '2027-01-31'",
+        ):
+            with pytest.raises(DBAPIError, match="不可修改|只能在结束时写入一次"):
+                c.execute(text(sql))
+            c.rollback()
+
+
+def test_open_relation_close_info_needs_valid_to(api, app_engine):
+    api.apply(inst_create(), campus_create(), relation_create())
+    with app_engine.connect() as c:
+        with pytest.raises(DBAPIError, match="只能在结束时写入一次"):
+            c.execute(text("UPDATE operator_relation SET closed_at = LOCALTIMESTAMP"))
+        c.rollback()
+
+
+def test_campus_cannot_be_created_suspended(api):
+    r = api.post("/api/change-requests", {"items": [campus_create(status="SUSPENDED")]})
+    assert r.status_code == 422
+
+
+def test_return_follows_approval_rule(api, owner_engine):
+    with owner_engine.begin() as c:
+        c.execute(
+            text(
+                "UPDATE approval_rule SET confirmer_role = 'maintainer' "
+                "WHERE object_type = 'institution' AND action = 'create'"
+            )
+        )
+    try:
+        cr = api.as_("maintainer").draft(inst_create())
+        api.as_("maintainer").submit(cr["id"])
+        got = api.as_("maintainer").get(f"/api/change-requests/{cr['id']}").json()
+        assert got["permissions"]["can_return"] is True
+        assert (
+            api.as_("confirmer")
+            .get(f"/api/change-requests/{cr['id']}")
+            .json()["permissions"]["can_return"]
+            is False
+        )
+        r = api.as_("confirmer").post(f"/api/change-requests/{cr['id']}/return", {"reason": "x"})
+        assert r.status_code == 403
+        r = api.as_("maintainer").post(f"/api/change-requests/{cr['id']}/return", {"reason": "x"})
+        assert r.json()["status"] == "returned"
+    finally:
+        with owner_engine.begin() as c:
+            c.execute(text("UPDATE approval_rule SET confirmer_role = 'confirmer'"))
+
+
+def test_status_error_message_is_chinese(api):
+    cr = api.draft(inst_create())
+    api.post(f"/api/change-requests/{cr['id']}/cancel")
+    r = api.submit(cr["id"])
+    assert r.status_code == 409
+    assert "已撤销" in r.json()["message"]

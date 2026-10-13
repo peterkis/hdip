@@ -1,7 +1,12 @@
 // 各类变更的表单。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
 import { useState } from 'react'
 import { useListCampuses, useListInstitutions } from '@/api/generated/master/master'
-import type { CampusVersionOut, InstitutionVersionOut, RelationOut } from '@/api/generated/model'
+import type {
+  CampusCreateOperatingStatus,
+  CampusVersionOut,
+  InstitutionVersionOut,
+  RelationOut,
+} from '@/api/generated/model'
 import { diffPatch, orNull, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
 import { useApp } from '@/lib/app-context'
@@ -189,7 +194,7 @@ const statusOptions = (from = 0) =>
 export function CampusCreateDialog(props: DialogProps) {
   const [code, setCode] = useState('')
   const [f, setF] = useState(toCampusForm())
-  const [status, setStatus] = useState<OperatingStatus>('PLANNING')
+  const [status, setStatus] = useState<CampusCreateOperatingStatus>('PLANNING')
   const [validFrom, setValidFrom] = useEffectiveDate()
   return (
     <ItemDialog
@@ -214,7 +219,7 @@ export function CampusCreateDialog(props: DialogProps) {
         label="初始运营状态"
         required
         value={status}
-        onChange={(v) => setStatus(v as OperatingStatus)}
+        onChange={(v) => setStatus(v as CampusCreateOperatingStatus)}
         options={statusOptions().slice(0, 3)}
       />
       <TextField label="生效日期" type="date" required value={validFrom} onChange={setValidFrom} />

@@ -1598,8 +1598,7 @@
             "enum": [
               "PLANNING",
               "TRIAL_RUNNING",
-              "RUNNING",
-              "SUSPENDED"
+              "RUNNING"
             ],
             "title": "Operating Status",
             "default": "PLANNING"

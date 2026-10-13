@@ -326,10 +326,12 @@ def _relation_close(ctx: Ctx, item: OperatorRelationClose) -> dict:
         raise ItemError(f"结束日不能早于开始日 {rel.valid_from.isoformat()}", "valid_to")
     # 第 2 步补：若仍有在用服务单元依赖该运营关系，阻止并列出（设计文档第 5 节阻止规则）。
     before = relation_snapshot(rel)
+    now = s.scalar(select(func.localtimestamp()))
+    # 结束日与关闭信息须在同一次 UPDATE 里写入（hdip_guard_update 只允许写一次）
     rel.valid_to = item.valid_to
     rel.closed_change_id = ctx.change_id
     rel.closed_by = ctx.user_id
-    rel.closed_at = s.scalar(select(func.localtimestamp()))
+    rel.closed_at = now
     s.flush()
     inst = s.get(Institution, rel.institution_id)
     campus = s.get(Campus, rel.campus_id)

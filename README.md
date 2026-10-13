@@ -7,11 +7,12 @@
 
 ## 快速开始
 
-需要 Docker、[uv](https://docs.astral.sh/uv/)、Node.js 20+。Python 版本由 uv 按 `api/.python-version`（3.13）自动安装，无需另装。
+需要 PostgreSQL 18（`brew install postgresql@18`）、[uv](https://docs.astral.sh/uv/)、Node.js 20+。Python 版本由 uv 按 `api/.python-version`（3.13）自动安装，无需另装。
 
 ```bash
-cp .env.example .env
-make db                      # PostgreSQL 16
+cp .env.example .env         # 改成自己的密码
+make db                      # 启动本机 PostgreSQL 18
+make db-init                 # 建 hdip 账号与库，不动已有库
 cd api && uv sync && cd ..
 make migrate
 cd web && npm install && cd ..

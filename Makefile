@@ -1,6 +1,15 @@
-.PHONY: db migrate api web gen test check
+.PHONY: db db-init db-docker migrate api web gen test check
 
+# 本机 Homebrew PostgreSQL 18
 db:
+	brew services start postgresql@18
+
+# 首次：按 .env 建 hdip_owner / hdip_app 账号和 hdip 库（可重复执行，不动其他库）
+db-init:
+	./db/local-setup.sh
+
+# 备选：有 Docker 时用容器里的 PostgreSQL 18（账号由 db/init/ 初始化）
+db-docker:
 	docker compose up -d db
 
 migrate:

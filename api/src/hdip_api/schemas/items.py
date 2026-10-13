@@ -17,6 +17,8 @@ Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 OperatingStatus = Literal["PLANNING", "TRIAL_RUNNING", "RUNNING", "SUSPENDED"]
+# 新建院区只能从筹建、试运行或运行开始；停用只能经“变更运营状态”到达
+InitialOperatingStatus = Literal["PLANNING", "TRIAL_RUNNING", "RUNNING"]
 RelationType = Literal["OPERATE", "REGISTER", "MANAGE", "CHARGE"]
 
 OPERATING_STATUS_ORDER: dict[str, int] = {
@@ -119,7 +121,7 @@ class CampusCreate(_Item):
     kind: Literal["campus.create"]
     code: Code
     valid_from: date
-    operating_status: OperatingStatus = "PLANNING"
+    operating_status: InitialOperatingStatus = "PLANNING"
     fields: CampusFields
 
 

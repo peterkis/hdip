@@ -295,7 +295,7 @@ def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
             can_edit=cr.status == "draft" and is_creator,
             can_submit=cr.status == "draft" and is_creator and is_maintainer and not problems,
             can_confirm=cr.status == "submitted" and block is None and not problems,
-            can_return=cr.status == "submitted" and "confirmer" in user.roles,
+            can_return=workflow.return_block_reason(s, cr, user) is None,
             can_cancel=cr.status in ("draft", "submitted") and is_creator,
             can_copy=cr.status in ("returned", "cancelled") and is_maintainer,
             confirm_hint=block if cr.status == "submitted" else None,
