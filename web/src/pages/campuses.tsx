@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useGetCampus, useListCampuses } from '@/api/generated/master/master'
+import { useGetCampus, useListCampuses, useListServiceUnits } from '@/api/generated/master/master'
 import type { CampusVersionOut } from '@/api/generated/model'
 import { OperatingStatusBadge } from '@/components/badges'
 import {
@@ -10,19 +10,21 @@ import {
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
 import { PageHeader } from '@/components/layout'
+import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { RelationsTable } from '@/components/relations-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { FIELD_LABELS, formatValue, period, type OperatingStatus } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
 
 export function CampusesPage() {
-  const { asOf, nodeRoles } = useApp()
+  const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListCampuses({ as_of: asOf })
   const [creating, setCreating] = useState(false)
@@ -72,7 +74,7 @@ export function CampusesPage() {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell>{formatValue('node_role', r.version.node_role, nodeRoles)}</TableCell>
+                <TableCell>{formatValue('node_role', r.version.node_role, optionLabels)}</TableCell>
                 <TableCell>
                   <OperatingStatusBadge status={r.version.operating_status} />
                 </TableCell>
@@ -100,10 +102,11 @@ const CAMPUS_FIELDS: (keyof CampusVersionOut)[] = [
 
 export function CampusDetailPage() {
   const id = Number(useParams().id)
-  const { asOf, nodeRoles } = useApp()
+  const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
   const { data } = useGetCampus(id, { as_of: asOf })
-  const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | null>(null)
+  const { data: units = [] } = useListServiceUnits({ as_of: asOf, campus_id: id })
+  const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | 'unit' | null>(null)
   if (!data) return null
 
   const latest = data.versions[0]
@@ -150,13 +153,34 @@ export function CampusDetailPage() {
                 {CAMPUS_FIELDS.map((k) => (
                   <div key={k}>
                     <dt className="text-muted-foreground">{FIELD_LABELS[k]}</dt>
-                    <dd>{formatValue(k, onDay[k], nodeRoles)}</dd>
+                    <dd>{formatValue(k, onDay[k], optionLabels)}</dd>
                   </div>
                 ))}
               </dl>
             ) : (
               <p className="text-muted-foreground text-xs">该日期没有有效版本，最早版本自 {data.versions.at(-1)?.valid_from} 起。</p>
             )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              服务单元（{asOf}）
+              <span className="text-muted-foreground ml-2 font-normal">
+                该院区有哪些部门 = 这些单元按所属部门去重：
+                {[...new Set(units.filter((u) => !u.not_yet_effective).map((u) => u.version.department_name))].join('、') || '无'}
+              </span>
+            </CardTitle>
+            {isMaintainer && latest.operating_status !== 'SUSPENDED' && (
+              <CardAction>
+                <Button size="sm" variant="outline" onClick={() => setDialog('unit')}>
+                  新建服务单元
+                </Button>
+              </CardAction>
+            )}
+          </CardHeader>
+          <CardContent>
+            <UnitsTable rows={units} hide={['campus']} />
           </CardContent>
         </Card>
         <Card>
@@ -186,6 +210,7 @@ export function CampusDetailPage() {
         />
       )}
       {dialog === 'relation' && <RelationCreateDialog open onOpenChange={close} campusCode={data.code} />}
+      {dialog === 'unit' && <UnitCreateDialog open onOpenChange={close} campusCode={data.code} />}
     </>
   )
 }

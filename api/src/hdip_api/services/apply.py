@@ -7,7 +7,7 @@
 数据库拒绝时把约束名翻译成中文（见 CONSTRAINT_MESSAGES）。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -19,10 +19,13 @@ from hdip_api.core.errors import BusinessError, ProblemItem
 from hdip_api.models import (
     Campus,
     CampusVersion,
+    Department,
     Institution,
     InstitutionVersion,
     OperatorRelation,
     OptionItem,
+    ServiceUnit,
+    ServiceUnitVersion,
 )
 from hdip_api.schemas.items import (
     KIND_LABELS,
@@ -31,10 +34,19 @@ from hdip_api.schemas.items import (
     CampusCreate,
     CampusRevise,
     ChangeItem,
+    DepartmentChangeStatus,
+    DepartmentCreate,
+    DepartmentRename,
     InstitutionCreate,
     InstitutionRevise,
     OperatorRelationClose,
     OperatorRelationCreate,
+    ServiceUnitChangeDepartment,
+    ServiceUnitChangeStatus,
+    ServiceUnitCreate,
+    ServiceUnitRebind,
+    ServiceUnitRetire,
+    ServiceUnitRevise,
 )
 
 STATUS_LABELS = {
@@ -44,6 +56,13 @@ STATUS_LABELS = {
     "SUSPENDED": "停用",
 }
 RELATION_LABELS = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
+UNIT_STATUS_LABELS = {"ACTIVE": "在用", "SUSPENDED": "暂停"}
+DEPARTMENT_STATUS_LABELS = {
+    "ACTIVE": "在用",
+    "INACTIVE": "停用",
+    "DEPRECATED": "弃用",
+    "SUPERSEDED": "被替代",
+}
 
 CONSTRAINT_MESSAGES: dict[str, str] = {
     "institution_code_uniq": "主体代码已被使用（含已退出对象），代码永不复用",
@@ -58,6 +77,12 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "operator_relation_primary_operate_check": "只有“运营”类型的关系可以作为主要运营方",
     "operator_relation_period_check": "结束日不能早于开始日",
     "hdip_history_immutable": "历史记录不可修改",
+    "department_code_uniq": "部门代码已被使用（含已停用部门），代码永不复用",
+    "department_code_check": "代码只能包含字母、数字、点、下划线、短横线，且以字母或数字开头",
+    "service_unit_code_uniq": "服务单元代码已被使用（含已退出单元），代码永不复用",
+    "service_unit_code_check": "代码只能包含字母、数字、点、下划线、短横线，且以字母或数字开头",
+    "service_unit_type_check": "单元类型不在既有码值范围内",
+    "service_unit_version_no_overlap": "与该服务单元已有版本的期间重叠",
 }
 
 
@@ -73,6 +98,11 @@ class Ctx:
     session: Session
     change_id: int
     user_id: int
+    index: int = 0
+    # 应用完全部变更项后统一校验服务单元的依赖（见 _check_units）：
+    # 本申请新写的单元版本 id → 项序号；本申请影响到的院区 id → 项序号
+    new_unit_versions: dict[int, int] = field(default_factory=dict)
+    touched_campuses: dict[int, int] = field(default_factory=dict)
 
 
 def _json(value: Any) -> Any:
@@ -255,7 +285,9 @@ def _campus_change_status(ctx: Ctx, item: CampusChangeStatus) -> dict:
             f"运营状态只能按 筹建 → 试运行 → 运行 → 停用 推进，当前为{STATUS_LABELS[old]}",
             "operating_status",
         )
-    # 第 2 步补：停用前若仍有在用服务单元依赖该院区，阻止并列出（设计文档第 5 节阻止规则）。
+    # 停用后若仍有单元依赖该院区，由 _check_units 阻止并列出（设计文档第 5 节阻止规则）
+    if new_status == "SUSPENDED":
+        ctx.touched_campuses[obj.id] = ctx.index
     before = version_snapshot(latest)
     content = {k: getattr(latest, k) for k in CampusVersion.CONTENT}
     content["operating_status"] = new_status
@@ -324,7 +356,9 @@ def _relation_close(ctx: Ctx, item: OperatorRelationClose) -> dict:
         raise ItemError(f"该关系已于 {rel.valid_to.isoformat()} 结束", "relation_id")
     if item.valid_to < rel.valid_from:
         raise ItemError(f"结束日不能早于开始日 {rel.valid_from.isoformat()}", "valid_to")
-    # 第 2 步补：若仍有在用服务单元依赖该运营关系，阻止并列出（设计文档第 5 节阻止规则）。
+    # 关闭后若仍有单元依赖该关系，由 _check_units 阻止并列出（设计文档第 5 节阻止规则）
+    if rel.relation_type == "OPERATE":
+        ctx.touched_campuses[rel.campus_id] = ctx.index
     before = relation_snapshot(rel)
     now = s.scalar(select(func.localtimestamp()))
     # 结束日与关闭信息须在同一次 UPDATE 里写入（hdip_guard_update 只允许写一次）
@@ -342,6 +376,306 @@ def _relation_close(ctx: Ctx, item: OperatorRelationClose) -> dict:
     }
 
 
+# ------------------------------------------------------------------ 部门
+def _department(s: Session, code: str, field_name: str = "code") -> Department:
+    obj = s.scalar(select(Department).where(Department.code == code).with_for_update())
+    if obj is None:
+        raise ItemError(f"部门代码 {code} 不存在", field_name)
+    return obj
+
+
+def department_snapshot(d: Department) -> dict[str, Any]:
+    return {"code": d.code, "name": d.name, "department_status": d.status}
+
+
+def _units_of_department(s: Session, dept_id: int) -> list[str]:
+    """当前及计划中仍挂在该部门下的单元（最新版本未结束）。"""
+    rows = s.execute(
+        select(ServiceUnit.code, ServiceUnitVersion.name)
+        .join(ServiceUnitVersion, ServiceUnitVersion.service_unit_id == ServiceUnit.id)
+        .where(ServiceUnitVersion.department_id == dept_id, ServiceUnitVersion.valid_to.is_(None))
+        .order_by(ServiceUnit.code)
+    )
+    return [f"{code} {name}" for code, name in rows]
+
+
+def _department_create(ctx: Ctx, item: DepartmentCreate) -> dict:
+    s = ctx.session
+    if s.scalar(select(Department.id).where(Department.code == item.code)):
+        raise ItemError(f"部门代码 {item.code} 已被使用，代码永不复用", "code")
+    d = Department(
+        code=item.code,
+        name=item.name,
+        status="ACTIVE",
+        created_change_id=ctx.change_id,
+        last_change_id=ctx.change_id,
+    )
+    s.add(d)
+    s.flush()
+    return {"target": f"部门 {d.code} {d.name}", "before": None, "after": department_snapshot(d)}
+
+
+def _department_touch(ctx: Ctx, d: Department) -> None:
+    d.last_change_id = ctx.change_id
+    d.updated_at = ctx.session.scalar(select(func.localtimestamp()))
+    ctx.session.flush()
+
+
+def _department_rename(ctx: Ctx, item: DepartmentRename) -> dict:
+    d = _department(ctx.session, item.code)
+    if d.name == item.name:
+        raise ItemError("名称没有变化", "name")
+    before = department_snapshot(d)
+    d.name = item.name
+    _department_touch(ctx, d)
+    return {"target": f"部门 {d.code}", "before": before, "after": department_snapshot(d)}
+
+
+def _department_change_status(ctx: Ctx, item: DepartmentChangeStatus) -> dict:
+    d = _department(ctx.session, item.code)
+    if d.status not in ("ACTIVE", "INACTIVE"):
+        raise ItemError(f"部门状态为{DEPARTMENT_STATUS_LABELS[d.status]}，不能停用或恢复")
+    if d.status == item.status:
+        raise ItemError(f"部门已是{DEPARTMENT_STATUS_LABELS[d.status]}", "status")
+    before = department_snapshot(d)
+    d.status = item.status
+    _department_touch(ctx, d)
+    after = department_snapshot(d)
+    if item.status == "INACTIVE":
+        # 只提示不处置：已有单元保留引用（设计文档第 5、8 节）
+        units = _units_of_department(ctx.session, d.id)
+        after["affected_units"] = "、".join(units) if units else None
+    return {"target": f"部门 {d.code} {d.name}", "before": before, "after": after}
+
+
+# ------------------------------------------------------------------ 服务单元
+def _unit(s: Session, code: str) -> ServiceUnit:
+    obj = s.scalar(select(ServiceUnit).where(ServiceUnit.code == code))
+    if obj is None:
+        raise ItemError(f"服务单元代码 {code} 不存在", "code")
+    return obj
+
+
+def _active_department(s: Session, code: str, field_name: str) -> Department:
+    d = _department(s, code, field_name)
+    if d.status != "ACTIVE":
+        label = DEPARTMENT_STATUS_LABELS[d.status]
+        raise ItemError(f"部门 {d.code} {d.name} 已{label}，不能被新建或改挂的单元选用", field_name)
+    return d
+
+
+def _ref(s: Session, finder, code: str, field_name: str):
+    try:
+        return finder(s, code)
+    except ItemError as e:
+        raise ItemError(e.message, field_name) from None
+
+
+def unit_snapshot(s: Session, v: ServiceUnitVersion) -> dict[str, Any]:
+    dept = s.get(Department, v.department_id)
+    campus = s.get(Campus, v.campus_id)
+    inst = s.get(Institution, v.institution_id)
+    campus_v = _version_on(s, CampusVersion, CampusVersion.campus_id, campus.id, v.valid_from)
+    inst_v = _version_on(
+        s, InstitutionVersion, InstitutionVersion.institution_id, inst.id, v.valid_from
+    )
+    unit = s.get(ServiceUnit, v.service_unit_id)
+    return {
+        "version_no": v.version_no,
+        "valid_from": _json(v.valid_from),
+        "valid_to": _json(v.valid_to),
+        "unit_type": unit.unit_type,
+        "name": v.name,
+        "department": f"{dept.code} {dept.name}",
+        "campus": f"{campus.code} {campus_v.name if campus_v else ''}".strip(),
+        "institution": f"{inst.code} {inst_v.name if inst_v else ''}".strip(),
+        "status": v.status,
+        "phone": v.phone,
+        "scope_note": v.scope_note,
+    }
+
+
+def _unit_create(ctx: Ctx, item: ServiceUnitCreate) -> dict:
+    s = ctx.session
+    if s.scalar(select(ServiceUnit.id).where(ServiceUnit.code == item.code)):
+        raise ItemError(f"服务单元代码 {item.code} 已被使用（含已退出单元），代码永不复用", "code")
+    f = item.fields
+    dept = _active_department(s, f.department_code, "fields.department_code")
+    campus = _ref(s, _campus, f.campus_code, "fields.campus_code")
+    inst = _ref(s, _institution, f.institution_code, "fields.institution_code")
+    unit = ServiceUnit(code=item.code, unit_type=item.unit_type, created_change_id=ctx.change_id)
+    s.add(unit)
+    s.flush()
+    v = ServiceUnitVersion(
+        service_unit_id=unit.id,
+        version_no=1,
+        valid_from=item.valid_from,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+        name=f.name,
+        department_id=dept.id,
+        campus_id=campus.id,
+        institution_id=inst.id,
+        status="ACTIVE",
+        phone=f.phone,
+        scope_note=f.scope_note,
+    )
+    s.add(v)
+    s.flush()
+    ctx.new_unit_versions[v.id] = ctx.index
+    return {
+        "target": f"服务单元 {unit.code} {v.name}",
+        "before": None,
+        "after": unit_snapshot(s, v),
+    }
+
+
+def _unit_next(ctx: Ctx, code: str, day: date, patch: dict) -> dict:
+    """服务单元各类调整的共同部分：在 day 生效一个新版本。"""
+    s = ctx.session
+    unit = _unit(s, code)
+    latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+    if latest.valid_to is not None:
+        raise ItemError(f"服务单元已于 {latest.valid_to.isoformat()} 后永久退出，不能再调整")
+    before = unit_snapshot(s, latest)
+    content = {k: getattr(latest, k) for k in ServiceUnitVersion.CONTENT} | patch
+    new = _next_version(ctx, ServiceUnitVersion, "service_unit_id", unit.id, latest, day, content)
+    ctx.new_unit_versions[new.id] = ctx.index
+    return {
+        "target": f"服务单元 {unit.code} {new.name}",
+        "before": before,
+        "after": unit_snapshot(s, new),
+    }
+
+
+def _unit_revise(ctx: Ctx, item: ServiceUnitRevise) -> dict:
+    patch = item.changes.model_dump(exclude_unset=True)
+    return _unit_next(ctx, item.code, item.effective_date, patch)
+
+
+def _unit_rebind(ctx: Ctx, item: ServiceUnitRebind) -> dict:
+    s = ctx.session
+    patch: dict[str, Any] = {}
+    if item.campus_code is not None:
+        patch["campus_id"] = _ref(s, _campus, item.campus_code, "campus_code").id
+    if item.institution_code is not None:
+        inst = _ref(s, _institution, item.institution_code, "institution_code")
+        patch["institution_id"] = inst.id
+    return _unit_next(ctx, item.code, item.effective_date, patch)
+
+
+def _unit_change_department(ctx: Ctx, item: ServiceUnitChangeDepartment) -> dict:
+    dept = _active_department(ctx.session, item.department_code, "department_code")
+    return _unit_next(ctx, item.code, item.effective_date, {"department_id": dept.id})
+
+
+def _unit_change_status(ctx: Ctx, item: ServiceUnitChangeStatus) -> dict:
+    s = ctx.session
+    unit = _unit(s, item.code)
+    latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+    if latest.status == item.status and latest.valid_to is None:
+        raise ItemError(f"服务单元已是{UNIT_STATUS_LABELS[item.status]}", "status")
+    return _unit_next(ctx, item.code, item.effective_date, {"status": item.status})
+
+
+def _unit_retire(ctx: Ctx, item: ServiceUnitRetire) -> dict:
+    s = ctx.session
+    unit = _unit(s, item.code)
+    latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+    if latest.valid_to is not None:
+        raise ItemError(f"服务单元已于 {latest.valid_to.isoformat()} 后永久退出")
+    if item.valid_to < latest.valid_from:
+        raise ItemError(
+            f"最后有效日不能早于当前版本的开始日 {latest.valid_from.isoformat()}", "valid_to"
+        )
+    before = unit_snapshot(s, latest)
+    latest.valid_to = item.valid_to
+    s.flush()
+    return {
+        "target": f"服务单元 {unit.code} {latest.name}",
+        "before": before,
+        "after": unit_snapshot(s, latest),
+    }
+
+
+# ------------------------------------------------------------------ 单元依赖校验
+def _uncovered_from(relations: list[OperatorRelation], start: date, end: date | None):
+    """返回 [start, end] 中第一个没有被这些关系覆盖的日期；全部覆盖返回 None。"""
+    cursor = start
+    for r in sorted(relations, key=lambda r: r.valid_from):
+        if r.valid_from > cursor:
+            break
+        if r.valid_to is None:
+            return None
+        if r.valid_to >= cursor:
+            cursor = r.valid_to + timedelta(days=1)
+        if end is not None and cursor > end:
+            return None
+    return cursor
+
+
+def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
+    """单元版本须满足：院区在整个期间存在且非停用；运营主体与该院区有覆盖整个期间的“运营”关系。"""
+    campus = s.get(Campus, v.campus_id)
+    inst = s.get(Institution, v.institution_id)
+
+    def overlaps(x) -> bool:
+        return (v.valid_to is None or x.valid_from <= v.valid_to) and (
+            x.valid_to is None or x.valid_to >= v.valid_from
+        )
+
+    campus_versions = s.scalars(
+        select(CampusVersion).where(CampusVersion.campus_id == campus.id)
+    ).all()
+    if not any(cv.valid_from <= v.valid_from for cv in campus_versions):
+        return f"院区 {campus.code} 在 {v.valid_from.isoformat()} 尚未生效"
+    for cv in sorted(campus_versions, key=lambda x: x.valid_from):
+        if cv.operating_status == "SUSPENDED" and overlaps(cv):
+            return f"院区 {campus.code} 自 {cv.valid_from.isoformat()} 起停用"
+    relations = s.scalars(
+        select(OperatorRelation).where(
+            OperatorRelation.institution_id == inst.id,
+            OperatorRelation.campus_id == campus.id,
+            OperatorRelation.relation_type == "OPERATE",
+        )
+    ).all()
+    gap = _uncovered_from(list(relations), v.valid_from, v.valid_to)
+    if gap is not None:
+        return f"主体 {inst.code} 与院区 {campus.code} 自 {gap.isoformat()} 起没有“运营”关系"
+    return None
+
+
+def _check_units(ctx: Ctx) -> list[ProblemItem]:
+    """应用完全部变更项后统一校验，所以“停用院区 + 把单元改挂走”可以放在同一张申请里，不论先后。"""
+    s = ctx.session
+    checks: dict[int, int] = dict(ctx.new_unit_versions)
+    if ctx.touched_campuses:
+        rows = s.scalars(
+            select(ServiceUnitVersion).where(ServiceUnitVersion.campus_id.in_(ctx.touched_campuses))
+        )
+        for v in rows:
+            checks.setdefault(v.id, ctx.touched_campuses[v.campus_id])
+    # 项序号 → (本项新写的单元版本的问题, 本项影响到的已有单元)
+    blocked: dict[int, tuple[list[str], list[str]]] = {}
+    for version_id, index in sorted(checks.items()):
+        v = s.get(ServiceUnitVersion, version_id)
+        problem = unit_version_problem(s, v)
+        if problem:
+            unit = s.get(ServiceUnit, v.service_unit_id)
+            own, dependents = blocked.setdefault(index, ([], []))
+            if version_id in ctx.new_unit_versions:
+                own.append(problem)
+            else:
+                dependents.append(f"{unit.code} {v.name}（{problem}）")
+    problems = []
+    for index, (own, dependents) in sorted(blocked.items()):
+        parts = list(own)
+        if dependents:
+            parts.append("仍有服务单元依赖，须先对这些单元重新绑定或退出：" + "；".join(dependents))
+        problems.append(ProblemItem(message="；".join(parts), item_index=index))
+    return problems
+
+
 HANDLERS = {
     "institution.create": _institution_create,
     "institution.revise": _institution_revise,
@@ -350,6 +684,15 @@ HANDLERS = {
     "campus.change_status": _campus_change_status,
     "operator_relation.create": _relation_create,
     "operator_relation.close": _relation_close,
+    "department.create": _department_create,
+    "department.rename": _department_rename,
+    "department.change_status": _department_change_status,
+    "service_unit.create": _unit_create,
+    "service_unit.revise": _unit_revise,
+    "service_unit.rebind": _unit_rebind,
+    "service_unit.change_department": _unit_change_department,
+    "service_unit.change_status": _unit_change_status,
+    "service_unit.retire": _unit_retire,
 }
 
 
@@ -374,6 +717,7 @@ def apply_items(
     outcomes: list[dict] = []
     for index, item in enumerate(items):
         label = KIND_LABELS[item.kind]
+        ctx.index = index
         try:
             out = HANDLERS[item.kind](ctx, item)
         except ItemError as e:
@@ -388,6 +732,14 @@ def apply_items(
                 problems=[ProblemItem(message=msg, item_index=index)],
             ) from None
         outcomes.append({"index": index, "kind": item.kind, "label": label, **out})
+    problems = _check_units(ctx)
+    if problems:
+        first = problems[0]
+        label = KIND_LABELS[items[first.item_index].kind]
+        raise BusinessError(
+            f"第 {first.item_index + 1} 项（{label}）未通过校验：{first.message}",
+            problems=problems,
+        )
     return outcomes
 
 

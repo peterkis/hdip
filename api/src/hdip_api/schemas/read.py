@@ -117,6 +117,66 @@ class CampusDetail(BaseModel):
     relations: list[RelationOut]
 
 
+# ------------------------------------------------------------------ 部门与服务单元
+class ServiceUnitVersionOut(VersionMeta):
+    name: str
+    department_id: int
+    department_code: str
+    department_name: str
+    """部门暂无版本，按历史日期查询时显示的是部门当前名称（设计文档第 6 节局限）。"""
+    department_status: str
+    campus_id: int
+    campus_code: str
+    campus_name: str
+    institution_id: int
+    institution_code: str
+    institution_name: str
+    status: str
+    phone: str | None
+    scope_note: str | None
+
+
+class ServiceUnitRow(BaseModel):
+    id: int
+    code: str
+    unit_type: str
+    version: ServiceUnitVersionOut
+    """查看日期当天有效的版本；当天尚未生效时为最早的计划版本。"""
+    not_yet_effective: bool
+    has_later_versions: bool
+
+
+class ServiceUnitDetail(BaseModel):
+    id: int
+    code: str
+    unit_type: str
+    created_at: datetime
+    created_change_id: int
+    retired_after: date | None
+    """永久退出时为最后有效日（当天仍有效）；未退出为空。"""
+    versions: list[ServiceUnitVersionOut]
+
+
+class DepartmentRow(BaseModel):
+    id: int
+    code: str
+    name: str
+    status: str
+    unit_count: int
+    """查看日期当天挂在该部门下的服务单元数。"""
+
+
+class DepartmentDetail(DepartmentRow):
+    created_at: datetime
+    created_change_id: int
+    updated_at: datetime
+    last_change_id: int
+    units: list[ServiceUnitRow]
+    """查看日期当天挂在该部门下的服务单元。"""
+    change_ids: list[int]
+    """改动过该部门的已确认申请（部门无版本表，历史以申请为准）。"""
+
+
 # ------------------------------------------------------------------ 变更申请
 class ChangeRequestWrite(BaseModel):
     items: list[ChangeItem]

@@ -160,3 +160,50 @@ class OperatorRelation(Base):
     closed_change_id: Mapped[int | None] = mapped_column(ForeignKey("change_request.id"))
     closed_at: Mapped[datetime | None]
     closed_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+
+
+class Department(Base):
+    """部门引用：无版本表，名称与状态的改动记录在变更申请里。"""
+
+    __tablename__ = "department"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(Text)
+    created_change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    created_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    last_change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
+class ServiceUnit(_Identity, Base):
+    __tablename__ = "service_unit"
+    __mapper_args__ = {"eager_defaults": True}
+
+    unit_type: Mapped[str] = mapped_column(Text)
+
+
+class ServiceUnitVersion(_Version, Base):
+    __tablename__ = "service_unit_version"
+    __mapper_args__ = {"eager_defaults": True}
+
+    service_unit_id: Mapped[int] = mapped_column(ForeignKey("service_unit.id"))
+    name: Mapped[str] = mapped_column(Text)
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    campus_id: Mapped[int] = mapped_column(ForeignKey("campus.id"))
+    institution_id: Mapped[int] = mapped_column(ForeignKey("institution.id"))
+    status: Mapped[str] = mapped_column(Text)
+    phone: Mapped[str | None] = mapped_column(Text)
+    scope_note: Mapped[str | None] = mapped_column(Text)
+
+    CONTENT = (
+        "name",
+        "department_id",
+        "campus_id",
+        "institution_id",
+        "status",
+        "phone",
+        "scope_note",
+    )

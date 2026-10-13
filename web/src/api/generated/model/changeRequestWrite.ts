@@ -7,12 +7,21 @@
 import type { CampusChangeStatus } from './campusChangeStatus';
 import type { CampusCreate } from './campusCreate';
 import type { CampusRevise } from './campusRevise';
+import type { DepartmentChangeStatus } from './departmentChangeStatus';
+import type { DepartmentCreate } from './departmentCreate';
+import type { DepartmentRename } from './departmentRename';
 import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
+import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
+import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
+import type { ServiceUnitCreate } from './serviceUnitCreate';
+import type { ServiceUnitRebind } from './serviceUnitRebind';
+import type { ServiceUnitRetire } from './serviceUnitRetire';
+import type { ServiceUnitRevise } from './serviceUnitRevise';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire)[];
   note?: string | null;
 }

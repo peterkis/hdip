@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils'
 const NAV = [
   { to: '/campuses', label: '院区' },
   { to: '/institutions', label: '主体' },
+  { to: '/departments', label: '部门' },
+  { to: '/service-units', label: '服务单元' },
   { to: '/changes', label: '变更申请' },
 ]
 

@@ -22,6 +22,21 @@ export const RELATION_TYPE = {
 } as const
 export type RelationType = keyof typeof RELATION_TYPE
 
+export const UNIT_STATUS = {
+  ACTIVE: '在用',
+  SUSPENDED: '暂停',
+} as const
+export type UnitStatus = keyof typeof UNIT_STATUS
+
+// INACTIVE 之外的两个为部门拆分合并预留，MVP 不会出现
+export const DEPARTMENT_STATUS = {
+  ACTIVE: '在用',
+  INACTIVE: '停用',
+  DEPRECATED: '弃用',
+  SUPERSEDED: '被替代',
+} as const
+export type DepartmentStatus = keyof typeof DEPARTMENT_STATUS
+
 export const CHANGE_STATUS = {
   draft: '草稿',
   submitted: '已提交',
@@ -51,7 +66,22 @@ export const FIELD_LABELS: Record<string, string> = {
   id: '关系编号',
   relation_type: '关系类型',
   is_primary: '主要运营方',
+  code: '代码',
+  unit_type: '单元类型',
+  department: '所属部门',
+  department_name: '所属部门',
+  campus: '院区',
+  campus_name: '院区',
+  institution: '运营主体',
+  institution_name: '运营主体',
+  status: '单元状态',
+  scope_note: '范围说明',
+  department_status: '部门状态',
+  affected_units: '仍挂在该部门下的单元（只提示，不处置）',
 }
+
+/** 选项表里的码值名称，按字段名索引：{ node_role: {HIGH_TECH: '高新院区'}, unit_type: {...} } */
+export type OptionLabels = Record<string, Record<string, string>>
 
 /** 今天（浏览器本地日期），YYYY-MM-DD。 */
 export function today(): string {
@@ -68,16 +98,14 @@ export function stamp(value: string | null | undefined): string {
   return value ? value.slice(0, 16).replace('T', ' ') : '—'
 }
 
-export function formatValue(
-  field: string,
-  value: unknown,
-  nodeRoles: Record<string, string> = {},
-): string {
+export function formatValue(field: string, value: unknown, labels: OptionLabels = {}): string {
   if (field === 'valid_to' && value === null) return '长期'
   if (value === null || value === undefined || value === '') return '—'
   if (field === 'operating_status') return OPERATING_STATUS[value as OperatingStatus] ?? String(value)
   if (field === 'relation_type') return RELATION_TYPE[value as RelationType] ?? String(value)
-  if (field === 'node_role') return nodeRoles[value as string] ?? String(value)
+  if (field === 'status') return UNIT_STATUS[value as UnitStatus] ?? String(value)
+  if (field === 'department_status') return DEPARTMENT_STATUS[value as DepartmentStatus] ?? String(value)
+  if (labels[field]) return labels[field][value as string] ?? String(value)
   if (typeof value === 'boolean') return value ? '是' : '否'
   return String(value)
 }

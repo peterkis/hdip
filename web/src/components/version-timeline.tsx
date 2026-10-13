@@ -23,7 +23,7 @@ export function VersionTimeline<V extends Version>({
   fields: (keyof V)[]
   asOf: string
 }) {
-  const { nodeRoles } = useApp()
+  const { optionLabels } = useApp()
   return (
     <Table>
       <TableHeader>
@@ -52,11 +52,11 @@ export function VersionTimeline<V extends Version>({
                       <span className="text-muted-foreground">{FIELD_LABELS[String(f)]}：</span>
                       {prev && (
                         <>
-                          <span className="line-through opacity-60">{formatValue(String(f), prev[f], nodeRoles)}</span>
+                          <span className="line-through opacity-60">{formatValue(String(f), prev[f], optionLabels)}</span>
                           {' → '}
                         </>
                       )}
-                      {formatValue(String(f), v[f], nodeRoles)}
+                      {formatValue(String(f), v[f], optionLabels)}
                     </span>
                   ))}
               </TableCell>

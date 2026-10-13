@@ -1,27 +1,39 @@
 // 全局“查看日期”与选项字典。查看日期作为查询参数进入 TanStack Query 的查询键。
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useListOptions } from '@/api/generated/meta/meta'
-import { today } from '@/lib/format'
+import { today, type OptionLabels } from '@/lib/format'
+
+interface Option {
+  code: string
+  name: string
+}
 
 interface AppContextValue {
   asOf: string
   setAsOf: (day: string) => void
-  nodeRoles: Record<string, string>
-  nodeRoleOptions: { code: string; name: string }[]
+  nodeRoleOptions: Option[]
+  unitTypeOptions: Option[]
+  /** 按字段名索引的码值名称，供 formatValue 使用 */
+  optionLabels: OptionLabels
 }
 
 const Ctx = createContext<AppContextValue | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [asOf, setAsOf] = useState(today)
-  const { data: options = [] } = useListOptions({ category: 'campus_node_role' })
+  const { data: options = [] } = useListOptions()
   const value = useMemo(() => {
-    const nodeRoleOptions = options.map((o) => ({ code: o.code, name: o.name }))
+    const of = (category: string) =>
+      options.filter((o) => o.category === category).map((o) => ({ code: o.code, name: o.name }))
+    const nodeRoleOptions = of('campus_node_role')
+    const unitTypeOptions = of('service_unit_type')
+    const labels = (list: Option[]) => Object.fromEntries(list.map((o) => [o.code, o.name]))
     return {
       asOf,
       setAsOf,
       nodeRoleOptions,
-      nodeRoles: Object.fromEntries(nodeRoleOptions.map((o) => [o.code, o.name])),
+      unitTypeOptions,
+      optionLabels: { node_role: labels(nodeRoleOptions), unit_type: labels(unitTypeOptions) },
     }
   }, [asOf, options])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>

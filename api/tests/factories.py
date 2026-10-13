@@ -43,3 +43,47 @@ def change_status(code="GX", status="TRIAL_RUNNING", effective_date="2026-11-01"
         "effective_date": effective_date,
         "operating_status": status,
     }
+
+
+def dept_create(code="XNK", name="心血管内科"):
+    return {"kind": "department.create", "code": code, "name": name}
+
+
+def unit_create(
+    code="XNK-GX-OPD",
+    name="心内科高新门诊",
+    unit_type="OPD",
+    dept="XNK",
+    campus="GX",
+    inst="CD3",
+    valid_from="2026-11-01",
+    **fields,
+):
+    return {
+        "kind": "service_unit.create",
+        "code": code,
+        "unit_type": unit_type,
+        "valid_from": valid_from,
+        "fields": {
+            "name": name,
+            "department_code": dept,
+            "campus_code": campus,
+            "institution_code": inst,
+            **fields,
+        },
+    }
+
+
+def unit_item(kind, code, effective_date, **kw):
+    return {"kind": f"service_unit.{kind}", "code": code, "effective_date": effective_date, **kw}
+
+
+def world():
+    """本院 + 高新两个院区，都由成都市第三人民医院主要运营。"""
+    return [
+        inst_create(),
+        campus_create(code="BY", name="本院院区", valid_from="2020-01-01", status="RUNNING"),
+        relation_create(campus="BY", valid_from="2020-01-01"),
+        campus_create(code="GX", name="高新院区", valid_from="2026-10-01"),
+        relation_create(campus="GX", valid_from="2026-10-01"),
+    ]

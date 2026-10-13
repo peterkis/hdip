@@ -18,6 +18,7 @@ import {
   InstitutionCreateDialog,
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
+import { DepartmentCreateDialog, UnitCreateDialog } from '@/components/forms/unit-forms'
 import { PageHeader } from '@/components/layout'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -110,7 +111,7 @@ export function ChangeDetailPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
-  const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | null>(null)
+  const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
 
   const action = useMutation({
     mutationFn: (fn: () => Promise<ChangeRequestOut>) => fn(),
@@ -216,7 +217,7 @@ export function ChangeDetailPage() {
               </span>
             </CardTitle>
             {p.can_edit && (
-              <CardAction className="flex gap-1">
+              <CardAction className="flex flex-wrap justify-end gap-1">
                 <Button size="sm" variant="outline" onClick={() => setAdding('institution')}>
                   + 新建主体
                 </Button>
@@ -225,6 +226,12 @@ export function ChangeDetailPage() {
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => setAdding('relation')}>
                   + 建立运营关系
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setAdding('department')}>
+                  + 新建部门
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setAdding('unit')}>
+                  + 新建服务单元
                 </Button>
               </CardAction>
             )}
@@ -265,6 +272,16 @@ export function ChangeDetailPage() {
       />
       {adding === 'institution' && <InstitutionCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
       {adding === 'campus' && <CampusCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
+      {adding === 'department' && <DepartmentCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
+      {adding === 'unit' && (
+        <UnitCreateDialog
+          open
+          onOpenChange={closeAdd}
+          fixedTarget={id}
+          departmentCode={lastCode(cr, 'department.create')}
+          campusCode={lastCode(cr, 'campus.create')}
+        />
+      )}
       {adding === 'relation' && (
         <RelationCreateDialog
           open
@@ -323,7 +340,7 @@ function NoteCard({ cr, onSave }: { cr: ChangeRequestOut; onSave: (note: string 
 }
 
 function OutcomeDiff({ outcome }: { outcome: ItemOutcome }) {
-  const { nodeRoles } = useApp()
+  const { optionLabels } = useApp()
   const [showAll, setShowAll] = useState(false)
   const before = outcome.before as Record<string, unknown> | null
   const after = (outcome.after ?? {}) as Record<string, unknown>
@@ -359,8 +376,8 @@ function OutcomeDiff({ outcome }: { outcome: ItemOutcome }) {
             return (
               <TableRow key={k} className={cn(changed && 'bg-muted/60 font-medium')}>
                 <TableCell className="text-muted-foreground">{FIELD_LABELS[k]}</TableCell>
-                {before && <TableCell>{formatValue(k, before[k], nodeRoles)}</TableCell>}
-                <TableCell>{formatValue(k, after[k], nodeRoles)}</TableCell>
+                {before && <TableCell>{formatValue(k, before[k], optionLabels)}</TableCell>}
+                <TableCell>{formatValue(k, after[k], optionLabels)}</TableCell>
               </TableRow>
             )
           })}

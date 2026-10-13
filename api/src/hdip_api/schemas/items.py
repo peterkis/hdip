@@ -156,6 +156,116 @@ class OperatorRelationClose(_Item):
     valid_to: date
 
 
+# ------------------------------------------------------------------ 部门
+# 仅引用，无版本，确认即生效
+DepartmentStatus = Literal["ACTIVE", "INACTIVE"]
+
+
+class DepartmentCreate(_Item):
+    kind: Literal["department.create"]
+    code: Code
+    name: Name
+
+
+class DepartmentRename(_Item):
+    kind: Literal["department.rename"]
+    code: Code
+    name: Name
+
+
+class DepartmentChangeStatus(_Item):
+    """停用 / 恢复。停用后不能被新建或改挂的单元选用，已有单元保留引用。"""
+
+    kind: Literal["department.change_status"]
+    code: Code
+    status: DepartmentStatus
+
+
+# ------------------------------------------------------------------ 服务单元
+UnitType = Literal["OPD", "IPD", "ED", "EXAM", "LAB", "PHARMACY", "OR", "OTHER"]
+UnitStatus = Literal["ACTIVE", "SUSPENDED"]
+
+
+class ServiceUnitFields(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: Name
+    department_code: Code
+    campus_code: Code
+    institution_code: Code
+    phone: Text | None = None
+    scope_note: Text | None = None
+
+
+class ServiceUnitCreate(_Item):
+    kind: Literal["service_unit.create"]
+    code: Code
+    unit_type: UnitType
+    valid_from: date
+    fields: ServiceUnitFields
+
+
+class ServiceUnitPatch(_Patch):
+    """修订只改名称、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"""
+
+    name: Name | None = None
+    phone: Text | None = None
+    scope_note: Text | None = None
+
+    @model_validator(mode="after")
+    def _name_not_null(self):
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("名称不能清空")
+        return self
+
+
+class ServiceUnitRevise(_Item):
+    kind: Literal["service_unit.revise"]
+    code: Code
+    effective_date: date
+    changes: ServiceUnitPatch
+
+
+class ServiceUnitRebind(_Item):
+    """换院区或运营主体（至少一项）；身份不变，产生新版本。"""
+
+    kind: Literal["service_unit.rebind"]
+    code: Code
+    effective_date: date
+    campus_code: Code | None = None
+    institution_code: Code | None = None
+
+    @model_validator(mode="after")
+    def _something(self):
+        if self.campus_code is None and self.institution_code is None:
+            raise ValueError("至少要换院区或运营主体之一")
+        return self
+
+
+class ServiceUnitChangeDepartment(_Item):
+    kind: Literal["service_unit.change_department"]
+    code: Code
+    effective_date: date
+    department_code: Code
+
+
+class ServiceUnitChangeStatus(_Item):
+    """暂停 / 恢复。"""
+
+    kind: Literal["service_unit.change_status"]
+    code: Code
+    effective_date: date
+    status: UnitStatus
+
+
+class ServiceUnitRetire(_Item):
+    """永久退出：valid_to 是最后有效日（当天仍有效）。终态，代码不释放。"""
+
+    kind: Literal["service_unit.retire"]
+    code: Code
+    valid_to: date
+
+
 ChangeItem = Annotated[
     InstitutionCreate
     | InstitutionRevise
@@ -163,7 +273,16 @@ ChangeItem = Annotated[
     | CampusRevise
     | CampusChangeStatus
     | OperatorRelationCreate
-    | OperatorRelationClose,
+    | OperatorRelationClose
+    | DepartmentCreate
+    | DepartmentRename
+    | DepartmentChangeStatus
+    | ServiceUnitCreate
+    | ServiceUnitRevise
+    | ServiceUnitRebind
+    | ServiceUnitChangeDepartment
+    | ServiceUnitChangeStatus
+    | ServiceUnitRetire,
     Field(discriminator="kind"),
 ]
 
@@ -177,6 +296,15 @@ KIND_LABELS: dict[str, str] = {
     "campus.change_status": "变更院区运营状态",
     "operator_relation.create": "建立运营关系",
     "operator_relation.close": "关闭运营关系",
+    "department.create": "新建部门",
+    "department.rename": "部门改名",
+    "department.change_status": "停用/恢复部门",
+    "service_unit.create": "新建服务单元",
+    "service_unit.revise": "修订服务单元",
+    "service_unit.rebind": "重新绑定服务单元",
+    "service_unit.change_department": "更换所属部门",
+    "service_unit.change_status": "暂停/恢复服务单元",
+    "service_unit.retire": "永久退出服务单元",
 }
 
 

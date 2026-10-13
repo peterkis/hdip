@@ -12,9 +12,13 @@ from hdip_api.core.errors import ERROR_RESPONSES
 from hdip_api.schemas.read import (
     CampusDetail,
     CampusRow,
+    DepartmentDetail,
+    DepartmentRow,
     InstitutionDetail,
     InstitutionRow,
     RelationOut,
+    ServiceUnitDetail,
+    ServiceUnitRow,
 )
 from hdip_api.services import queries
 
@@ -64,3 +68,41 @@ def list_relations(
     return queries.list_relations(
         session, _day(session, as_of), institution_id=institution_id, campus_id=campus_id
     )
+
+
+@router.get("/departments", response_model=list[DepartmentRow], operation_id="listDepartments")
+def list_departments(session: SessionDep, as_of: AsOf = None):
+    """全部部门（含停用），附查看日期当天挂在其下的单元数。"""
+    return queries.list_departments(session, _day(session, as_of))
+
+
+@router.get(
+    "/departments/{department_id}", response_model=DepartmentDetail, operation_id="getDepartment"
+)
+def get_department(session: SessionDep, department_id: int, as_of: AsOf = None):
+    return queries.get_department(session, department_id, _day(session, as_of))
+
+
+@router.get("/service-units", response_model=list[ServiceUnitRow], operation_id="listServiceUnits")
+def list_service_units(
+    session: SessionDep,
+    as_of: AsOf = None,
+    campus_id: int | None = None,
+    department_id: int | None = None,
+    institution_id: int | None = None,
+):
+    """查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。"""
+    return queries.list_service_units(
+        session,
+        _day(session, as_of),
+        campus_id=campus_id,
+        department_id=department_id,
+        institution_id=institution_id,
+    )
+
+
+@router.get(
+    "/service-units/{unit_id}", response_model=ServiceUnitDetail, operation_id="getServiceUnit"
+)
+def get_service_unit(session: SessionDep, unit_id: int, as_of: AsOf = None):
+    return queries.get_service_unit(session, unit_id, _day(session, as_of))

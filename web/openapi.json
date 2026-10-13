@@ -707,6 +707,474 @@
         }
       }
     },
+    "/api/departments": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List Departments",
+        "description": "全部部门（含停用），附查看日期当天挂在其下的单元数。",
+        "operationId": "listDepartments",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DepartmentRow"
+                  },
+                  "title": "Response Listdepartments"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "Get Department",
+        "operationId": "getDepartment",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/service-units": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List Service Units",
+        "description": "查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。",
+        "operationId": "listServiceUnits",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "campus_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Campus Id"
+            }
+          },
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "institution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ServiceUnitRow"
+                  },
+                  "title": "Response Listserviceunits"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/service-units/{unit_id}": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "Get Service Unit",
+        "operationId": "getServiceUnit",
+        "parameters": [
+          {
+            "name": "unit_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Unit Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnitDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/change-requests": {
       "get": {
         "tags": [
@@ -2062,6 +2530,33 @@
                 },
                 {
                   "$ref": "#/components/schemas/OperatorRelationClose"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRename"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentChangeStatus"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRebind"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitChangeDepartment"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitChangeStatus"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRetire"
                 }
               ],
               "discriminator": {
@@ -2070,10 +2565,19 @@
                   "campus.change_status": "#/components/schemas/CampusChangeStatus",
                   "campus.create": "#/components/schemas/CampusCreate",
                   "campus.revise": "#/components/schemas/CampusRevise",
+                  "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.create": "#/components/schemas/DepartmentCreate",
+                  "department.rename": "#/components/schemas/DepartmentRename",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
-                  "operator_relation.create": "#/components/schemas/OperatorRelationCreate"
+                  "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
+                  "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.create": "#/components/schemas/ServiceUnitCreate",
+                  "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
+                  "service_unit.retire": "#/components/schemas/ServiceUnitRetire",
+                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise"
                 }
               }
             },
@@ -2379,6 +2883,33 @@
                 },
                 {
                   "$ref": "#/components/schemas/OperatorRelationClose"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRename"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentChangeStatus"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRebind"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitChangeDepartment"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitChangeStatus"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitRetire"
                 }
               ],
               "discriminator": {
@@ -2387,10 +2918,19 @@
                   "campus.change_status": "#/components/schemas/CampusChangeStatus",
                   "campus.create": "#/components/schemas/CampusCreate",
                   "campus.revise": "#/components/schemas/CampusRevise",
+                  "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.create": "#/components/schemas/DepartmentCreate",
+                  "department.rename": "#/components/schemas/DepartmentRename",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
-                  "operator_relation.create": "#/components/schemas/OperatorRelationCreate"
+                  "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
+                  "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.create": "#/components/schemas/ServiceUnitCreate",
+                  "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
+                  "service_unit.retire": "#/components/schemas/ServiceUnitRetire",
+                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise"
                 }
               }
             },
@@ -2414,6 +2954,197 @@
           "items"
         ],
         "title": "ChangeRequestWrite"
+      },
+      "DepartmentChangeStatus": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.change_status",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "INACTIVE"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "status"
+        ],
+        "title": "DepartmentChangeStatus",
+        "description": "停用 / 恢复。停用后不能被新建或改挂的单元选用，已有单元保留引用。"
+      },
+      "DepartmentCreate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.create",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "name"
+        ],
+        "title": "DepartmentCreate"
+      },
+      "DepartmentDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "unit_count": {
+            "type": "integer",
+            "title": "Unit Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_change_id": {
+            "type": "integer",
+            "title": "Created Change Id"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_change_id": {
+            "type": "integer",
+            "title": "Last Change Id"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceUnitRow"
+            },
+            "type": "array",
+            "title": "Units"
+          },
+          "change_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Change Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "status",
+          "unit_count",
+          "created_at",
+          "created_change_id",
+          "updated_at",
+          "last_change_id",
+          "units",
+          "change_ids"
+        ],
+        "title": "DepartmentDetail"
+      },
+      "DepartmentRename": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.rename",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "name"
+        ],
+        "title": "DepartmentRename"
+      },
+      "DepartmentRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "unit_count": {
+            "type": "integer",
+            "title": "Unit Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "status",
+          "unit_count"
+        ],
+        "title": "DepartmentRow"
       },
       "HTTPValidationError": {
         "properties": {
@@ -3303,6 +4034,559 @@
           "reason"
         ],
         "title": "ReturnBody"
+      },
+      "ServiceUnitChangeDepartment": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.change_department",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "department_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Department Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "department_code"
+        ],
+        "title": "ServiceUnitChangeDepartment"
+      },
+      "ServiceUnitChangeStatus": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.change_status",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED"
+            ],
+            "title": "Status"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "status"
+        ],
+        "title": "ServiceUnitChangeStatus",
+        "description": "暂停 / 恢复。"
+      },
+      "ServiceUnitCreate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.create",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "unit_type": {
+            "type": "string",
+            "enum": [
+              "OPD",
+              "IPD",
+              "ED",
+              "EXAM",
+              "LAB",
+              "PHARMACY",
+              "OR",
+              "OTHER"
+            ],
+            "title": "Unit Type"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/ServiceUnitFields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "unit_type",
+          "valid_from",
+          "fields"
+        ],
+        "title": "ServiceUnitCreate"
+      },
+      "ServiceUnitDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "unit_type": {
+            "type": "string",
+            "title": "Unit Type"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_change_id": {
+            "type": "integer",
+            "title": "Created Change Id"
+          },
+          "retired_after": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retired After"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceUnitVersionOut"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "unit_type",
+          "created_at",
+          "created_change_id",
+          "retired_after",
+          "versions"
+        ],
+        "title": "ServiceUnitDetail"
+      },
+      "ServiceUnitFields": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "department_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Department Code"
+          },
+          "campus_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Campus Code"
+          },
+          "institution_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Institution Code"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "department_code",
+          "campus_code",
+          "institution_code"
+        ],
+        "title": "ServiceUnitFields"
+      },
+      "ServiceUnitPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ServiceUnitPatch",
+        "description": "修订只改名称、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"
+      },
+      "ServiceUnitRebind": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.rebind",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "campus_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Code"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date"
+        ],
+        "title": "ServiceUnitRebind",
+        "description": "换院区或运营主体（至少一项）；身份不变，产生新版本。"
+      },
+      "ServiceUnitRetire": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.retire",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "valid_to"
+        ],
+        "title": "ServiceUnitRetire",
+        "description": "永久退出：valid_to 是最后有效日（当天仍有效）。终态，代码不释放。"
+      },
+      "ServiceUnitRevise": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.revise",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/ServiceUnitPatch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "changes"
+        ],
+        "title": "ServiceUnitRevise"
+      },
+      "ServiceUnitRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "unit_type": {
+            "type": "string",
+            "title": "Unit Type"
+          },
+          "version": {
+            "$ref": "#/components/schemas/ServiceUnitVersionOut"
+          },
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          },
+          "has_later_versions": {
+            "type": "boolean",
+            "title": "Has Later Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "unit_type",
+          "version",
+          "not_yet_effective",
+          "has_later_versions"
+        ],
+        "title": "ServiceUnitRow"
+      },
+      "ServiceUnitVersionOut": {
+        "properties": {
+          "version_no": {
+            "type": "integer",
+            "title": "Version No"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "recorded_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "department_id": {
+            "type": "integer",
+            "title": "Department Id"
+          },
+          "department_code": {
+            "type": "string",
+            "title": "Department Code"
+          },
+          "department_name": {
+            "type": "string",
+            "title": "Department Name"
+          },
+          "department_status": {
+            "type": "string",
+            "title": "Department Status"
+          },
+          "campus_id": {
+            "type": "integer",
+            "title": "Campus Id"
+          },
+          "campus_code": {
+            "type": "string",
+            "title": "Campus Code"
+          },
+          "campus_name": {
+            "type": "string",
+            "title": "Campus Name"
+          },
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "type": "string",
+            "title": "Institution Code"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phone"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_no",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "recorded_at",
+          "recorded_by",
+          "name",
+          "department_id",
+          "department_code",
+          "department_name",
+          "department_status",
+          "campus_id",
+          "campus_code",
+          "campus_name",
+          "institution_id",
+          "institution_code",
+          "institution_name",
+          "status",
+          "phone",
+          "scope_note"
+        ],
+        "title": "ServiceUnitVersionOut"
       },
       "UserOut": {
         "properties": {

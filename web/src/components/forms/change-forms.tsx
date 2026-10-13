@@ -19,16 +19,16 @@ import {
   type RelationType,
 } from '@/lib/format'
 
-interface DialogProps {
+export interface DialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   fixedTarget?: number
 }
 
-const CODE_HINT = '字母、数字、点、下划线、短横线；一经使用永久绑定，退出后也不复用'
-const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
+export const CODE_HINT = '字母、数字、点、下划线、短横线；一经使用永久绑定，退出后也不复用'
+export const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
-function useEffectiveDate() {
+export function useEffectiveDate() {
   return useState(today)
 }
 

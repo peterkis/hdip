@@ -13,9 +13,12 @@ from hdip_api.models import (
     Campus,
     CampusVersion,
     ChangeRequest,
+    Department,
     Institution,
     InstitutionVersion,
     OperatorRelation,
+    ServiceUnit,
+    ServiceUnitVersion,
 )
 from hdip_api.schemas.items import KIND_LABELS
 from hdip_api.schemas.read import (
@@ -24,6 +27,8 @@ from hdip_api.schemas.read import (
     CampusVersionOut,
     ChangeRequestOut,
     ChangeRequestSummary,
+    DepartmentDetail,
+    DepartmentRow,
     InstitutionDetail,
     InstitutionRow,
     InstitutionVersionOut,
@@ -31,6 +36,9 @@ from hdip_api.schemas.read import (
     Permissions,
     PrimaryOperator,
     RelationOut,
+    ServiceUnitDetail,
+    ServiceUnitRow,
+    ServiceUnitVersionOut,
     UserRef,
 )
 from hdip_api.services import workflow
@@ -58,6 +66,12 @@ def _pick(versions: list, day: date):
     if future:
         return future[0], True, len(future) > 1
     return None, False, False
+
+
+def _name_on(versions: list, day: date) -> str:
+    """查看日期当天的名称；当天没有版本时取最早的计划版本或最新版本。"""
+    v, _, _ = _pick(versions, day)
+    return (v or max(versions, key=lambda x: x.version_no)).name
 
 
 def _versions_by(s: Session, model, fk_name: str) -> dict[int, list]:
@@ -191,10 +205,6 @@ def list_relations(
     inst_codes = {i.id: i.code for i in s.scalars(select(Institution))}
     campus_codes = {c.id: c.code for c in s.scalars(select(Campus))}
 
-    def name_on(versions: list, day: date) -> str:
-        v, _, _ = _pick(versions, day)
-        return (v or max(versions, key=lambda x: x.version_no)).name
-
     out = []
     for r in s.scalars(q):
         effective = covers(r.valid_from, r.valid_to, as_of)
@@ -205,10 +215,10 @@ def list_relations(
                 id=r.id,
                 institution_id=r.institution_id,
                 institution_code=inst_codes[r.institution_id],
-                institution_name=name_on(inst_v[r.institution_id], as_of),
+                institution_name=_name_on(inst_v[r.institution_id], as_of),
                 campus_id=r.campus_id,
                 campus_code=campus_codes[r.campus_id],
-                campus_name=name_on(campus_v[r.campus_id], as_of),
+                campus_name=_name_on(campus_v[r.campus_id], as_of),
                 relation_type=r.relation_type,
                 is_primary=r.is_primary,
                 valid_from=r.valid_from,
@@ -219,6 +229,134 @@ def list_relations(
             )
         )
     return out
+
+
+# ------------------------------------------------------------------ 服务单元
+class _UnitNames:
+    """一次查询里把部门、院区、主体的代码与名称备齐（数据量小，取全量）。"""
+
+    def __init__(self, s: Session, as_of: date) -> None:
+        self.as_of = as_of
+        self.users = _users(s)
+        self.departments = {d.id: d for d in s.scalars(select(Department))}
+        self.campus_codes = {c.id: c.code for c in s.scalars(select(Campus))}
+        self.inst_codes = {i.id: i.code for i in s.scalars(select(Institution))}
+        self.campus_v = _versions_by(s, CampusVersion, "campus_id")
+        self.inst_v = _versions_by(s, InstitutionVersion, "institution_id")
+
+    def version_out(self, v: ServiceUnitVersion) -> ServiceUnitVersionOut:
+        d = self.departments[v.department_id]
+        return ServiceUnitVersionOut.model_validate(
+            {
+                **_cols(v),
+                "recorded_by": self.users[v.recorded_by],
+                "department_code": d.code,
+                "department_name": d.name,
+                "department_status": d.status,
+                "campus_code": self.campus_codes[v.campus_id],
+                "campus_name": _name_on(self.campus_v[v.campus_id], self.as_of),
+                "institution_code": self.inst_codes[v.institution_id],
+                "institution_name": _name_on(self.inst_v[v.institution_id], self.as_of),
+            }
+        )
+
+
+def list_service_units(
+    s: Session,
+    as_of: date,
+    *,
+    campus_id: int | None = None,
+    department_id: int | None = None,
+    institution_id: int | None = None,
+    include_future: bool = True,
+) -> list[ServiceUnitRow]:
+    names = _UnitNames(s, as_of)
+    versions = _versions_by(s, ServiceUnitVersion, "service_unit_id")
+    rows = []
+    for unit in s.scalars(select(ServiceUnit).order_by(ServiceUnit.code)):
+        v, future, later = _pick(versions[unit.id], as_of)
+        if v is None or (future and not include_future):
+            continue
+        if campus_id is not None and v.campus_id != campus_id:
+            continue
+        if department_id is not None and v.department_id != department_id:
+            continue
+        if institution_id is not None and v.institution_id != institution_id:
+            continue
+        rows.append(
+            ServiceUnitRow(
+                id=unit.id,
+                code=unit.code,
+                unit_type=unit.unit_type,
+                version=names.version_out(v),
+                not_yet_effective=future,
+                has_later_versions=later,
+            )
+        )
+    return rows
+
+
+def get_service_unit(s: Session, unit_id: int, as_of: date) -> ServiceUnitDetail:
+    unit = s.get(ServiceUnit, unit_id)
+    if unit is None:
+        raise NotFound("服务单元不存在")
+    names = _UnitNames(s, as_of)
+    versions = sorted(
+        s.scalars(select(ServiceUnitVersion).where(ServiceUnitVersion.service_unit_id == unit.id)),
+        key=lambda v: -v.version_no,
+    )
+    return ServiceUnitDetail(
+        id=unit.id,
+        code=unit.code,
+        unit_type=unit.unit_type,
+        created_at=unit.created_at,
+        created_change_id=unit.created_change_id,
+        retired_after=versions[0].valid_to,
+        versions=[names.version_out(v) for v in versions],
+    )
+
+
+# ------------------------------------------------------------------ 部门
+def list_departments(s: Session, as_of: date) -> list[DepartmentRow]:
+    counts: dict[int, int] = defaultdict(int)
+    for row in list_service_units(s, as_of, include_future=False):
+        counts[row.version.department_id] += 1
+    return [
+        DepartmentRow(id=d.id, code=d.code, name=d.name, status=d.status, unit_count=counts[d.id])
+        for d in s.scalars(select(Department).order_by(Department.code))
+    ]
+
+
+def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDetail:
+    d = s.get(Department, department_id)
+    if d is None:
+        raise NotFound("部门不存在")
+    units = list_service_units(s, as_of, department_id=d.id, include_future=False)
+    change_ids = [
+        cr.id
+        for cr in s.scalars(
+            select(ChangeRequest)
+            .where(ChangeRequest.status == "confirmed")
+            .order_by(ChangeRequest.id.desc())
+        )
+        if any(
+            i.get("kind", "").startswith("department.") and i.get("code") == d.code
+            for i in cr.items
+        )
+    ]
+    return DepartmentDetail(
+        id=d.id,
+        code=d.code,
+        name=d.name,
+        status=d.status,
+        unit_count=len(units),
+        created_at=d.created_at,
+        created_change_id=d.created_change_id,
+        updated_at=d.updated_at,
+        last_change_id=d.last_change_id,
+        units=units,
+        change_ids=change_ids,
+    )
 
 
 # ------------------------------------------------------------------ 变更申请

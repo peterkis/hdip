@@ -22,15 +22,23 @@ import type {
 import type {
   CampusDetail,
   CampusRow,
+  DepartmentDetail,
+  DepartmentRow,
   GetCampusParams,
+  GetDepartmentParams,
   GetInstitutionParams,
+  GetServiceUnitParams,
   InstitutionDetail,
   InstitutionRow,
   ListCampusesParams,
+  ListDepartmentsParams,
   ListInstitutionsParams,
   ListOperatorRelationsParams,
+  ListServiceUnitsParams,
   Problem,
-  RelationOut
+  RelationOut,
+  ServiceUnitDetail,
+  ServiceUnitRow
 } from '../model';
 
 import { hdipFetch } from '../../fetcher';
@@ -596,6 +604,452 @@ export function useListOperatorRelations<TData = Awaited<ReturnType<typeof listO
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListOperatorRelationsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListDepartmentsUrl = (params?: ListDepartmentsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/departments?${stringifiedParams}` : `/api/departments`
+}
+
+/**
+ * 全部部门（含停用），附查看日期当天挂在其下的单元数。
+ * @summary List Departments
+ */
+export const listDepartments = async (params?: ListDepartmentsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DepartmentRow[]> => {
+
+  return hdipFetch<DepartmentRow[]>(getListDepartmentsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDepartmentsQueryKey = (params?: ListDepartmentsParams,) => {
+    return [
+    `/api/departments`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDepartmentsQueryOptions = <TData = Awaited<ReturnType<typeof listDepartments>>, TError = Problem>(params?: ListDepartmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDepartmentsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDepartments>>> = ({ signal }) => listDepartments(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDepartmentsQueryResult = NonNullable<Awaited<ReturnType<typeof listDepartments>>>
+export type ListDepartmentsQueryError = Problem
+
+
+export function useListDepartments<TData = Awaited<ReturnType<typeof listDepartments>>, TError = Problem>(
+ params: undefined |  ListDepartmentsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDepartments>>,
+          TError,
+          Awaited<ReturnType<typeof listDepartments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDepartments<TData = Awaited<ReturnType<typeof listDepartments>>, TError = Problem>(
+ params?: ListDepartmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDepartments>>,
+          TError,
+          Awaited<ReturnType<typeof listDepartments>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDepartments<TData = Awaited<ReturnType<typeof listDepartments>>, TError = Problem>(
+ params?: ListDepartmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Departments
+ */
+
+export function useListDepartments<TData = Awaited<ReturnType<typeof listDepartments>>, TError = Problem>(
+ params?: ListDepartmentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDepartmentsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetDepartmentUrl = (departmentId: number,
+    params?: GetDepartmentParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/departments/${departmentId}?${stringifiedParams}` : `/api/departments/${departmentId}`
+}
+
+/**
+ * @summary Get Department
+ */
+export const getDepartment = async (departmentId: number,
+    params?: GetDepartmentParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DepartmentDetail> => {
+
+  return hdipFetch<DepartmentDetail>(getGetDepartmentUrl(departmentId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDepartmentQueryKey = (departmentId: number,
+    params?: GetDepartmentParams,) => {
+    return [
+    `/api/departments/${departmentId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDepartmentQueryOptions = <TData = Awaited<ReturnType<typeof getDepartment>>, TError = Problem>(departmentId: number,
+    params?: GetDepartmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDepartmentQueryKey(departmentId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDepartment>>> = ({ signal }) => getDepartment(departmentId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: departmentId !== null && departmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDepartmentQueryResult = NonNullable<Awaited<ReturnType<typeof getDepartment>>>
+export type GetDepartmentQueryError = Problem
+
+
+export function useGetDepartment<TData = Awaited<ReturnType<typeof getDepartment>>, TError = Problem>(
+ departmentId: number,
+    params: undefined |  GetDepartmentParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDepartment>>,
+          TError,
+          Awaited<ReturnType<typeof getDepartment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDepartment<TData = Awaited<ReturnType<typeof getDepartment>>, TError = Problem>(
+ departmentId: number,
+    params?: GetDepartmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDepartment>>,
+          TError,
+          Awaited<ReturnType<typeof getDepartment>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDepartment<TData = Awaited<ReturnType<typeof getDepartment>>, TError = Problem>(
+ departmentId: number,
+    params?: GetDepartmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Department
+ */
+
+export function useGetDepartment<TData = Awaited<ReturnType<typeof getDepartment>>, TError = Problem>(
+ departmentId: number,
+    params?: GetDepartmentParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartment>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDepartmentQueryOptions(departmentId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListServiceUnitsUrl = (params?: ListServiceUnitsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/service-units?${stringifiedParams}` : `/api/service-units`
+}
+
+/**
+ * 查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。
+ * @summary List Service Units
+ */
+export const listServiceUnits = async (params?: ListServiceUnitsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ServiceUnitRow[]> => {
+
+  return hdipFetch<ServiceUnitRow[]>(getListServiceUnitsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListServiceUnitsQueryKey = (params?: ListServiceUnitsParams,) => {
+    return [
+    `/api/service-units`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListServiceUnitsQueryOptions = <TData = Awaited<ReturnType<typeof listServiceUnits>>, TError = Problem>(params?: ListServiceUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListServiceUnitsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listServiceUnits>>> = ({ signal }) => listServiceUnits(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListServiceUnitsQueryResult = NonNullable<Awaited<ReturnType<typeof listServiceUnits>>>
+export type ListServiceUnitsQueryError = Problem
+
+
+export function useListServiceUnits<TData = Awaited<ReturnType<typeof listServiceUnits>>, TError = Problem>(
+ params: undefined |  ListServiceUnitsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listServiceUnits>>,
+          TError,
+          Awaited<ReturnType<typeof listServiceUnits>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListServiceUnits<TData = Awaited<ReturnType<typeof listServiceUnits>>, TError = Problem>(
+ params?: ListServiceUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listServiceUnits>>,
+          TError,
+          Awaited<ReturnType<typeof listServiceUnits>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListServiceUnits<TData = Awaited<ReturnType<typeof listServiceUnits>>, TError = Problem>(
+ params?: ListServiceUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Service Units
+ */
+
+export function useListServiceUnits<TData = Awaited<ReturnType<typeof listServiceUnits>>, TError = Problem>(
+ params?: ListServiceUnitsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listServiceUnits>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListServiceUnitsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetServiceUnitUrl = (unitId: number,
+    params?: GetServiceUnitParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/service-units/${unitId}?${stringifiedParams}` : `/api/service-units/${unitId}`
+}
+
+/**
+ * @summary Get Service Unit
+ */
+export const getServiceUnit = async (unitId: number,
+    params?: GetServiceUnitParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ServiceUnitDetail> => {
+
+  return hdipFetch<ServiceUnitDetail>(getGetServiceUnitUrl(unitId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetServiceUnitQueryKey = (unitId: number,
+    params?: GetServiceUnitParams,) => {
+    return [
+    `/api/service-units/${unitId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetServiceUnitQueryOptions = <TData = Awaited<ReturnType<typeof getServiceUnit>>, TError = Problem>(unitId: number,
+    params?: GetServiceUnitParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetServiceUnitQueryKey(unitId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getServiceUnit>>> = ({ signal }) => getServiceUnit(unitId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: unitId !== null && unitId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetServiceUnitQueryResult = NonNullable<Awaited<ReturnType<typeof getServiceUnit>>>
+export type GetServiceUnitQueryError = Problem
+
+
+export function useGetServiceUnit<TData = Awaited<ReturnType<typeof getServiceUnit>>, TError = Problem>(
+ unitId: number,
+    params: undefined |  GetServiceUnitParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getServiceUnit>>,
+          TError,
+          Awaited<ReturnType<typeof getServiceUnit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetServiceUnit<TData = Awaited<ReturnType<typeof getServiceUnit>>, TError = Problem>(
+ unitId: number,
+    params?: GetServiceUnitParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getServiceUnit>>,
+          TError,
+          Awaited<ReturnType<typeof getServiceUnit>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetServiceUnit<TData = Awaited<ReturnType<typeof getServiceUnit>>, TError = Problem>(
+ unitId: number,
+    params?: GetServiceUnitParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Service Unit
+ */
+
+export function useGetServiceUnit<TData = Awaited<ReturnType<typeof getServiceUnit>>, TError = Problem>(
+ unitId: number,
+    params?: GetServiceUnitParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getServiceUnit>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetServiceUnitQueryOptions(unitId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
