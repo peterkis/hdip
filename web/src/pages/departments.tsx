@@ -9,6 +9,7 @@ import {
   UnitCreateDialog,
 } from '@/components/forms/unit-forms'
 import { PageHeader } from '@/components/layout'
+import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
@@ -77,6 +78,7 @@ export function DepartmentDetailPage() {
   const { isMaintainer } = useMe()
   const { data } = useGetDepartment(id, { as_of: asOf })
   const [dialog, setDialog] = useState<'rename' | 'status' | 'unit' | null>(null)
+  useCrumb(data && `${data.code} ${data.name}`)
   if (!data) return null
   const close = (o: boolean) => !o && setDialog(null)
 

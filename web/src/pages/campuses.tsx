@@ -10,6 +10,7 @@ import {
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
 import { PageHeader } from '@/components/layout'
+import { useCrumb } from '@/components/shell/crumbs'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { RelationsTable } from '@/components/relations-table'
 import { Badge } from '@/components/ui/badge'
@@ -107,6 +108,7 @@ export function CampusDetailPage() {
   const { data } = useGetCampus(id, { as_of: asOf })
   const { data: units = [] } = useListServiceUnits({ as_of: asOf, campus_id: id })
   const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | 'unit' | null>(null)
+  useCrumb(data && `${data.code} ${data.versions[0].name}`)
   if (!data) return null
 
   const latest = data.versions[0]

@@ -27,6 +27,7 @@ import {
   TextFontIcon,
 } from '@hugeicons/core-free-icons'
 import { useEffect, useState, type ReactNode } from 'react'
+import { Link } from 'react-router'
 import { Callout } from '@/components/kit/callout'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag, TONES, type Tone } from '@/components/kit/tag'
@@ -109,12 +110,16 @@ export function DesignPage() {
 function Sidebar({ active }: { active: string }) {
   return (
     <aside className="bg-surface-sidebar border-line-subtle hidden w-(--hd-sidebar-width) shrink-0 flex-col border-r md:flex">
-      <div className="hover:bg-surface-hover mx-2 mt-2 flex h-8 items-center gap-2 rounded-md px-2 transition-colors duration-(--hd-duration-fast)">
+      <Link
+        to="/"
+        title="返回应用"
+        className="hover:bg-surface-hover mx-2 mt-2 flex h-8 items-center gap-2 rounded-md px-2 transition-colors duration-(--hd-duration-fast)"
+      >
         <span className="bg-fg-strong text-surface-page grid size-5 place-items-center rounded-sm text-caption font-semibold">
           H
         </span>
         <span className="text-fg-strong truncate text-xs font-medium">HDIP 主数据维护</span>
-      </div>
+      </Link>
       <div className="text-fg-muted hover:bg-surface-hover mx-2 mt-1 flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-(--hd-duration-fast)">
         <HugeiconsIcon icon={Search01Icon} className="size-4" strokeWidth={1.75} />
         搜索

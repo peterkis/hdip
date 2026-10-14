@@ -1,85 +1,25 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import {
-  useGetServiceUnit,
-  useListCampuses,
-  useListDepartments,
-  useListServiceUnits,
-} from '@/api/generated/master/master'
+import { useGetServiceUnit } from '@/api/generated/master/master'
 import type { ServiceUnitVersionOut } from '@/api/generated/model'
 import { UnitStatusBadge } from '@/components/badges'
-import { SelectField } from '@/components/forms/fields'
 import {
   UnitChangeDepartmentDialog,
-  UnitCreateDialog,
   UnitRebindDialog,
   UnitRetireDialog,
   UnitReviseDialog,
   UnitStatusDialog,
 } from '@/components/forms/unit-forms'
 import { PageHeader } from '@/components/layout'
+import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
-import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, stamp } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
-
-export function ServiceUnitsPage() {
-  const { asOf } = useApp()
-  const { isMaintainer } = useMe()
-  const [campusId, setCampusId] = useState('')
-  const [departmentId, setDepartmentId] = useState('')
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
-  const { data: rows = [], isPending } = useListServiceUnits({
-    as_of: asOf,
-    ...(campusId && { campus_id: Number(campusId) }),
-    ...(departmentId && { department_id: Number(departmentId) }),
-  })
-  const [creating, setCreating] = useState(false)
-
-  return (
-    <>
-      <PageHeader
-        title="服务单元"
-        description={`显示 ${asOf} 当天有效的版本。服务单元 = 部门 × 院区 × 运营主体 × 期间。`}
-        actions={isMaintainer && <Button onClick={() => setCreating(true)}>新建服务单元</Button>}
-      />
-      <div className="mb-3 grid max-w-xl grid-cols-2 gap-3">
-        <SelectField
-          label="院区"
-          allowEmpty
-          value={campusId}
-          onChange={setCampusId}
-          options={campuses.map((c) => ({ value: String(c.id), label: c.version.name }))}
-        />
-        <SelectField
-          label="所属部门"
-          allowEmpty
-          value={departmentId}
-          onChange={setDepartmentId}
-          options={departments.map((d) => ({ value: String(d.id), label: d.name }))}
-        />
-      </div>
-      {!isPending && rows.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyTitle>{asOf} 没有服务单元</EmptyTitle>
-            <EmptyDescription>新建服务单元后经提交、确认才会出现在这里。</EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <UnitsTable rows={rows} />
-      )}
-      {creating && <UnitCreateDialog open onOpenChange={setCreating} />}
-    </>
-  )
-}
 
 const UNIT_FIELDS: (keyof ServiceUnitVersionOut)[] = [
   'name',
@@ -99,6 +39,7 @@ export function ServiceUnitDetailPage() {
   const { isMaintainer } = useMe()
   const { data } = useGetServiceUnit(id, { as_of: asOf })
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
+  useCrumb(data && `${data.code} ${data.versions[0].name}`)
   if (!data) return null
 
   const latest = data.versions[0]

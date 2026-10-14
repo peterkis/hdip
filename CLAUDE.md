@@ -80,9 +80,10 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/api/generated/          orval 生成，禁止手改
   src/styles/tokens.css       设计令牌（原始 → 语义）；index.css 桥接到 Tailwind 与 shadcn 变量
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
-  src/components/kit/         自建的 Notion 风格组件：Tag、Callout、PropertyList
+  src/components/kit/         自建的 Notion 风格组件：Tag、Callout、PropertyList、database（列表页的数据库视图：筛选胶囊、表格、计数）
+  src/components/shell/       外壳辅助（面包屑 useCrumb）；外壳本身在 components/layout.tsx
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿
-  src/pages/                  院区、主体、部门、服务单元、变更申请页面；design.tsx 为 /design 视觉规范页
+  src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页
   src/lib/                    码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
 ```

@@ -8,6 +8,7 @@ import {
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
 import { PageHeader } from '@/components/layout'
+import { useCrumb } from '@/components/shell/crumbs'
 import { RelationsTable } from '@/components/relations-table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -98,6 +99,7 @@ export function InstitutionDetailPage() {
   const { isMaintainer } = useMe()
   const { data } = useGetInstitution(id, { as_of: asOf })
   const [dialog, setDialog] = useState<'revise' | 'relation' | null>(null)
+  useCrumb(data && `${data.code} ${data.versions[0].name}`)
   if (!data) return null
 
   const latest = data.versions[0]

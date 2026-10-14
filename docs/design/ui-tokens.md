@@ -82,20 +82,42 @@
 ## 6. 组件
 
 - **shadcn/ui（Base UI，base-mira）**：经桥接层自动套用令牌。只有 Badge、Button（xs）、NativeSelect（sm）三处原写死 10px 字号，已改为 `text-caption`。
+- **合并类名**：`cn()`（`lib/utils.ts`）已登记自定义字号 `text-caption`。新增令牌字号时要同步登记，否则 tailwind-merge 会把它当成颜色类误删。
 - **自建组件 `components/kit/`**：
   - `Tag`：Notion 彩色标签。
   - `Callout`：提示块，无边框、浅底色、左侧图标。
   - `PropertyList`：对象详情页顶部的属性列表。
+  - `database`：列表页的数据库视图基本件，见第 8 节。
 - **按钮**：一屏只放一个主按钮，其余用 `outline`、`ghost`。危险操作用 `destructive`（浅红底）。
 - **表格**：采用 Notion 数据库式。无外框、只有横线分隔，表头为灰色常规字重，行悬停有底色。代码用等宽字体，状态用 Tag。
 
-## 7. 应用外壳（`/design` 已示范，各页面迁移时采用）
+## 7. 应用外壳（`components/layout.tsx`）
 
-- 左侧栏宽 240（`--hd-sidebar-width`），用 `bg-surface-sidebar`；导航项高 28，悬停用叠加色，选中用 `bg-surface-selected`。
-- 顶栏高 44（`--hd-topbar-height`），放面包屑和页面级操作。“查看日期”和当前用户也放在这里。
-- 正文最宽 900（`--hd-page-max-width`），宽表格页可用 1200（`--hd-page-wide-max-width`）。
+- **左侧栏**：宽 240（`--hd-sidebar-width`），底色 `bg-surface-sidebar`。
+  - 顶部是工作区名，悬停时出现收起按钮；窄屏（小于 768px）默认收起。
+  - 导航分两组：“主数据”（服务单元、部门、院区、主体）和“治理”（变更申请，右侧数字是待确认的申请数）。
+  - 底部依次是设计规范、深色/浅色切换、当前用户（开发期身份）。
+  - 导航项高 28，悬停用叠加色，选中用 `bg-surface-selected`。
+- **顶栏**：高 44（`--hd-topbar-height`）。
+  - 左边是面包屑：一级取自导航项，详情页用 `useCrumb()` 补上对象名。
+  - 右边是全局“查看日期”。不是今天时整块用黄色标签色高亮，并出现“回到今天”。
+- **正文**：列表页最宽 1200（`--hd-page-wide-max-width`）。页头用 `PageHeader`：图标、32px 粗体标题、一句说明、右上角的操作。
 
-## 8. 检查清单
+## 8. 列表页 = Notion 数据库视图（`components/kit/database.tsx`）
+
+- **工具栏**（`DbToolbar`）：
+  - 左边放筛选胶囊 `FilterPill`。未选时显示“院区 ▾”；选中后变为强调色浅底，显示“院区：高新院区 ×”。
+  - 开关胶囊 `ToggleChip`（如“含计划中”）也放左边。
+  - 右边是搜索框 `SearchBox`，无边框，悬停或聚焦时显示底色。
+- **筛选条件写在地址栏**（如 `?campus=8&type=IPD`），可以收藏和分享。
+- **表格**（`DbTable` / `DbRow` / `DbCell`）：
+  - 表头带图标、灰色、常规字重；列之间用细竖线，行之间用横线；行悬停有底色。
+  - 第一列是名称，可点击进入详情。代码用等宽字体；状态用 Tag。
+- **底部**（`DbFooter`）：显示计数和口径说明。
+- **空状态**（`DbEmpty`）：一句说明和一个操作，不画插图。
+- **页头操作**：“导出 CSV”用幽灵按钮，“新建”是主按钮。导出调用 `lib/download.ts`，按二进制保存以保留 BOM。
+
+## 9. 检查清单
 
 | 要 | 不要 |
 | --- | --- |

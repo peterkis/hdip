@@ -6,7 +6,8 @@ import { ChangeDetailPage, ChangesPage } from '@/pages/changes'
 import { DepartmentDetailPage, DepartmentsPage } from '@/pages/departments'
 import { DesignPage } from '@/pages/design'
 import { InstitutionDetailPage, InstitutionsPage } from '@/pages/institutions'
-import { ServiceUnitDetailPage, ServiceUnitsPage } from '@/pages/service-units'
+import { ServiceUnitsPage } from '@/pages/service-unit-list'
+import { ServiceUnitDetailPage } from '@/pages/service-units'
 
 export function App() {
   return (
@@ -15,7 +16,7 @@ export function App() {
         <Routes>
           <Route path="design" element={<DesignPage />} />
           <Route element={<Layout />}>
-            <Route index element={<Navigate to="/campuses" replace />} />
+            <Route index element={<Navigate to="/service-units" replace />} />
             <Route path="campuses" element={<CampusesPage />} />
             <Route path="campuses/:id" element={<CampusDetailPage />} />
             <Route path="institutions" element={<InstitutionsPage />} />

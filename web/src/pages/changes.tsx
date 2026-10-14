@@ -20,6 +20,7 @@ import {
 } from '@/components/forms/change-forms'
 import { DepartmentCreateDialog, UnitCreateDialog } from '@/components/forms/unit-forms'
 import { PageHeader } from '@/components/layout'
+import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -112,6 +113,7 @@ export function ChangeDetailPage() {
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
   const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
+  useCrumb(`#${id}`)
 
   const action = useMutation({
     mutationFn: (fn: () => Promise<ChangeRequestOut>) => fn(),

@@ -1,0 +1,18 @@
+// 下载只读导出的 CSV。按二进制保存，保留服务端写入的 BOM（按文本读取会丢失，Excel 打开会乱码）。
+import { getExportCsvUrl } from '@/api/generated/export/export'
+import { getCurrentUsername } from '@/lib/session'
+
+type Dataset = Parameters<typeof getExportCsvUrl>[0]
+
+export async function downloadCsv(dataset: Dataset, asOf: string): Promise<void> {
+  const res = await fetch(getExportCsvUrl(dataset, { as_of: asOf }), {
+    headers: { 'X-HDIP-User': getCurrentUsername() },
+  })
+  if (!res.ok) throw new Error(`导出失败（${res.status}）`)
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `hdip-${dataset}-${asOf}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
