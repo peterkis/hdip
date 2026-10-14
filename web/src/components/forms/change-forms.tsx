@@ -1,14 +1,14 @@
 // 各类变更的表单。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
 import { useState } from 'react'
-import { useListCampuses, useListInstitutions } from '@/api/generated/master/master'
 import type {
   CampusCreateOperatingStatus,
   CampusVersionOut,
   InstitutionVersionOut,
   RelationOut,
 } from '@/api/generated/model'
-import { diffPatch, orNull, SelectField, TextField } from '@/components/forms/fields'
+import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
+import { CampusSelect, InstitutionSelect } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
 import {
   OPERATING_STATUS,
@@ -67,7 +67,7 @@ function InstitutionFields({ f, set }: { f: InstitutionForm; set: (f: Institutio
   const bind = (k: keyof InstitutionForm) => ({ value: f[k], onChange: (v: string) => set({ ...f, [k]: v }) })
   return (
     <>
-      <TextField label="名称" required {...bind('name')} />
+      <TextField label="名称" name="name" required {...bind('name')} />
       <TextField label="主体性质" hint="按登记证照填写，不由院区名称推断" {...bind('nature')} />
       <TextField label="统一社会信用代码" {...bind('unified_credit_code')} />
       <TextField label="医疗机构登记代码" {...bind('medical_reg_code')} />
@@ -88,21 +88,23 @@ export function InstitutionCreateDialog(props: DialogProps) {
     <ItemDialog
       {...props}
       title="新建主体"
-      build={() => {
-        if (!CODE_RE.test(code.trim())) return '请填写有效的主体代码'
-        if (!f.name.trim()) return '请填写名称'
-        if (!validFrom) return '请填写生效日期'
-        return {
+      build={() =>
+        requireFields([
+          ['name', !!f.name.trim(), '请填写名称'],
+          ['code', !!code.trim(), '请填写主体代码'],
+          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
+          ['valid_from', !!validFrom, '请选择生效日期'],
+        ]) ?? {
           kind: 'institution.create',
           code: code.trim(),
           valid_from: validFrom,
           fields: institutionValues(f),
         }
-      }}
+      }
     >
-      <TextField label="主体代码" required value={code} onChange={setCode} hint={CODE_HINT} />
       <InstitutionFields f={f} set={setF} />
-      <TextField label="生效日期" type="date" required value={validFrom} onChange={setValidFrom} />
+      <TextField label="主体代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
+      <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
     </ItemDialog>
   )
 }
@@ -120,14 +122,18 @@ export function InstitutionReviseDialog({
       title={`修订主体 ${code}`}
       description={`当前版本自 ${current.valid_from} 起。修订在生效日起成为新版本，旧版本保留。`}
       build={() => {
-        if (!f.name.trim()) return '名称不能为空'
+        const missing = requireFields([
+          ['name', !!f.name.trim(), '名称不能为空'],
+          ['effective_date', !!day, '请选择生效日期'],
+        ])
+        if (missing) return missing
         const changes = diffPatch(current, institutionValues(f))
         if (Object.keys(changes).length === 0) return '没有修改任何内容'
         return { kind: 'institution.revise', code, effective_date: day, changes }
       }}
     >
       <InstitutionFields f={f} set={setF} />
-      <TextField label="生效日期" type="date" required value={day} onChange={setDay} />
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
 }
@@ -166,10 +172,10 @@ function CampusFields({ f, set }: { f: CampusForm; set: (f: CampusForm) => void 
   const bind = (k: keyof CampusForm) => ({ value: f[k], onChange: (v: string) => set({ ...f, [k]: v }) })
   return (
     <>
-      <TextField label="名称" required {...bind('name')} />
+      <TextField label="名称" name="name" required {...bind('name')} />
       <SelectField
         label="节点角色"
-        allowEmpty
+        placeholder="（不填）"
         options={nodeRoleOptions.map((o) => ({ value: o.code, label: o.name }))}
         {...bind('node_role')}
       />
@@ -201,20 +207,23 @@ export function CampusCreateDialog(props: DialogProps) {
       {...props}
       title="新建院区"
       description="院区不等于法人；运营主体通过“建立运营关系”绑定。"
-      build={() => {
-        if (!CODE_RE.test(code.trim())) return '请填写有效的院区代码'
-        if (!f.name.trim()) return '请填写名称'
-        return {
+      build={() =>
+        requireFields([
+          ['name', !!f.name.trim(), '请填写名称'],
+          ['code', !!code.trim(), '请填写院区代码'],
+          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
+          ['valid_from', !!validFrom, '请选择生效日期'],
+        ]) ?? {
           kind: 'campus.create',
           code: code.trim(),
           valid_from: validFrom,
           operating_status: status,
           fields: campusValues(f),
         }
-      }}
+      }
     >
-      <TextField label="院区代码" required value={code} onChange={setCode} hint={CODE_HINT} />
       <CampusFields f={f} set={setF} />
+      <TextField label="院区代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
       <SelectField
         label="初始运营状态"
         required
@@ -222,7 +231,7 @@ export function CampusCreateDialog(props: DialogProps) {
         onChange={(v) => setStatus(v as CampusCreateOperatingStatus)}
         options={statusOptions().slice(0, 3)}
       />
-      <TextField label="生效日期" type="date" required value={validFrom} onChange={setValidFrom} />
+      <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
     </ItemDialog>
   )
 }
@@ -240,14 +249,18 @@ export function CampusReviseDialog({
       title={`修订院区资料 ${code}`}
       description={`当前版本自 ${current.valid_from} 起。运营状态请用“变更运营状态”。`}
       build={() => {
-        if (!f.name.trim()) return '名称不能为空'
+        const missing = requireFields([
+          ['name', !!f.name.trim(), '名称不能为空'],
+          ['effective_date', !!day, '请选择生效日期'],
+        ])
+        if (missing) return missing
         const changes = diffPatch(current, campusValues(f))
         if (Object.keys(changes).length === 0) return '没有修改任何内容'
         return { kind: 'campus.revise', code, effective_date: day, changes }
       }}
     >
       <CampusFields f={f} set={setF} />
-      <TextField label="生效日期" type="date" required value={day} onChange={setDay} />
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
 }
@@ -266,17 +279,22 @@ export function CampusStatusDialog({
       title={`变更运营状态 ${code}`}
       description={`当前为“${OPERATING_STATUS[current]}”。状态只能按 筹建 → 试运行 → 运行 → 停用 推进，停用后不可恢复。`}
       build={() => {
-        if (!status) return '院区已停用，不能再变更运营状态'
-        return {
-          kind: 'campus.change_status',
-          code,
-          effective_date: day,
-          operating_status: status as OperatingStatus,
-        }
+        if (next.length === 0) return '院区已停用，不能再变更运营状态'
+        return (
+          requireFields([
+            ['status', !!status, '请选择新的运营状态'],
+            ['effective_date', !!day, '请选择生效日期'],
+          ]) ?? {
+            kind: 'campus.change_status',
+            code,
+            effective_date: day,
+            operating_status: status as OperatingStatus,
+          }
+        )
       }}
     >
-      <SelectField label="新的运营状态" required value={status} onChange={setStatus} options={next} />
-      <TextField label="生效日期" type="date" required value={day} onChange={setDay} />
+      <SelectField label="新的运营状态" name="status" required value={status} onChange={setStatus} options={next} />
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
 }
@@ -287,9 +305,6 @@ export function RelationCreateDialog({
   campusCode = '',
   ...props
 }: DialogProps & { institutionCode?: string; campusCode?: string }) {
-  const { asOf } = useApp()
-  const { data: institutions = [] } = useListInstitutions({ as_of: asOf }, { query: { enabled: props.open } })
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf }, { query: { enabled: props.open } })
   const [inst, setInst] = useState(institutionCode)
   const [campus, setCampus] = useState(campusCode)
   const [type, setType] = useState<RelationType>('OPERATE')
@@ -301,49 +316,38 @@ export function RelationCreateDialog({
       {...props}
       title="建立运营关系"
       description="同一院区在重叠期间最多一个主要运营方。调整期间或主要方 = 关闭旧关系 + 新建。"
-      build={() => {
-        if (!inst.trim() || !campus.trim()) return '请填写主体代码和院区代码'
-        if (validTo && validTo < validFrom) return '结束日不能早于开始日'
-        return {
+      build={() =>
+        requireFields([
+          ['institution', !!inst, '请选择主体'],
+          ['campus', !!campus, '请选择院区'],
+          ['valid_from', !!validFrom, '请选择开始日'],
+          ['valid_to', !validTo || validTo >= validFrom, '结束日不能早于开始日'],
+        ]) ?? {
           kind: 'operator_relation.create',
-          institution_code: inst.trim(),
-          campus_code: campus.trim(),
+          institution_code: inst,
+          campus_code: campus,
           relation_type: type,
           is_primary: type === 'OPERATE' && primary === 'true',
           valid_from: validFrom,
           valid_to: orNull(validTo),
         }
-      }}
+      }
     >
-      <datalist id="institution-codes">
-        {institutions.map((i) => (
-          <option key={i.id} value={i.code}>
-            {i.version.name}
-          </option>
-        ))}
-      </datalist>
-      <datalist id="campus-codes">
-        {campuses.map((c) => (
-          <option key={c.id} value={c.code}>
-            {c.version.name}
-          </option>
-        ))}
-      </datalist>
-      <TextField
-        label="主体代码"
+      <InstitutionSelect
+        label="主体"
+        name="institution"
         required
-        list="institution-codes"
         value={inst}
         onChange={setInst}
-        hint="可选择已有主体；同一张申请里新建的主体直接填代码"
+        hint="同一张申请里新建的主体也会出现在列表中"
       />
-      <TextField
-        label="院区代码"
+      <CampusSelect
+        label="院区"
+        name="campus"
         required
-        list="campus-codes"
         value={campus}
         onChange={setCampus}
-        hint="可选择已有院区；同一张申请里新建的院区直接填代码"
+        hint="同一张申请里新建的院区也会出现在列表中"
       />
       <SelectField
         label="关系类型"
@@ -365,8 +369,8 @@ export function RelationCreateDialog({
         />
       )}
       <div className="grid grid-cols-2 gap-3">
-        <TextField label="开始日" type="date" required value={validFrom} onChange={setValidFrom} />
-        <TextField label="结束日" type="date" value={validTo} onChange={setValidTo} hint="不填为长期" />
+        <TextField label="开始日" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
+        <TextField label="结束日" name="valid_to" type="date" value={validTo} onChange={setValidTo} hint="不填为长期" />
       </div>
     </ItemDialog>
   )
@@ -377,14 +381,16 @@ export function RelationCloseDialog({ relation, ...props }: DialogProps & { rela
   return (
     <ItemDialog
       {...props}
-      title={`关闭运营关系 #${relation.id}`}
+      title="关闭运营关系"
       description={`${relation.institution_name} → ${relation.campus_name}（${RELATION_TYPE[relation.relation_type as RelationType]}${relation.is_primary ? '，主要' : ''}），自 ${relation.valid_from} 起。结束日当天仍有效。`}
-      build={() => {
-        if (validTo < relation.valid_from) return '结束日不能早于开始日'
-        return { kind: 'operator_relation.close', relation_id: relation.id, valid_to: validTo }
-      }}
+      build={() =>
+        requireFields([
+          ['valid_to', !!validTo, '请选择结束日'],
+          ['valid_to', validTo >= relation.valid_from, `结束日不能早于开始日 ${relation.valid_from}`],
+        ]) ?? { kind: 'operator_relation.close', relation_id: relation.id, valid_to: validTo }
+      }
     >
-      <TextField label="结束日" type="date" required value={validTo} onChange={setValidTo} />
+      <TextField label="结束日" name="valid_to" type="date" required value={validTo} onChange={setValidTo} />
     </ItemDialog>
   )
 }

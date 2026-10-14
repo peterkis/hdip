@@ -82,7 +82,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
   src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、database（列表页的数据库视图）、toaster（轻提示）
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
-  src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿
+  src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
   src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页
   src/lib/                    码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
@@ -92,6 +92,7 @@ docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参�
 - 迁移用 `hdip_owner` 执行（`HDIP_MIGRATION_DATABASE_URL`），应用用 `hdip_app`（`HDIP_DATABASE_URL`）。新表的权限依赖 `ALTER DEFAULT PRIVILEGES`，所以**新表必须由 `hdip_owner` 创建**。
 - 契约链路：改后端接口 → `make gen` →（导出 OpenAPI + orval 生成）→ 前端用生成的 `useXxx` hooks。每个路由写明 `operation_id`，生成的 hook 名由它决定。
 - “查看日期”作为 TanStack Query 查询键的一部分；确认申请后使相关查询失效重取。
+- **操作动线优先**：页面与表单必须符合人的操作直觉、路线合理（见 `docs/design/ui-tokens.md` 第 0 节）。引用其他对象一律按名称从下拉选择（`forms/ref-selects.tsx`），不让人输代码；只列可选项，能推断的给默认值；保存时用 `requireFields` 返回字段级错误，所有问题字段同时标红、焦点落到第一个。
 - **视觉规范（Notion 风格）**：见 `docs/design/ui-tokens.md`，应用内 `/design` 可看。样式只用 `web/src/styles/tokens.css` 的语义令牌及其生成的 Tailwind 类（`text-fg-muted`、`bg-surface-subtle`、`border-line`、`bg-brand`…）；**不写色值和任意值**（`#xxx`、`text-[13px]`），页面不引用原始令牌（`--hd-blue-600`）。状态用 `components/kit/tag.tsx`，颜色取 `lib/tones.ts`。图标统一用 `components/kit/icon.tsx` 的 `<Icon>`：先选 hugeicons（shadcn/ReUI 的 iconLibrary），没有合适的再用 lucide-react。轻提示用 `lib/notify.ts`（react-hot-toast，样式已按令牌定制），只用于成功和轻量结果；需要逐条处理的校验错误留在页面上。深色与强调色只重定义语义令牌（`.dark`、`[data-accent]`），切换用 `lib/theme.ts`。
 - UI 组件用 shadcn/ui 的 **Base UI 版本**（`components.json`：style `base-mira`，图标 hugeicons），全项目统一。加组件：在 `web/` 下 `npx shadcn@latest add <name>`。Base UI 组件用 `render` 属性替换元素（不是 Radix 的 `asChild`）。主题变量在 `src/index.css`。需要 ReUI 组件时选 Base UI 版本：在 `components.json` 的 `registries` 加 `"@reui": "https://reui.io/r/{style}/{name}.json"` 后 `npx shadcn@latest add @reui/<name>`（先确认 ReUI 是否提供 base-mira 风格）。路径别名 `@/` → `web/src/`，`cn()` 在 `src/lib/utils.ts`。
 - 表单弹窗只在打开时挂载（`{open && <XxxDialog open … />}`），关闭即丢弃状态。
