@@ -20,3 +20,6 @@ __pycache__/
 node_modules/
 web/dist/
 *.tsbuildinfo
+
+# 参考资料（体积大，不入库）
+docs/refer/
