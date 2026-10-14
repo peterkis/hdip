@@ -78,17 +78,20 @@ db/init/            备选 docker（make db-docker）首次初始化：建 hdip_
 web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query + React Router
   src/api/fetcher.ts          orval 统一请求函数（带 X-HDIP-User，出错抛 ApiError）
   src/api/generated/          orval 生成，禁止手改
-  src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改
+  src/styles/tokens.css       设计令牌（原始 → 语义）；index.css 桥接到 Tailwind 与 shadcn 变量
+  src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
+  src/components/kit/         自建的 Notion 风格组件：Tag、Callout、PropertyList
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿
-  src/pages/                  院区、主体、部门、服务单元、变更申请页面
-  src/lib/                    码值中文名（format.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
-docs/               设计文档
+  src/pages/                  院区、主体、部门、服务单元、变更申请页面；design.tsx 为 /design 视觉规范页
+  src/lib/                    码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
+docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
 ```
 
 - 数据库规则在数据库层强制（唯一、排他、外键、检查约束）；应用层校验只负责给出可读的中文错误信息，两者不一致以数据库为准。前端校验只做即时提示。
 - 迁移用 `hdip_owner` 执行（`HDIP_MIGRATION_DATABASE_URL`），应用用 `hdip_app`（`HDIP_DATABASE_URL`）。新表的权限依赖 `ALTER DEFAULT PRIVILEGES`，所以**新表必须由 `hdip_owner` 创建**。
 - 契约链路：改后端接口 → `make gen` →（导出 OpenAPI + orval 生成）→ 前端用生成的 `useXxx` hooks。每个路由写明 `operation_id`，生成的 hook 名由它决定。
 - “查看日期”作为 TanStack Query 查询键的一部分；确认申请后使相关查询失效重取。
+- **视觉规范（Notion 风格）**：见 `docs/design/ui-tokens.md`，应用内 `/design` 可看。样式只用 `web/src/styles/tokens.css` 的语义令牌及其生成的 Tailwind 类（`text-fg-muted`、`bg-surface-subtle`、`border-line`、`bg-brand`…）；**不写色值和任意值**（`#xxx`、`text-[13px]`），页面不引用原始令牌（`--hd-blue-600`）。状态用 `components/kit/tag.tsx`，颜色取 `lib/tones.ts`。深色与强调色只重定义语义令牌（`.dark`、`[data-accent]`），切换用 `lib/theme.ts`。
 - UI 组件用 shadcn/ui 的 **Base UI 版本**（`components.json`：style `base-mira`，图标 hugeicons），全项目统一。加组件：在 `web/` 下 `npx shadcn@latest add <name>`。Base UI 组件用 `render` 属性替换元素（不是 Radix 的 `asChild`）。主题变量在 `src/index.css`。需要 ReUI 组件时选 Base UI 版本：在 `components.json` 的 `registries` 加 `"@reui": "https://reui.io/r/{style}/{name}.json"` 后 `npx shadcn@latest add @reui/<name>`（先确认 ReUI 是否提供 base-mira 风格）。路径别名 `@/` → `web/src/`，`cn()` 在 `src/lib/utils.ts`。
 - 表单弹窗只在打开时挂载（`{open && <XxxDialog open … />}`），关闭即丢弃状态。
 - 界面文案用中文；代码标识符用英文，与设计文档第 3 节表名一致（`institution`、`campus`、`operator_relation`、`department`、`service_unit`、`service_unit_lineage`、`change_request`、`option_item`、`approval_rule`）。

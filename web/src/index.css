@@ -1,11 +1,102 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "./styles/tokens.css";
 
-/* 主题变量：shadcn base-mira + neutral。改配色只改 :root / .dark。 */
+/*
+ * 桥接层：把 styles/tokens.css 的语义令牌接到 Tailwind 主题与 shadcn 变量。
+ * 这里不出现任何色值或尺寸常量；要改样式请改 tokens.css。规范见 docs/design/ui-tokens.md。
+ */
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* ---- 字体与字号：重定 Tailwind 字号阶，现有 shadcn 组件（大量 text-xs）随之变为 Notion 尺寸 */
+  --font-sans: var(--hd-font-sans);
+  --font-serif: var(--hd-font-serif);
+  --font-mono: var(--hd-font-mono);
+  --text-caption: var(--hd-type-caption-size);
+  --text-caption--line-height: var(--hd-type-caption-leading);
+  --text-xs: var(--hd-type-ui-size);
+  --text-xs--line-height: var(--hd-type-ui-leading);
+  --text-sm: var(--hd-type-subtitle-size);
+  --text-sm--line-height: var(--hd-type-subtitle-leading);
+  --text-base: var(--hd-type-body-size);
+  --text-base--line-height: var(--hd-type-body-leading);
+  --text-lg: var(--hd-type-heading-size);
+  --text-lg--line-height: var(--hd-type-heading-leading);
+  --text-xl: var(--hd-type-title-size);
+  --text-xl--line-height: var(--hd-type-title-leading);
+
+  /* ---- 圆角与阴影 */
+  --radius-sm: var(--hd-radius-tag);
+  --radius-md: var(--hd-radius-control);
+  --radius-lg: var(--hd-radius-card);
+  --radius-xl: var(--hd-radius-popover);
+  --radius-2xl: var(--hd-radius-900);
+  --radius-3xl: var(--hd-radius-900);
+  --radius-4xl: var(--hd-radius-900);
+  --shadow-xs: var(--hd-elevation-card);
+  --shadow-sm: var(--hd-elevation-card);
+  --shadow-md: var(--hd-elevation-popover);
+  --shadow-lg: var(--hd-elevation-dialog);
+  --shadow-xl: var(--hd-elevation-dialog);
+  --ease-standard: var(--hd-ease-standard);
+  --ease-in-out: var(--hd-ease-in-out);
+  --ease-out: var(--hd-ease-out);
+
+  /* ---- 语义颜色工具类（页面与自建组件用这些） */
+  --color-fg-strong: var(--hd-text-strong);
+  --color-fg: var(--hd-text-primary);
+  --color-fg-secondary: var(--hd-text-secondary);
+  --color-fg-muted: var(--hd-text-muted);
+  --color-fg-disabled: var(--hd-text-disabled);
+  --color-fg-on-brand: var(--hd-text-on-accent);
+  --color-surface-page: var(--hd-surface-page);
+  --color-surface-sidebar: var(--hd-surface-sidebar);
+  --color-surface-raised: var(--hd-surface-raised);
+  --color-surface-subtle: var(--hd-surface-subtle);
+  --color-surface-hover: var(--hd-surface-hover);
+  --color-surface-pressed: var(--hd-surface-pressed);
+  --color-surface-selected: var(--hd-surface-selected);
+  --color-surface-overlay: var(--hd-surface-overlay);
+  --color-line-subtle: var(--hd-border-subtle);
+  --color-line: var(--hd-border-default);
+  --color-line-strong: var(--hd-border-strong);
+  --color-brand: var(--hd-accent);
+  --color-brand-hover: var(--hd-accent-hover);
+  --color-brand-pressed: var(--hd-accent-pressed);
+  --color-brand-soft: var(--hd-accent-soft);
+  --color-brand-muted: var(--hd-accent-muted);
+  --color-brand-text: var(--hd-accent-text);
+  --color-danger: var(--hd-danger);
+  --color-danger-text: var(--hd-danger-text);
+  --color-danger-soft: var(--hd-danger-soft);
+  --color-warning-text: var(--hd-warning-text);
+  --color-warning-soft: var(--hd-warning-soft);
+  --color-success-text: var(--hd-success-text);
+  --color-success-soft: var(--hd-success-soft);
+  --color-info-text: var(--hd-info-text);
+  --color-info-soft: var(--hd-info-soft);
+  --color-tag-gray-bg: var(--hd-tag-gray-bg);
+  --color-tag-gray-text: var(--hd-tag-gray-text);
+  --color-tag-brown-bg: var(--hd-tag-brown-bg);
+  --color-tag-brown-text: var(--hd-tag-brown-text);
+  --color-tag-orange-bg: var(--hd-tag-orange-bg);
+  --color-tag-orange-text: var(--hd-tag-orange-text);
+  --color-tag-yellow-bg: var(--hd-tag-yellow-bg);
+  --color-tag-yellow-text: var(--hd-tag-yellow-text);
+  --color-tag-green-bg: var(--hd-tag-green-bg);
+  --color-tag-green-text: var(--hd-tag-green-text);
+  --color-tag-blue-bg: var(--hd-tag-blue-bg);
+  --color-tag-blue-text: var(--hd-tag-blue-text);
+  --color-tag-purple-bg: var(--hd-tag-purple-bg);
+  --color-tag-purple-text: var(--hd-tag-purple-text);
+  --color-tag-pink-bg: var(--hd-tag-pink-bg);
+  --color-tag-pink-text: var(--hd-tag-pink-text);
+  --color-tag-red-bg: var(--hd-tag-red-bg);
+  --color-tag-red-text: var(--hd-tag-red-text);
+
+  /* ---- shadcn 约定的颜色名（ui/ 组件使用） */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -37,89 +128,60 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* shadcn 变量 → 语义令牌。深色、强调色替换都发生在语义层，这里不需要 .dark 块 */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --background: var(--hd-surface-page);
+  --foreground: var(--hd-text-primary);
+  --card: var(--hd-surface-raised);
+  --card-foreground: var(--hd-text-primary);
+  --popover: var(--hd-surface-raised);
+  --popover-foreground: var(--hd-text-primary);
+  --primary: var(--hd-accent);
+  --primary-foreground: var(--hd-text-on-accent);
+  --secondary: var(--hd-surface-subtle);
+  --secondary-foreground: var(--hd-text-primary);
+  --muted: var(--hd-surface-subtle);
+  --muted-foreground: var(--hd-text-muted);
+  --accent: var(--hd-surface-hover);
+  --accent-foreground: var(--hd-text-primary);
+  --destructive: var(--hd-danger);
+  --border: var(--hd-border-subtle);
+  --input: var(--hd-border-default);
+  --ring: var(--hd-focus-ring);
+  --chart-1: var(--hd-tag-blue-text);
+  --chart-2: var(--hd-tag-green-text);
+  --chart-3: var(--hd-tag-orange-text);
+  --chart-4: var(--hd-tag-purple-text);
+  --chart-5: var(--hd-tag-brown-text);
+  --radius: var(--hd-radius-card);
+  --sidebar: var(--hd-surface-sidebar);
+  --sidebar-foreground: var(--hd-text-secondary);
+  --sidebar-primary: var(--hd-accent);
+  --sidebar-primary-foreground: var(--hd-text-on-accent);
+  --sidebar-accent: var(--hd-surface-hover);
+  --sidebar-accent-foreground: var(--hd-text-primary);
+  --sidebar-border: var(--hd-border-subtle);
+  --sidebar-ring: var(--hd-focus-ring);
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
   body {
     @apply bg-background text-foreground antialiased;
+    font-size: var(--hd-type-ui-size);
+    line-height: var(--hd-type-ui-leading);
+  }
+  ::selection {
+    background: var(--hd-accent-soft);
   }
 }

@@ -1,0 +1,327 @@
+/*
+ * HDIP 设计令牌（Notion 风格）。整个应用的颜色、文字、间距、圆角、阴影、动效只在这里定义。
+ * 依据：docs/design/notion-design-md.md（notion.so 提取）；规范说明：docs/design/ui-tokens.md。
+ *
+ * 三层结构，改动由上往下传递：
+ *   1. 原始令牌  --hd-<色系>-<级>、--hd-size-*、--hd-radius-*、--hd-shadow-* … 只描述“是什么值”
+ *   2. 语义令牌  --hd-text-*、--hd-surface-*、--hd-border-*、--hd-accent-*、--hd-tag-* … 描述“用在哪”
+ *   3. 桥接      index.css 把语义令牌接到 shadcn 变量与 Tailwind 主题（bg-surface、text-muted…）
+ *
+ * 一键修改：改原始令牌 = 全局换值；改语义令牌的指向 = 换用法；
+ * 一键替换：深色主题在 .dark、强调色在 [data-accent=…]，都只重定义语义令牌。
+ * 组件和页面只能用语义令牌（或由它生成的 Tailwind 类），不直接写色值、不引用原始令牌。
+ * 前缀统一 --hd-，避免与 Tailwind 自带的 --color-gray-* 等主题变量冲突。
+ */
+
+/* ============================================================ 1. 原始令牌 */
+:root {
+  /* 暖灰（Notion 的中性色带一点暖调） */
+  --hd-white: #ffffff;
+  --hd-black: #000000;
+  --hd-gray-50: #f7f7f5;
+  --hd-gray-100: #f9f9f8;
+  --hd-gray-200: #f6f5f4;
+  --hd-gray-300: #dfdcd9;
+  --hd-gray-400: #a39e98;
+  --hd-gray-500: #78736f;
+  --hd-gray-600: #615d59;
+  --hd-gray-700: #494744;
+  --hd-gray-800: #31302e;
+  --hd-gray-850: #202020;
+  --hd-gray-900: #191918;
+
+  /* 黑白透明度阶（文字、边框、悬停都用透明度叠加，在任何底色上都协调） */
+  --hd-alpha-black-50: #00000008;
+  --hd-alpha-black-100: #0000000d;
+  --hd-alpha-black-150: #00000014;
+  --hd-alpha-black-200: #0000001a;
+  --hd-alpha-black-300: #00000033;
+  --hd-alpha-black-400: #0000004d;
+  --hd-alpha-black-500: #0000008a;
+  --hd-alpha-black-600: #00000096;
+  --hd-alpha-black-700: #000000bf;
+  --hd-alpha-black-800: #000000e5;
+  --hd-alpha-black-900: #000000f2;
+  --hd-alpha-white-50: #ffffff08;
+  --hd-alpha-white-100: #ffffff0e;
+  --hd-alpha-white-150: #ffffff18;
+  --hd-alpha-white-200: #ffffff21;
+  --hd-alpha-white-400: #ffffff4d;
+  --hd-alpha-white-500: #ffffff75;
+  --hd-alpha-white-700: #ffffffbf;
+  --hd-alpha-white-800: #ffffffcf;
+  --hd-alpha-white-900: #fffffff2;
+
+  /* 彩色色系（100 最浅 → 900 最深） */
+  --hd-red-100: #fef3f1;   --hd-red-200: #fdd3cd;   --hd-red-300: #ff8b7c;
+  --hd-red-400: #f77463;   --hd-red-500: #f64932;   --hd-red-600: #e32d14;
+  --hd-red-700: #b01601;   --hd-red-800: #6f0d00;   --hd-red-900: #4f0900;
+  --hd-orange-100: #fff5ed; --hd-orange-200: #ffdec4; --hd-orange-300: #ffad71;
+  --hd-orange-400: #ff8a33; --hd-orange-500: #ff6d00; --hd-orange-600: #dd5b00;
+  --hd-orange-700: #ab4a00; --hd-orange-800: #793400; --hd-orange-900: #532200;
+  --hd-yellow-100: #fff5e0; --hd-yellow-200: #ffe4af; --hd-yellow-300: #ffd786;
+  --hd-yellow-400: #ffc95e; --hd-yellow-500: #ffb110; --hd-yellow-600: #e89d01;
+  --hd-yellow-700: #c78600; --hd-yellow-800: #a16c00; --hd-yellow-900: #704b00;
+  --hd-green-100: #f0faf2; --hd-green-200: #d0f4d8; --hd-green-300: #abe5b8;
+  --hd-green-400: #68ce7e; --hd-green-500: #1aae39; --hd-green-600: #14832b;
+  --hd-green-700: #0f6220; --hd-green-800: #0a4216; --hd-green-900: #05210b;
+  --hd-teal-100: #f2fafa;  --hd-teal-200: #bde6e4;  --hd-teal-300: #83cbc9;
+  --hd-teal-400: #2a9d99;  --hd-teal-500: #27918d;  --hd-teal-600: #0a7b77;
+  --hd-teal-700: #126764;  --hd-teal-800: #0a4d4b;  --hd-teal-900: #042b29;
+  --hd-blue-100: #f2f9ff;  --hd-blue-200: #e6f3fe;  --hd-blue-300: #93cdfe;
+  --hd-blue-400: #62aef0;  --hd-blue-500: #097fe8;  --hd-blue-600: #0075de;
+  --hd-blue-700: #005bab;  --hd-blue-800: #00396b;  --hd-blue-900: #002a4f;
+  --hd-purple-100: #f8f5fc; --hd-purple-200: #eadbfa; --hd-purple-300: #d6b6f6;
+  --hd-purple-400: #ad6ded; --hd-purple-500: #9849e8; --hd-purple-600: #7237ae;
+  --hd-purple-700: #562983; --hd-purple-800: #391c57; --hd-purple-900: #1c0e2c;
+  --hd-pink-100: #fff5fc;  --hd-pink-200: #ffcdf1;  --hd-pink-300: #ffb5eb;
+  --hd-pink-400: #ff83dd;  --hd-pink-500: #ff64c8;  --hd-pink-600: #d13f9d;
+  --hd-pink-700: #9d2472;  --hd-pink-800: #6c1b4f;  --hd-pink-900: #481034;
+  --hd-brown-100: #fcf8f5; --hd-brown-200: #ebd5c5; --hd-brown-300: #d9b79f;
+  --hd-brown-400: #b18164; --hd-brown-500: #9c7054; --hd-brown-600: #885d3d;
+  --hd-brown-700: #744d2d; --hd-brown-800: #654124; --hd-brown-900: #523410;
+
+  /* 字体：不加载网络字体（内网可用），NotionInter 不可得时由系统字体承担；中文优先苹方/雅黑 */
+  --hd-font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text",
+    "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", Helvetica,
+    Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --hd-font-serif: "Lyon Text", Georgia, "Songti SC", SimSun, serif;
+  --hd-font-mono: "iA Writer Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* 字号阶（与来源 --font-size-* 同名同值） */
+  --hd-size-50: 0.75rem;     /* 12 */
+  --hd-size-100: 0.875rem;   /* 14 */
+  --hd-size-150: 0.9375rem;  /* 15 */
+  --hd-size-200: 1rem;       /* 16 */
+  --hd-size-300: 1.125rem;   /* 18 */
+  --hd-size-350: 1.25rem;    /* 20 */
+  --hd-size-400: 1.375rem;   /* 22 */
+  --hd-size-500: 1.625rem;   /* 26 */
+  --hd-size-600: 2rem;       /* 32 */
+  --hd-size-700: 2.625rem;   /* 42 */
+  --hd-weight-regular: 400;
+  --hd-weight-medium: 500;
+  --hd-weight-semibold: 600;
+  --hd-weight-bold: 700;
+
+  /* 间距阶（基数 4px，与来源 --spacing-* 同名同值） */
+  --hd-space-0: 0;
+  --hd-space-2: 0.125rem;
+  --hd-space-4: 0.25rem;
+  --hd-space-6: 0.375rem;
+  --hd-space-8: 0.5rem;
+  --hd-space-12: 0.75rem;
+  --hd-space-16: 1rem;
+  --hd-space-20: 1.25rem;
+  --hd-space-24: 1.5rem;
+  --hd-space-32: 2rem;
+  --hd-space-40: 2.5rem;
+  --hd-space-48: 3rem;
+  --hd-space-64: 4rem;
+  --hd-space-96: 6rem;
+
+  /* 圆角阶（与来源 --border-radius-* 同名同值） */
+  --hd-radius-200: 0.25rem;   /* 4 */
+  --hd-radius-300: 0.3125rem; /* 5 */
+  --hd-radius-400: 0.375rem;  /* 6 */
+  --hd-radius-500: 0.5rem;    /* 8 */
+  --hd-radius-700: 0.75rem;   /* 12 */
+  --hd-radius-900: 1rem;      /* 16 */
+  --hd-radius-round: 9999px;
+
+  /* 阴影阶（来源 --shadow-100/200/300：多层、极淡） */
+  --hd-shadow-100: 0 0.7px 1.462px rgba(0, 0, 0, 0.015), 0 3px 9px #00000008;
+  --hd-shadow-200: 0 0.175px 1.041px rgba(0, 0, 0, 0.013), 0 0.8px 2.925px #00000005,
+    0 2.025px 7.847px rgba(0, 0, 0, 0.027), 0 4px 18px #0000000a;
+  --hd-shadow-300: 0 0.667px 3.502px #00000003, 0 2.933px 7.252px rgba(0, 0, 0, 0.016),
+    0 7.2px 14.462px #00000005, 0 13.867px 28.348px rgba(0, 0, 0, 0.024),
+    0 23.333px 52.123px #00000008, 0 36px 89px #0000000a;
+
+  /* 动效 */
+  --hd-duration-instant: 75ms;
+  --hd-duration-fast: 100ms;
+  --hd-duration-base: 200ms;
+  --hd-ease-standard: ease;
+  --hd-ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+  --hd-ease-out: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+/* ============================================================ 2. 语义令牌（浅色，默认） */
+:root {
+  /* 文字 */
+  --hd-text-strong: var(--hd-alpha-black-900);
+  --hd-text-primary: var(--hd-alpha-black-800);
+  --hd-text-secondary: var(--hd-alpha-black-600);
+  --hd-text-muted: var(--hd-alpha-black-500);
+  --hd-text-disabled: var(--hd-alpha-black-400);
+  --hd-text-on-accent: var(--hd-white);
+
+  /* 表面（底色） */
+  --hd-surface-page: var(--hd-white);          /* 页面主体 */
+  --hd-surface-sidebar: var(--hd-gray-50);     /* 左侧栏 */
+  --hd-surface-raised: var(--hd-white);        /* 卡片、弹窗、下拉 */
+  --hd-surface-subtle: var(--hd-gray-200);     /* 次级块、表头、代码、只读区 */
+  --hd-surface-hover: var(--hd-alpha-black-100);    /* 悬停：叠加而不是换色 */
+  --hd-surface-pressed: var(--hd-alpha-black-200);
+  --hd-surface-selected: var(--hd-gray-200);
+  --hd-surface-overlay: var(--hd-alpha-black-400);  /* 弹窗遮罩 */
+
+  /* 边框 */
+  --hd-border-subtle: var(--hd-alpha-black-150); /* 分隔线、表格线 */
+  --hd-border-default: var(--hd-alpha-black-200); /* 输入框、卡片 */
+  --hd-border-strong: var(--hd-alpha-black-300);
+
+  /* 强调（主按钮、链接、焦点、选中）。换品牌色只改这一组，或用 [data-accent] */
+  --hd-accent: var(--hd-blue-600);
+  --hd-accent-hover: var(--hd-blue-700);
+  --hd-accent-pressed: var(--hd-blue-800);
+  --hd-accent-soft: var(--hd-blue-200);
+  --hd-accent-muted: var(--hd-blue-100);
+  --hd-accent-text: var(--hd-blue-600);
+  --hd-focus-ring: var(--hd-blue-600);
+
+  /* 反馈 */
+  --hd-danger: var(--hd-red-500);
+  --hd-danger-text: var(--hd-red-600);
+  --hd-danger-soft: var(--hd-red-100);
+  --hd-warning-text: var(--hd-orange-600);
+  --hd-warning-soft: var(--hd-orange-100);
+  --hd-success-text: var(--hd-green-600);
+  --hd-success-soft: var(--hd-green-100);
+  --hd-info-text: var(--hd-blue-700);
+  --hd-info-soft: var(--hd-blue-100);
+
+  /* 标签色（Notion 的彩色选项）：底色 + 文字，九种 */
+  --hd-tag-gray-bg: var(--hd-gray-200);     --hd-tag-gray-text: var(--hd-gray-700);
+  --hd-tag-brown-bg: var(--hd-brown-200);   --hd-tag-brown-text: var(--hd-brown-800);
+  --hd-tag-orange-bg: var(--hd-orange-200); --hd-tag-orange-text: var(--hd-orange-800);
+  --hd-tag-yellow-bg: var(--hd-yellow-200); --hd-tag-yellow-text: var(--hd-yellow-900);
+  --hd-tag-green-bg: var(--hd-green-200);   --hd-tag-green-text: var(--hd-green-800);
+  --hd-tag-blue-bg: var(--hd-blue-200);     --hd-tag-blue-text: var(--hd-blue-800);
+  --hd-tag-purple-bg: var(--hd-purple-200); --hd-tag-purple-text: var(--hd-purple-800);
+  --hd-tag-pink-bg: var(--hd-pink-200);     --hd-tag-pink-text: var(--hd-pink-800);
+  --hd-tag-red-bg: var(--hd-red-200);       --hd-tag-red-text: var(--hd-red-800);
+
+  /* 文字角色：字号 / 行高 / 字重 / 字距 */
+  --hd-type-caption-size: var(--hd-size-50);
+  --hd-type-caption-leading: 1rem;
+  --hd-type-ui-size: var(--hd-size-100);        /* 应用内正文、按钮、输入、表格 */
+  --hd-type-ui-leading: 1.25rem;
+  --hd-type-body-size: var(--hd-size-200);      /* 长段落 */
+  --hd-type-body-leading: 1.5rem;
+  --hd-type-subtitle-size: var(--hd-size-200);  /* 卡片、弹窗标题 */
+  --hd-type-subtitle-leading: 1.5rem;
+  --hd-type-heading-size: var(--hd-size-400);   /* 区块标题 */
+  --hd-type-heading-leading: 1.75rem;
+  --hd-type-heading-tracking: -0.015625rem;
+  --hd-type-title-size: var(--hd-size-600);     /* 页面标题 */
+  --hd-type-title-leading: 2.5rem;
+  --hd-type-title-tracking: -0.046875rem;
+
+  /* 圆角角色 */
+  --hd-radius-tag: var(--hd-radius-200);
+  --hd-radius-control: var(--hd-radius-400);
+  --hd-radius-card: var(--hd-radius-500);
+  --hd-radius-popover: var(--hd-radius-700);
+  --hd-radius-pill: var(--hd-radius-round);
+
+  /* 阴影角色 */
+  --hd-elevation-card: var(--hd-shadow-100);
+  --hd-elevation-popover: var(--hd-shadow-200);
+  --hd-elevation-dialog: var(--hd-shadow-300);
+
+  /* 尺寸与布局 */
+  --hd-control-height: 2rem;     /* 32：按钮、输入框 */
+  --hd-control-height-sm: 1.75rem;
+  --hd-tag-height: 1.25rem;
+  --hd-sidebar-width: 15rem;     /* 240 */
+  --hd-topbar-height: 2.75rem;   /* 44 */
+  --hd-page-max-width: 56.25rem; /* 900：Notion 正文宽 */
+  --hd-page-wide-max-width: 75rem;
+  --hd-page-padding-x: var(--hd-space-96);
+  --hd-page-padding-x-narrow: var(--hd-space-24);
+
+  /* 层级 */
+  --hd-z-sticky: 90;
+  --hd-z-dropdown: 100;
+  --hd-z-modal: 1000;
+
+  /* 动效角色 */
+  --hd-transition-hover: background-color var(--hd-duration-fast) var(--hd-ease-standard);
+  --hd-transition-surface: box-shadow var(--hd-duration-base) var(--hd-ease-standard),
+    opacity var(--hd-duration-base) var(--hd-ease-standard);
+}
+
+/* ============================================================ 深色主题：只重定义语义令牌 */
+.dark {
+  --hd-text-strong: var(--hd-alpha-white-900);
+  --hd-text-primary: var(--hd-alpha-white-800);
+  --hd-text-secondary: var(--hd-alpha-white-700);
+  --hd-text-muted: var(--hd-alpha-white-500);
+  --hd-text-disabled: var(--hd-alpha-white-400);
+
+  --hd-surface-page: var(--hd-gray-900);
+  --hd-surface-sidebar: var(--hd-gray-850);
+  --hd-surface-raised: #252525;
+  --hd-surface-subtle: #2c2c2b;
+  --hd-surface-hover: var(--hd-alpha-white-100);
+  --hd-surface-pressed: var(--hd-alpha-white-200);
+  --hd-surface-selected: var(--hd-alpha-white-150);
+  --hd-surface-overlay: #0000008a;
+
+  --hd-border-subtle: var(--hd-alpha-white-100);
+  --hd-border-default: var(--hd-alpha-white-150);
+  --hd-border-strong: var(--hd-alpha-white-200);
+
+  --hd-accent: var(--hd-blue-500);
+  --hd-accent-hover: var(--hd-blue-400);
+  --hd-accent-pressed: var(--hd-blue-300);
+  --hd-accent-soft: #0b3a63;
+  --hd-accent-muted: #10263b;
+  --hd-accent-text: var(--hd-blue-400);
+  --hd-focus-ring: var(--hd-blue-400);
+
+  --hd-danger: var(--hd-red-400);
+  --hd-danger-text: var(--hd-red-300);
+  --hd-danger-soft: #3d1a14;
+  --hd-warning-text: var(--hd-orange-300);
+  --hd-warning-soft: #3a2611;
+  --hd-success-text: var(--hd-green-400);
+  --hd-success-soft: #13301a;
+  --hd-info-text: var(--hd-blue-300);
+  --hd-info-soft: #10263b;
+
+  --hd-tag-gray-bg: #373737;    --hd-tag-gray-text: var(--hd-alpha-white-800);
+  --hd-tag-brown-bg: #4a3829;   --hd-tag-brown-text: var(--hd-brown-200);
+  --hd-tag-orange-bg: #5c3b23;  --hd-tag-orange-text: var(--hd-orange-200);
+  --hd-tag-yellow-bg: #564328;  --hd-tag-yellow-text: var(--hd-yellow-200);
+  --hd-tag-green-bg: #243d30;   --hd-tag-green-text: var(--hd-green-200);
+  --hd-tag-blue-bg: #143a4e;    --hd-tag-blue-text: var(--hd-blue-200);
+  --hd-tag-purple-bg: #3c2d49;  --hd-tag-purple-text: var(--hd-purple-200);
+  --hd-tag-pink-bg: #4e2c3c;    --hd-tag-pink-text: var(--hd-pink-200);
+  --hd-tag-red-bg: #522e2a;     --hd-tag-red-text: var(--hd-red-200);
+
+  --hd-elevation-card: 0 0 0 1px var(--hd-alpha-white-100);
+  --hd-elevation-popover: 0 0 0 1px var(--hd-alpha-white-100), 0 4px 18px #00000066;
+  --hd-elevation-dialog: 0 0 0 1px var(--hd-alpha-white-100), 0 16px 48px #00000080;
+}
+
+/* ============================================================ 强调色替换示例 */
+[data-accent="purple"] {
+  --hd-accent: var(--hd-purple-500);
+  --hd-accent-hover: var(--hd-purple-600);
+  --hd-accent-pressed: var(--hd-purple-700);
+  --hd-accent-soft: var(--hd-purple-200);
+  --hd-accent-muted: var(--hd-purple-100);
+  --hd-accent-text: var(--hd-purple-600);
+  --hd-focus-ring: var(--hd-purple-500);
+}
+[data-accent="teal"] {
+  --hd-accent: var(--hd-teal-600);
+  --hd-accent-hover: var(--hd-teal-700);
+  --hd-accent-pressed: var(--hd-teal-800);
+  --hd-accent-soft: var(--hd-teal-200);
+  --hd-accent-muted: var(--hd-teal-100);
+  --hd-accent-text: var(--hd-teal-600);
+  --hd-focus-ring: var(--hd-teal-600);
+}

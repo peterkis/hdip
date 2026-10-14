@@ -4,6 +4,7 @@ import { AppProvider } from '@/lib/app-context'
 import { CampusDetailPage, CampusesPage } from '@/pages/campuses'
 import { ChangeDetailPage, ChangesPage } from '@/pages/changes'
 import { DepartmentDetailPage, DepartmentsPage } from '@/pages/departments'
+import { DesignPage } from '@/pages/design'
 import { InstitutionDetailPage, InstitutionsPage } from '@/pages/institutions'
 import { ServiceUnitDetailPage, ServiceUnitsPage } from '@/pages/service-units'
 
@@ -12,6 +13,7 @@ export function App() {
     <AppProvider>
       <BrowserRouter>
         <Routes>
+          <Route path="design" element={<DesignPage />} />
           <Route element={<Layout />}>
             <Route index element={<Navigate to="/campuses" replace />} />
             <Route path="campuses" element={<CampusesPage />} />
