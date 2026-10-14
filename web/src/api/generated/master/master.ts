@@ -854,7 +854,9 @@ export const getListServiceUnitsUrl = (params?: ListServiceUnitsParams,) => {
 }
 
 /**
- * 查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。
+ * 查看日期当天有效的服务单元，含暂停的（看 version.status）；已退出的不含。
+ *
+ * 剧本 5“某日哪些单元在运营、归哪个主体”：include_future=false，按 institution 字段归集。
  * @summary List Service Units
  */
 export const listServiceUnits = async (params?: ListServiceUnitsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ServiceUnitRow[]> => {

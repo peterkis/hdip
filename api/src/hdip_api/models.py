@@ -207,3 +207,19 @@ class ServiceUnitVersion(_Version, Base):
         "phone",
         "scope_note",
     )
+
+
+class ServiceUnitLineage(Base):
+    """拆分/合并的前身 → 后继，一行一对；只追加。"""
+
+    __tablename__ = "service_unit_lineage"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    predecessor_id: Mapped[int] = mapped_column(ForeignKey("service_unit.id"))
+    successor_id: Mapped[int] = mapped_column(ForeignKey("service_unit.id"))
+    lineage_type: Mapped[str] = mapped_column(Text)
+    effective_date: Mapped[date]
+    change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))

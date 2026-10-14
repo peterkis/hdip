@@ -4,6 +4,7 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { LineageOut } from './lineageOut';
 import type { ServiceUnitVersionOut } from './serviceUnitVersionOut';
 
 export interface ServiceUnitDetail {
@@ -14,4 +15,6 @@ export interface ServiceUnitDetail {
   created_change_id: number;
   retired_after: string | null;
   versions: ServiceUnitVersionOut[];
+  predecessors: LineageOut[];
+  successors: LineageOut[];
 }

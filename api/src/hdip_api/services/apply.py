@@ -25,6 +25,7 @@ from hdip_api.models import (
     OperatorRelation,
     OptionItem,
     ServiceUnit,
+    ServiceUnitLineage,
     ServiceUnitVersion,
 )
 from hdip_api.schemas.items import (
@@ -44,9 +45,12 @@ from hdip_api.schemas.items import (
     ServiceUnitChangeDepartment,
     ServiceUnitChangeStatus,
     ServiceUnitCreate,
+    ServiceUnitFields,
+    ServiceUnitMerge,
     ServiceUnitRebind,
     ServiceUnitRetire,
     ServiceUnitRevise,
+    ServiceUnitSplit,
 )
 
 STATUS_LABELS = {
@@ -83,6 +87,8 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "service_unit_code_check": "代码只能包含字母、数字、点、下划线、短横线，且以字母或数字开头",
     "service_unit_type_check": "单元类型不在既有码值范围内",
     "service_unit_version_no_overlap": "与该服务单元已有版本的期间重叠",
+    "service_unit_lineage_pair_uniq": "这两个单元之间已有演变关系",
+    "service_unit_lineage_self_check": "前身与后继不能是同一个单元",
 }
 
 
@@ -495,21 +501,30 @@ def unit_snapshot(s: Session, v: ServiceUnitVersion) -> dict[str, Any]:
     }
 
 
-def _unit_create(ctx: Ctx, item: ServiceUnitCreate) -> dict:
+def _new_unit(
+    ctx: Ctx,
+    code: str,
+    unit_type: str,
+    valid_from: date,
+    f: ServiceUnitFields,
+    prefix: str = "",
+) -> ServiceUnitVersion:
+    """新建单元身份与第 1 版（新建、拆分/合并的后继共用）。prefix 用于指出出错字段的位置。"""
     s = ctx.session
-    if s.scalar(select(ServiceUnit.id).where(ServiceUnit.code == item.code)):
-        raise ItemError(f"服务单元代码 {item.code} 已被使用（含已退出单元），代码永不复用", "code")
-    f = item.fields
-    dept = _active_department(s, f.department_code, "fields.department_code")
-    campus = _ref(s, _campus, f.campus_code, "fields.campus_code")
-    inst = _ref(s, _institution, f.institution_code, "fields.institution_code")
-    unit = ServiceUnit(code=item.code, unit_type=item.unit_type, created_change_id=ctx.change_id)
+    if s.scalar(select(ServiceUnit.id).where(ServiceUnit.code == code)):
+        raise ItemError(
+            f"服务单元代码 {code} 已被使用（含已退出单元），代码永不复用", f"{prefix}code"
+        )
+    dept = _active_department(s, f.department_code, f"{prefix}fields.department_code")
+    campus = _ref(s, _campus, f.campus_code, f"{prefix}fields.campus_code")
+    inst = _ref(s, _institution, f.institution_code, f"{prefix}fields.institution_code")
+    unit = ServiceUnit(code=code, unit_type=unit_type, created_change_id=ctx.change_id)
     s.add(unit)
     s.flush()
     v = ServiceUnitVersion(
         service_unit_id=unit.id,
         version_no=1,
-        valid_from=item.valid_from,
+        valid_from=valid_from,
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
         name=f.name,
@@ -523,10 +538,15 @@ def _unit_create(ctx: Ctx, item: ServiceUnitCreate) -> dict:
     s.add(v)
     s.flush()
     ctx.new_unit_versions[v.id] = ctx.index
+    return v
+
+
+def _unit_create(ctx: Ctx, item: ServiceUnitCreate) -> dict:
+    v = _new_unit(ctx, item.code, item.unit_type, item.valid_from, item.fields)
     return {
-        "target": f"服务单元 {unit.code} {v.name}",
+        "target": f"服务单元 {item.code} {v.name}",
         "before": None,
-        "after": unit_snapshot(s, v),
+        "after": unit_snapshot(ctx.session, v),
     }
 
 
@@ -578,24 +598,115 @@ def _unit_change_status(ctx: Ctx, item: ServiceUnitChangeStatus) -> dict:
     return _unit_next(ctx, item.code, item.effective_date, {"status": item.status})
 
 
-def _unit_retire(ctx: Ctx, item: ServiceUnitRetire) -> dict:
+def _end_unit(
+    ctx: Ctx, code: str, last_day: date, code_field: str, day_field: str
+) -> tuple[ServiceUnit, ServiceUnitVersion, dict]:
+    """让单元在 last_day 之后永久退出（退出、拆分/合并的前身共用）。
+
+    返回单元、最新版本与退出前快照。
+    """
     s = ctx.session
-    unit = _unit(s, item.code)
+    unit = _ref(s, _unit, code, code_field)
     latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
     if latest.valid_to is not None:
-        raise ItemError(f"服务单元已于 {latest.valid_to.isoformat()} 后永久退出")
-    if item.valid_to < latest.valid_from:
         raise ItemError(
-            f"最后有效日不能早于当前版本的开始日 {latest.valid_from.isoformat()}", "valid_to"
+            f"服务单元 {code} 已于 {latest.valid_to.isoformat()} 后永久退出", code_field
+        )
+    if last_day < latest.valid_from:
+        raise ItemError(
+            f"服务单元 {code} 的最后有效日不能早于其当前版本的开始日 "
+            f"{latest.valid_from.isoformat()}",
+            day_field,
         )
     before = unit_snapshot(s, latest)
-    latest.valid_to = item.valid_to
+    latest.valid_to = last_day
     s.flush()
+    return unit, latest, before
+
+
+def _unit_retire(ctx: Ctx, item: ServiceUnitRetire) -> dict:
+    unit, latest, before = _end_unit(ctx, item.code, item.valid_to, "code", "valid_to")
     return {
         "target": f"服务单元 {unit.code} {latest.name}",
         "before": before,
-        "after": unit_snapshot(s, latest),
+        "after": unit_snapshot(ctx.session, latest),
     }
+
+
+# ------------------------------------------------------------------ 拆分与合并
+def _lineage(ctx: Ctx, kind: str, pred_id: int, succ_id: int, day: date) -> None:
+    ctx.session.add(
+        ServiceUnitLineage(
+            predecessor_id=pred_id,
+            successor_id=succ_id,
+            lineage_type=kind,
+            effective_date=day,
+            change_id=ctx.change_id,
+            recorded_by=ctx.user_id,
+        )
+    )
+    ctx.session.flush()
+
+
+def _evolve(
+    ctx: Ctx, kind: str, pred_codes: list[str], successors: list, day: date, paths: dict
+) -> dict:
+    """前身全部在 day 前一日退出，后继全部自 day 起，两两写演变关系。
+
+    后继是新身份、新代码，不继承前身的版本历史，也不自动迁移任何引用（设计文档第 5 节）。
+    """
+    s = ctx.session
+    last_day = day - timedelta(days=1)
+    preds = []
+    for i, code in enumerate(pred_codes):
+        unit = _ref(s, _unit, code, paths["pred"](i))
+        latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+        if latest.valid_to is None and day <= latest.valid_from:
+            raise ItemError(
+                f"生效日须晚于前身 {code} 当前版本的开始日 {latest.valid_from.isoformat()}",
+                "effective_date",
+            )
+        unit, _, before = _end_unit(ctx, code, last_day, paths["pred"](i), "effective_date")
+        preds.append((unit, before))
+    succs = []
+    for i, spec in enumerate(successors):
+        v = _new_unit(ctx, spec.code, spec.unit_type, day, spec.fields, paths["succ"](i))
+        succs.append((spec.code, v))
+    for unit, _ in preds:
+        for _, v in succs:
+            _lineage(ctx, kind, unit.id, v.service_unit_id, day)
+    pred_label = "、".join(f"{u.code} {b['name']}" for u, b in preds)
+    succ_label = "、".join(f"{code} {v.name}" for code, v in succs)
+    return {
+        "target": f"{pred_label} → {succ_label}",
+        "before": {"predecessors": [b for _, b in preds]},
+        "after": {
+            "effective_date": day.isoformat(),
+            "successors": [unit_snapshot(s, v) for _, v in succs],
+        },
+    }
+
+
+def _unit_split(ctx: Ctx, item: ServiceUnitSplit) -> dict:
+    return _evolve(
+        ctx,
+        "SPLIT",
+        [item.code],
+        item.successors,
+        item.effective_date,
+        {"pred": lambda i: "code", "succ": lambda i: f"successors.{i}."},
+    )
+
+
+def _unit_merge(ctx: Ctx, item: ServiceUnitMerge) -> dict:
+    return _evolve(
+        ctx,
+        "MERGE",
+        item.codes,
+        [item.successor],
+        item.effective_date,
+        {"pred": lambda i: f"codes.{i}", "succ": lambda i: "successor."},
+    )
 
 
 # ------------------------------------------------------------------ 单元依赖校验
@@ -693,6 +804,8 @@ HANDLERS = {
     "service_unit.change_department": _unit_change_department,
     "service_unit.change_status": _unit_change_status,
     "service_unit.retire": _unit_retire,
+    "service_unit.split": _unit_split,
+    "service_unit.merge": _unit_merge,
 }
 
 

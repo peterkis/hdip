@@ -146,6 +146,22 @@ class ServiceUnitRow(BaseModel):
     has_later_versions: bool
 
 
+class LineageOut(BaseModel):
+    """一条演变关系：另一端单元的身份、代码与名称（前身取其最后一版名称，后继取第一版）。"""
+
+    id: int
+    lineage_type: Literal["SPLIT", "MERGE"]
+    effective_date: date
+    """后继的开始日；前身的最后有效日为其前一日。"""
+    change_id: int
+    predecessor_id: int
+    predecessor_code: str
+    predecessor_name: str
+    successor_id: int
+    successor_code: str
+    successor_name: str
+
+
 class ServiceUnitDetail(BaseModel):
     id: int
     code: str
@@ -155,6 +171,10 @@ class ServiceUnitDetail(BaseModel):
     retired_after: date | None
     """永久退出时为最后有效日（当天仍有效）；未退出为空。"""
     versions: list[ServiceUnitVersionOut]
+    predecessors: list[LineageOut]
+    """本单元由哪些单元拆分或合并而来。"""
+    successors: list[LineageOut]
+    """本单元拆分或合并成了哪些单元。"""
 
 
 class DepartmentRow(BaseModel):

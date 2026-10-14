@@ -90,14 +90,21 @@ def list_service_units(
     campus_id: int | None = None,
     department_id: int | None = None,
     institution_id: int | None = None,
+    include_future: Annotated[
+        bool, Query(description="是否包含查看日期尚未生效的计划单元（以 not_yet_effective 标出）")
+    ] = True,
 ):
-    """查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。"""
+    """查看日期当天有效的服务单元，含暂停的（看 version.status）；已退出的不含。
+
+    剧本 5“某日哪些单元在运营、归哪个主体”：include_future=false，按 institution 字段归集。
+    """
     return queries.list_service_units(
         session,
         _day(session, as_of),
         campus_id=campus_id,
         department_id=department_id,
         institution_id=institution_id,
+        include_future=include_future,
     )
 
 

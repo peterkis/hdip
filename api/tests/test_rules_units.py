@@ -154,3 +154,84 @@ def test_unit_history_and_department_identity_immutable(api, app_engine):
         with pytest.raises(DBAPIError, match="permission denied"):
             c.execute(text("DELETE FROM service_unit_version"))
         c.rollback()
+
+
+# ------------------------------------------------------------------ 拆分与合并
+from factories import merge, split, successor  # noqa: E402
+
+
+def test_split_needs_two_new_distinct_codes(api):
+    one = api.post(
+        "/api/change-requests", {"items": [split("U1", "2027-01-01", successor("A", "甲"))]}
+    )
+    assert one.status_code == 422
+    same = api.post(
+        "/api/change-requests",
+        {"items": [split("U1", "2027-01-01", successor("U1", "甲"), successor("B", "乙"))]},
+    )
+    assert same.status_code == 422
+
+
+def test_split_successor_code_never_reused(api):
+    api.apply(*world())
+    api.apply(dept_create(), unit_create(code="U1"), unit_create(code="OLD"))
+    api.apply({"kind": "service_unit.retire", "code": "OLD", "valid_to": "2026-11-30"})
+    cr = api.draft(split("U1", "2027-01-01", successor("OLD", "甲"), successor("B", "乙")))
+    r = api.submit(cr["id"])
+    assert r.status_code == 422
+    assert "代码永不复用" in r.json()["message"]
+
+
+def test_split_is_atomic(api):
+    api.apply(*world())
+    api.apply(dept_create(), unit_create(code="U1"))
+    # 第二个后继的部门不存在：整张申请不成立，前身不退出、第一个后继不落库
+    cr = api.draft(
+        split("U1", "2027-01-01", successor("A", "甲"), successor("B", "乙", dept="NOPE"))
+    )
+    r = api.submit(cr["id"])
+    assert r.status_code == 422
+    assert r.json()["problems"][0]["field"] == "successors.1.fields.department_code"
+    rows = api.get("/api/service-units", params={"as_of": "2027-01-01"}).json()
+    assert [x["code"] for x in rows] == ["U1"]
+
+
+def test_cannot_split_retired_unit_or_on_its_start_day(api):
+    api.apply(*world())
+    api.apply(dept_create(), unit_create(code="U1"), unit_create(code="U2"))
+    cr = api.draft(split("U1", "2026-11-01", successor("A", "甲"), successor("B", "乙")))
+    assert "生效日须晚于" in api.submit(cr["id"]).json()["message"]
+    api.apply({"kind": "service_unit.retire", "code": "U2", "valid_to": "2026-11-30"})
+    cr = api.draft(split("U2", "2027-01-01", successor("A", "甲"), successor("B", "乙")))
+    assert "永久退出" in api.submit(cr["id"]).json()["message"]
+
+
+def test_merge_successor_obeys_unit_rules(api):
+    api.apply(*world())
+    api.apply(dept_create(), unit_create(code="U1"), unit_create(code="U2"))
+    # 后继放到没有运营关系的主体下：被拒，前身不退出
+    api.apply(
+        {
+            "kind": "institution.create",
+            "code": "X",
+            "valid_from": "2020-01-01",
+            "fields": {"name": "无关主体"},
+        }
+    )
+    cr = api.draft(merge(["U1", "U2"], "2027-01-01", successor("M", "合并单元", inst="X")))
+    r = api.submit(cr["id"])
+    assert r.status_code == 422
+    assert "没有“运营”关系" in r.json()["message"]
+
+
+def test_lineage_rows_are_immutable(api, app_engine):
+    api.apply(*world())
+    api.apply(dept_create(), unit_create(code="U1"))
+    api.apply(split("U1", "2027-01-01", successor("A", "甲"), successor("B", "乙")))
+    with app_engine.connect() as c:
+        with pytest.raises(DBAPIError, match="历史记录不可修改"):
+            c.execute(text("UPDATE service_unit_lineage SET effective_date = '2027-02-01'"))
+        c.rollback()
+        with pytest.raises(DBAPIError, match="permission denied"):
+            c.execute(text("DELETE FROM service_unit_lineage"))
+        c.rollback()

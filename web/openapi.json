@@ -923,7 +923,7 @@
           "master"
         ],
         "summary": "List Service Units",
-        "description": "查看日期当天有效的服务单元（含尚未生效的计划单元，以 not_yet_effective 标出）。",
+        "description": "查看日期当天有效的服务单元，含暂停的（看 version.status）；已退出的不含。\n\n剧本 5“某日哪些单元在运营、归哪个主体”：include_future=false，按 institution 字段归集。",
         "operationId": "listServiceUnits",
         "parameters": [
           {
@@ -992,6 +992,18 @@
               ],
               "title": "Institution Id"
             }
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "是否包含查看日期尚未生效的计划单元（以 not_yet_effective 标出）",
+              "default": true,
+              "title": "Include Future"
+            },
+            "description": "是否包含查看日期尚未生效的计划单元（以 not_yet_effective 标出）"
           },
           {
             "name": "x-hdip-user",
@@ -2002,6 +2014,122 @@
           }
         }
       }
+    },
+    "/api/export/{dataset}.csv": {
+      "get": {
+        "tags": [
+          "export"
+        ],
+        "summary": "Export Csv",
+        "description": "导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。",
+        "operationId": "exportCsv",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "enum": [
+                "service-units",
+                "departments",
+                "campuses",
+                "institutions",
+                "operator-relations",
+                "service-unit-lineage"
+              ],
+              "type": "string",
+              "title": "Dataset"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2557,6 +2685,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/ServiceUnitRetire"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitSplit"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitMerge"
                 }
               ],
               "discriminator": {
@@ -2575,9 +2709,11 @@
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
+                  "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
                   "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
                   "service_unit.retire": "#/components/schemas/ServiceUnitRetire",
-                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise"
+                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise",
+                  "service_unit.split": "#/components/schemas/ServiceUnitSplit"
                 }
               }
             },
@@ -2910,6 +3046,12 @@
                 },
                 {
                   "$ref": "#/components/schemas/ServiceUnitRetire"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitSplit"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitMerge"
                 }
               ],
               "discriminator": {
@@ -2928,9 +3070,11 @@
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
+                  "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
                   "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
                   "service_unit.retire": "#/components/schemas/ServiceUnitRetire",
-                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise"
+                  "service_unit.revise": "#/components/schemas/ServiceUnitRevise",
+                  "service_unit.split": "#/components/schemas/ServiceUnitSplit"
                 }
               }
             },
@@ -3683,6 +3827,70 @@
         ],
         "title": "ItemOutcome"
       },
+      "LineageOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "lineage_type": {
+            "type": "string",
+            "enum": [
+              "SPLIT",
+              "MERGE"
+            ],
+            "title": "Lineage Type"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "predecessor_id": {
+            "type": "integer",
+            "title": "Predecessor Id"
+          },
+          "predecessor_code": {
+            "type": "string",
+            "title": "Predecessor Code"
+          },
+          "predecessor_name": {
+            "type": "string",
+            "title": "Predecessor Name"
+          },
+          "successor_id": {
+            "type": "integer",
+            "title": "Successor Id"
+          },
+          "successor_code": {
+            "type": "string",
+            "title": "Successor Code"
+          },
+          "successor_name": {
+            "type": "string",
+            "title": "Successor Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "lineage_type",
+          "effective_date",
+          "change_id",
+          "predecessor_id",
+          "predecessor_code",
+          "predecessor_name",
+          "successor_id",
+          "successor_code",
+          "successor_name"
+        ],
+        "title": "LineageOut",
+        "description": "一条演变关系：另一端单元的身份、代码与名称（前身取其最后一版名称，后继取第一版）。"
+      },
       "OperatorRelationClose": {
         "properties": {
           "kind": {
@@ -4192,6 +4400,20 @@
             },
             "type": "array",
             "title": "Versions"
+          },
+          "predecessors": {
+            "items": {
+              "$ref": "#/components/schemas/LineageOut"
+            },
+            "type": "array",
+            "title": "Predecessors"
+          },
+          "successors": {
+            "items": {
+              "$ref": "#/components/schemas/LineageOut"
+            },
+            "type": "array",
+            "title": "Successors"
           }
         },
         "type": "object",
@@ -4202,7 +4424,9 @@
           "created_at",
           "created_change_id",
           "retired_after",
-          "versions"
+          "versions",
+          "predecessors",
+          "successors"
         ],
         "title": "ServiceUnitDetail"
       },
@@ -4263,6 +4487,42 @@
           "institution_code"
         ],
         "title": "ServiceUnitFields"
+      },
+      "ServiceUnitMerge": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.merge",
+            "title": "Kind"
+          },
+          "codes": {
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Codes"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "successor": {
+            "$ref": "#/components/schemas/SuccessorUnit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "codes",
+          "effective_date",
+          "successor"
+        ],
+        "title": "ServiceUnitMerge",
+        "description": "把至少两个单元合并成一个：前身在 effective_date 前一日退出，后继自 effective_date 起。"
       },
       "ServiceUnitPatch": {
         "properties": {
@@ -4457,6 +4717,43 @@
         ],
         "title": "ServiceUnitRow"
       },
+      "ServiceUnitSplit": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.split",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "successors": {
+            "items": {
+              "$ref": "#/components/schemas/SuccessorUnit"
+            },
+            "type": "array",
+            "minItems": 2,
+            "title": "Successors"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "successors"
+        ],
+        "title": "ServiceUnitSplit",
+        "description": "把一个单元拆成至少两个：前身在 effective_date 前一日退出，后继自 effective_date 起。"
+      },
       "ServiceUnitVersionOut": {
         "properties": {
           "version_no": {
@@ -4587,6 +4884,41 @@
           "scope_note"
         ],
         "title": "ServiceUnitVersionOut"
+      },
+      "SuccessorUnit": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "unit_type": {
+            "type": "string",
+            "enum": [
+              "OPD",
+              "IPD",
+              "ED",
+              "EXAM",
+              "LAB",
+              "PHARMACY",
+              "OR",
+              "OTHER"
+            ],
+            "title": "Unit Type"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/ServiceUnitFields"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code",
+          "unit_type",
+          "fields"
+        ],
+        "title": "SuccessorUnit",
+        "description": "拆分/合并产生的后继单元：新身份、新代码，部门、院区、运营主体可与前身不同。"
       },
       "UserOut": {
         "properties": {

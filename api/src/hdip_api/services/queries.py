@@ -18,6 +18,7 @@ from hdip_api.models import (
     InstitutionVersion,
     OperatorRelation,
     ServiceUnit,
+    ServiceUnitLineage,
     ServiceUnitVersion,
 )
 from hdip_api.schemas.items import KIND_LABELS
@@ -33,6 +34,7 @@ from hdip_api.schemas.read import (
     InstitutionRow,
     InstitutionVersionOut,
     ItemOutcome,
+    LineageOut,
     Permissions,
     PrimaryOperator,
     RelationOut,
@@ -313,7 +315,53 @@ def get_service_unit(s: Session, unit_id: int, as_of: date) -> ServiceUnitDetail
         created_change_id=unit.created_change_id,
         retired_after=versions[0].valid_to,
         versions=[names.version_out(v) for v in versions],
+        predecessors=list_lineage(s, successor_id=unit.id),
+        successors=list_lineage(s, predecessor_id=unit.id),
     )
+
+
+def list_lineage(
+    s: Session,
+    *,
+    predecessor_id: int | None = None,
+    successor_id: int | None = None,
+    until: date | None = None,
+) -> list[LineageOut]:
+    """演变关系；until 给出时只含该日及之前生效的。"""
+    q = select(ServiceUnitLineage).order_by(
+        ServiceUnitLineage.effective_date, ServiceUnitLineage.id
+    )
+    if predecessor_id is not None:
+        q = q.where(ServiceUnitLineage.predecessor_id == predecessor_id)
+    if successor_id is not None:
+        q = q.where(ServiceUnitLineage.successor_id == successor_id)
+    if until is not None:
+        q = q.where(ServiceUnitLineage.effective_date <= until)
+    rows = s.scalars(q).all()
+    if not rows:
+        return []
+    codes = {u.id: u.code for u in s.scalars(select(ServiceUnit))}
+    versions = _versions_by(s, ServiceUnitVersion, "service_unit_id")
+
+    def name(unit_id: int, last: bool) -> str:
+        ordered = sorted(versions[unit_id], key=lambda v: v.version_no)
+        return (ordered[-1] if last else ordered[0]).name
+
+    return [
+        LineageOut(
+            id=r.id,
+            lineage_type=r.lineage_type,
+            effective_date=r.effective_date,
+            change_id=r.change_id,
+            predecessor_id=r.predecessor_id,
+            predecessor_code=codes[r.predecessor_id],
+            predecessor_name=name(r.predecessor_id, last=True),
+            successor_id=r.successor_id,
+            successor_code=codes[r.successor_id],
+            successor_name=name(r.successor_id, last=False),
+        )
+        for r in rows
+    ]
 
 
 # ------------------------------------------------------------------ 部门

@@ -87,3 +87,34 @@ def world():
         campus_create(code="GX", name="高新院区", valid_from="2026-10-01"),
         relation_create(campus="GX", valid_from="2026-10-01"),
     ]
+
+
+def successor(code, name, unit_type="OPD", dept="XNK", campus="GX", inst="CD3"):
+    return {
+        "code": code,
+        "unit_type": unit_type,
+        "fields": {
+            "name": name,
+            "department_code": dept,
+            "campus_code": campus,
+            "institution_code": inst,
+        },
+    }
+
+
+def split(code, effective_date, *successors):
+    return {
+        "kind": "service_unit.split",
+        "code": code,
+        "effective_date": effective_date,
+        "successors": list(successors),
+    }
+
+
+def merge(codes, effective_date, successor_spec):
+    return {
+        "kind": "service_unit.merge",
+        "codes": list(codes),
+        "effective_date": effective_date,
+        "successor": successor_spec,
+    }

@@ -266,6 +266,51 @@ class ServiceUnitRetire(_Item):
     valid_to: date
 
 
+class SuccessorUnit(BaseModel):
+    """拆分/合并产生的后继单元：新身份、新代码，部门、院区、运营主体可与前身不同。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    code: Code
+    unit_type: UnitType
+    fields: ServiceUnitFields
+
+
+class ServiceUnitSplit(_Item):
+    """把一个单元拆成至少两个：前身在 effective_date 前一日退出，后继自 effective_date 起。"""
+
+    kind: Literal["service_unit.split"]
+    code: Code
+    effective_date: date
+    successors: list[SuccessorUnit] = Field(min_length=2)
+
+    @model_validator(mode="after")
+    def _distinct(self):
+        codes = [s.code for s in self.successors]
+        if len(set(codes)) != len(codes):
+            raise ValueError("后继单元代码不能重复")
+        if self.code in codes:
+            raise ValueError("后继单元须用新代码，不能沿用前身代码")
+        return self
+
+
+class ServiceUnitMerge(_Item):
+    """把至少两个单元合并成一个：前身在 effective_date 前一日退出，后继自 effective_date 起。"""
+
+    kind: Literal["service_unit.merge"]
+    codes: list[Code] = Field(min_length=2)
+    effective_date: date
+    successor: SuccessorUnit
+
+    @model_validator(mode="after")
+    def _distinct(self):
+        if len(set(self.codes)) != len(self.codes):
+            raise ValueError("前身单元不能重复")
+        if self.successor.code in self.codes:
+            raise ValueError("后继单元须用新代码，不能沿用前身代码")
+        return self
+
+
 ChangeItem = Annotated[
     InstitutionCreate
     | InstitutionRevise
@@ -282,7 +327,9 @@ ChangeItem = Annotated[
     | ServiceUnitRebind
     | ServiceUnitChangeDepartment
     | ServiceUnitChangeStatus
-    | ServiceUnitRetire,
+    | ServiceUnitRetire
+    | ServiceUnitSplit
+    | ServiceUnitMerge,
     Field(discriminator="kind"),
 ]
 
@@ -305,6 +352,8 @@ KIND_LABELS: dict[str, str] = {
     "service_unit.change_department": "更换所属部门",
     "service_unit.change_status": "暂停/恢复服务单元",
     "service_unit.retire": "永久退出服务单元",
+    "service_unit.split": "拆分服务单元",
+    "service_unit.merge": "合并服务单元",
 }
 
 

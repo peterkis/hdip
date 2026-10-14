@@ -8,7 +8,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①② 步已完成（剧本 1、2、3、4、8 有后端测试 `api/tests/test_scriptN.py`，并在浏览器里走通）。下一步是第 ③：拆分、合并（`service_unit_lineage`）、按日期查询（剧本 5）、只读导出。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，8 条剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–4、8 在浏览器里走通。第 ③ 步（拆分、合并、按日期查询、导出）**尚无页面**：UI 视觉规范与整体风格待与维护者共同设计后再做。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
 - 业务尚不明确、随时可能调整：优先小而可改的实现，不做提前抽象。
@@ -47,11 +47,13 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 修订只作用于最新版本，生效日须晚于其开始日；内容无变化的修订被拒绝。修订项只写改动的字段，写 `null` 表示清空。
 - 版本表、身份表、运营关系由触发器 `hdip_guard_update` 保护：只允许把 `valid_to` 从空设为某日（关系另可在同一次 UPDATE 里写关闭信息），结束后整行不可再改。
 - 服务单元每个版本须满足：所属部门在用；院区非停用；运营主体与该院区有覆盖整个单元期间的“运营”关系（可由多段运营关系首尾相接覆盖）。“部门在用”只在单元**选用**部门时校验（新建、更换所属部门），已停用部门下的已有单元仍可修订、暂停、退出。
-- 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。
+- 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。中文名（门诊单元、住院单元…）在 `option_item`。“医技单元”与码值的映射未定，不要自行推断。
 - 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元。院区、关系类依赖在一张申请**全部变更项应用后**统一校验（`apply.py` 的 `_check_units`），所以“停用院区 + 改挂单元”可放在同一张申请里，不论先后。
 - 服务单元永久退出 = 最新版本写上 `valid_to`（最后有效日，当天仍有效），之后不再有版本；“已退出”由此推出，不另存状态。版本状态只有 `ACTIVE`（在用）/`SUSPENDED`（暂停）。
 - 部门无版本，名称与状态直接改在 `department` 行上（触发器只放开这几列），前后内容记在申请的 `results` 里。
-- 拆分/合并：旧单元退出，后继用新身份新代码，写 `service_unit_lineage`。
+- 拆分/合并（`service_unit.split` / `service_unit.merge`）：只填一个生效日 D，前身最后有效日 = D-1，后继自 D 起；后继新身份新代码、不继承前身版本历史、不自动迁移引用，可与前身不同部门/院区/运营主体。`service_unit_lineage` 一对前身—后继一行，只追加。
+- “某日在运营的单元”= 当天有有效版本，含暂停；`GET /api/service-units?include_future=false`。
+- 只读导出：`GET /api/export/{dataset}.csv?as_of=`（六类，见 `services/export.py`）。列名与列顺序是对外契约，新增列只加在末尾。
 - 为将来守住：部门上不写院区和管理方式；名称与代码不拼院区；单元代码不由“部门代码 + 院区”拼出；管理归属与核算归属分开。
 
 ## 范围外（不要实现，除非某条剧本因此失败）
@@ -66,7 +68,7 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
     core/           配置（HDIP_ 前缀环境变量）、数据库连接、错误、开发期身份
     models.py       ORM 映射（表结构以迁移为准）
     schemas/        items.py 变更项；read.py 查询与申请的响应
-    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询
+    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出
     routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口
   scripts/export_openapi.py   导出 web/openapi.json
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
@@ -78,7 +80,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/api/generated/          orval 生成，禁止手改
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿
-  src/pages/                  院区、主体、变更申请页面
+  src/pages/                  院区、主体、部门、服务单元、变更申请页面
   src/lib/                    码值中文名（format.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档
 ```

@@ -21,16 +21,18 @@ import type { ProblemItem } from './problemItem';
 import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
 import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
 import type { ServiceUnitCreate } from './serviceUnitCreate';
+import type { ServiceUnitMerge } from './serviceUnitMerge';
 import type { ServiceUnitRebind } from './serviceUnitRebind';
 import type { ServiceUnitRetire } from './serviceUnitRetire';
 import type { ServiceUnitRevise } from './serviceUnitRevise';
+import type { ServiceUnitSplit } from './serviceUnitSplit';
 import type { UserRef } from './userRef';
 
 export interface ChangeRequestOut {
   id: number;
   status: ChangeRequestOutStatus;
   note: string | null;
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge)[];
   item_labels: string[];
   outcomes: ItemOutcome[] | null;
   problems: ProblemItem[];

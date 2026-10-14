@@ -42,7 +42,10 @@ export const hdipFetch = async <T>(url: string, init?: RequestInit): Promise<T> 
     },
   })
   const text = await res.text()
-  const body = text ? JSON.parse(text) : undefined
+  // JSON 之外（如导出的 CSV）原样返回文本。注意 res.text() 会去掉 BOM：
+  // 页面做“下载 CSV”时应直接 fetch 后取 blob 保存，或在文本前补 '﻿'，否则 Excel 打开会乱码。
+  const isJson = res.headers.get('content-type')?.includes('json') ?? false
+  const body = text && isJson ? JSON.parse(text) : text || undefined
   if (!res.ok) throw new ApiError(res.status, body, readMessage(res.status, body))
   return body as T
 }

@@ -28,7 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
-    "service_unit_version, service_unit, department, "
+    "service_unit_lineage, service_unit_version, service_unit, department, "
     "operator_relation, campus_version, campus, institution_version, institution, change_request"
 )
 

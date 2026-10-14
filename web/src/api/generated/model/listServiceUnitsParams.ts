@@ -13,4 +13,8 @@ as_of?: string | null;
 campus_id?: number | null;
 department_id?: number | null;
 institution_id?: number | null;
+/**
+ * 是否包含查看日期尚未生效的计划单元（以 not_yet_effective 标出）
+ */
+include_future?: boolean;
 };
