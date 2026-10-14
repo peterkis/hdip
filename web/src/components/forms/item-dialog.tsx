@@ -23,6 +23,7 @@ import {
 import { Field, FieldLabel } from '@/components/ui/field'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { useCurrentUsername } from '@/lib/session'
+import { notify } from '@/lib/notify'
 
 export type ChangeItemInput = ChangeRequestWrite['items'][number]
 
@@ -38,7 +39,8 @@ export function useAddItem() {
       const cr = await getChangeRequest(target)
       return updateChangeRequest(target, { items: [...cr.items, item], note: cr.note })
     },
-    onSuccess: async (cr) => {
+    onSuccess: async (cr, { target }) => {
+      notify.success(target === 'new' ? `已保存到新草稿 #${cr.id}` : `已加入草稿 #${cr.id}`)
       await qc.invalidateQueries()
       navigate(`/changes/${cr.id}`)
     },

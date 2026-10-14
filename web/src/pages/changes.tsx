@@ -39,6 +39,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { CHANGE_STATUS, FIELD_LABELS, formatValue, stamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { notify } from '@/lib/notify'
 
 // ------------------------------------------------------------------ 列表
 export function ChangesPage() {
@@ -125,7 +126,9 @@ export function ChangeDetailPage() {
 
   if (!cr) return null
   const p = cr.permissions
-  const run = (fn: () => Promise<ChangeRequestOut>) => action.mutate(fn)
+  /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
+  const run = (fn: () => Promise<ChangeRequestOut>, done?: string) =>
+    action.mutate(fn, { onSuccess: () => done && notify.success(done) })
   const removeItem = (index: number) =>
     run(() => updateChangeRequest(id, { items: cr.items.filter((_, i) => i !== index), note: cr.note }))
   const closeAdd = (o: boolean) => !o && setAdding(null)
@@ -142,12 +145,12 @@ export function ChangeDetailPage() {
         actions={
           <>
             {p.can_cancel && (
-              <Button variant="ghost" disabled={action.isPending} onClick={() => run(() => cancelChangeRequest(id))}>
+              <Button variant="ghost" disabled={action.isPending} onClick={() => run(() => cancelChangeRequest(id), `申请 #${id} 已撤销`)}>
                 撤销
               </Button>
             )}
             {p.can_copy && (
-              <Button variant="outline" disabled={action.isPending} onClick={() => run(() => copyChangeRequest(id))}>
+              <Button variant="outline" disabled={action.isPending} onClick={() => run(() => copyChangeRequest(id), '已复制为新草稿')}>
                 复制为新草稿
               </Button>
             )}
@@ -157,7 +160,7 @@ export function ChangeDetailPage() {
               </Button>
             )}
             {p.can_submit && (
-              <Button disabled={action.isPending} onClick={() => run(() => submitChangeRequest(id))}>
+              <Button disabled={action.isPending} onClick={() => run(() => submitChangeRequest(id), `申请 #${id} 已提交，等待确认`)}>
                 提交
               </Button>
             )}
@@ -165,7 +168,7 @@ export function ChangeDetailPage() {
               <Button
                 disabled={!p.can_confirm || action.isPending}
                 title={p.confirm_hint ?? undefined}
-                onClick={() => run(() => confirmChangeRequest(id))}
+                onClick={() => run(() => confirmChangeRequest(id), `申请 #${id} 已确认生效`)}
               >
                 确认生效
               </Button>
@@ -208,7 +211,7 @@ export function ChangeDetailPage() {
           </CardContent>
         </Card>
 
-        <NoteCard cr={cr} onSave={(note) => run(() => updateChangeRequest(id, { items: cr.items, note }))} />
+        <NoteCard cr={cr} onSave={(note) => run(() => updateChangeRequest(id, { items: cr.items, note }), '变更说明已保存')} />
 
         <Card>
           <CardHeader>
@@ -269,7 +272,12 @@ export function ChangeDetailPage() {
         onOpenChange={setReturning}
         pending={action.isPending}
         onReturn={(reason) =>
-          action.mutate(() => returnChangeRequest(id, { reason }), { onSuccess: () => setReturning(false) })
+          action.mutate(() => returnChangeRequest(id, { reason }), {
+            onSuccess: () => {
+              setReturning(false)
+              notify.success(`申请 #${id} 已退回`)
+            },
+          })
         }
       />
       {adding === 'institution' && <InstitutionCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}

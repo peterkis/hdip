@@ -1,6 +1,6 @@
 // /design：统一 UI 视觉规范（Notion 风格）。展示全部设计令牌与组件在令牌下的样子。
 // 本页自身也只用令牌，并示范应用外壳：左侧栏 + 顶栏面包屑 + 900 宽正文。
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import { Icon, type AppIcon } from '@/components/kit/icon'
 import {
   Activity01Icon,
   Add01Icon,
@@ -59,7 +59,7 @@ import {
 } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
-const SECTIONS: { id: string; label: string; icon: IconSvgElement }[] = [
+const SECTIONS: { id: string; label: string; icon: AppIcon }[] = [
   { id: 'overview', label: '概览', icon: BookOpen01Icon },
   { id: 'color', label: '语义颜色', icon: ColorsIcon },
   { id: 'palette', label: '原始色板', icon: DropletIcon },
@@ -121,7 +121,7 @@ function Sidebar({ active }: { active: string }) {
         <span className="text-fg-strong truncate text-xs font-medium">HDIP 主数据维护</span>
       </Link>
       <div className="text-fg-muted hover:bg-surface-hover mx-2 mt-1 flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-(--hd-duration-fast)">
-        <HugeiconsIcon icon={Search01Icon} className="size-4" strokeWidth={1.75} />
+        <Icon icon={Search01Icon} className="size-4" strokeWidth={1.75} />
         搜索
       </div>
       <div className="text-fg-muted mt-4 px-4 pb-1 text-caption font-medium">设计规范</div>
@@ -137,7 +137,7 @@ function Sidebar({ active }: { active: string }) {
                 : 'text-fg-secondary hover:bg-surface-hover',
             )}
           >
-            <HugeiconsIcon icon={s.icon} className="size-4 shrink-0" strokeWidth={1.75} />
+            <Icon icon={s.icon} className="size-4 shrink-0" strokeWidth={1.75} />
             {s.label}
           </button>
         ))}
@@ -181,11 +181,11 @@ function Topbar() {
           size="sm"
           onClick={() => setTheme({ mode: theme.mode === 'dark' ? 'light' : 'dark' })}
         >
-          <HugeiconsIcon icon={theme.mode === 'dark' ? Sun03Icon : Moon02Icon} data-icon="inline-start" />
+          <Icon icon={theme.mode === 'dark' ? Sun03Icon : Moon02Icon} inline="start" />
           {theme.mode === 'dark' ? '浅色' : '深色'}
         </Button>
         <Button variant="ghost" size="icon-sm" aria-label="更多">
-          <HugeiconsIcon icon={MoreHorizontalIcon} />
+          <Icon icon={MoreHorizontalIcon} />
         </Button>
       </div>
     </header>
@@ -289,7 +289,7 @@ function Overview() {
   return (
     <section id="overview">
       <div className="text-fg-muted mb-3">
-        <HugeiconsIcon icon={PaintBoardIcon} className="size-14" strokeWidth={1.25} />
+        <Icon icon={PaintBoardIcon} className="size-14" strokeWidth={1.25} />
       </div>
       <h1 className="text-fg-strong text-xl font-bold tracking-(--hd-type-title-tracking)">统一 UI 视觉规范</h1>
       <div className="mt-4">
@@ -610,13 +610,13 @@ function ControlsSection() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm">
-            <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
+            <Icon icon={Add01Icon} inline="start" />
             新建
           </Button>
           <Button>默认</Button>
           <Button size="lg">大号</Button>
           <Button variant="outline" size="icon" aria-label="更多">
-            <HugeiconsIcon icon={MoreHorizontalIcon} />
+            <Icon icon={MoreHorizontalIcon} />
           </Button>
         </div>
       </div>

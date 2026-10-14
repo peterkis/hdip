@@ -91,17 +91,34 @@
 - **按钮**：一屏只放一个主按钮，其余用 `outline`、`ghost`。危险操作用 `destructive`（浅红底）。
 - **表格**：采用 Notion 数据库式。无外框、只有横线分隔，表头为灰色常规字重，行悬停有底色。代码用等宽字体，状态用 Tag。
 
+## 6.1 图标
+
+- 统一用 `components/kit/icon.tsx` 的 `<Icon icon={…} />`，页面不直接使用两个图标库的组件。
+- 选图标的顺序：先用 **hugeicons**（`@hugeicons/core-free-icons`）。它是 shadcn 与 ReUI 组件的 `iconLibrary` 配置，ReUI 的组件也用这套。没有合适的再用 **lucide-react**（例如“数据元”用的 `Blocks`）。
+- `Icon` 统一尺寸（默认 16px，即 `size-4`）和线宽（1.75）。放在按钮文字前后时，用 `inline="start"` 或 `inline="end"`。
+
+## 6.2 轻提示（toast）
+
+- 用 react-hot-toast，样式全部取自令牌（`components/kit/toaster.tsx`）：浮起表面、细边框、弹层阴影、控件圆角、界面字号。显示在底部居中，深色主题自动跟随。
+- 调用统一走 `lib/notify.ts`：`notify.success` / `notify.error` / `notify.info` / `notify.promise`。
+- **用 toast**：成功、轻量的结果。例如已保存到草稿、申请已提交或已确认、已导出、已切换身份。
+- **不用 toast**：需要用户逐条处理的校验错误，仍留在页面上（Callout 或表单提示）。toast 几秒后就消失，不适合承载要照着修改的内容。
+
 ## 7. 应用外壳（`components/layout.tsx`）
 
 - **左侧栏**：宽 240（`--hd-sidebar-width`），底色 `bg-surface-sidebar`。
+  - 导航按**业务主题域**分组，配置在 `components/shell/nav.ts`。新增主题域只需加一组数据，不改外壳代码。
+  - 当前分组依次为：组织与关系（主体、部门、院区、服务单元）、空间与场所、人员、资质与任职（人员与身份、聘用与合作关系、岗位与任职、执业资质、临床授权）、标准与数据集（标准数据集、数据元、数据目录）、治理（变更申请）。
+  - 尚未实现的条目标为 `planned`，显示为灰色，统一进入 `/planned/:key` 的“规划中”页面；没有条目的分组显示一行“规划中”。
+  - 分组标题可以折叠。
   - 顶部是工作区名，悬停时出现收起按钮；窄屏（小于 768px）默认收起。
-  - 导航分两组：“主数据”（服务单元、部门、院区、主体）和“治理”（变更申请，右侧数字是待确认的申请数）。
+  - “变更申请”右侧的数字是待确认的申请数。
   - 底部依次是设计规范、深色/浅色切换、当前用户（开发期身份）。
   - 导航项高 28，悬停用叠加色，选中用 `bg-surface-selected`。
 - **顶栏**：高 44（`--hd-topbar-height`）。
   - 左边是面包屑：一级取自导航项，详情页用 `useCrumb()` 补上对象名。
   - 右边是全局“查看日期”。不是今天时整块用黄色标签色高亮，并出现“回到今天”。
-- **正文**：列表页最宽 1200（`--hd-page-wide-max-width`）。页头用 `PageHeader`：图标、32px 粗体标题、一句说明、右上角的操作。
+- **正文**：列表页最宽 1200（`--hd-page-wide-max-width`）。页头用 `PageHeader`：图标与 32px 粗体标题同一行，下面一句说明，右上角放操作。
 
 ## 8. 列表页 = Notion 数据库视图（`components/kit/database.tsx`）
 

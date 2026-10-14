@@ -1,5 +1,5 @@
 // 服务单元列表：Notion 数据库视图。筛选条件放在地址栏（?campus=&dept=…），可收藏、可分享。
-import { HugeiconsIcon } from '@hugeicons/react'
+import { Icon } from '@/components/kit/icon'
 import {
   Add01Icon,
   Building03Icon,
@@ -42,6 +42,7 @@ import { PageHeader } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
+import { notify } from '@/lib/notify'
 import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
 import { UNIT_STATUS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
@@ -113,7 +114,11 @@ export function ServiceUnitsPage() {
     )
   }, [units, f.type, f.status, query])
 
-  const exporting = useMutation({ mutationFn: () => downloadCsv('service-units', asOf) })
+  const exporting = useMutation({
+    mutationFn: () => downloadCsv('service-units', asOf),
+    onSuccess: () => notify.success(`已导出 ${asOf} 的服务单元`),
+    onError: (e) => notify.error(e.message),
+  })
 
   return (
     <>
@@ -129,12 +134,12 @@ export function ServiceUnitsPage() {
               onClick={() => exporting.mutate()}
               title="导出当天已生效的全部单元（含暂停，不含计划中与已退出）"
             >
-              <HugeiconsIcon icon={Download01Icon} data-icon="inline-start" />
+              <Icon icon={Download01Icon} inline="start" />
               导出 CSV
             </Button>
             {isMaintainer && (
               <Button onClick={() => setCreating(true)}>
-                <HugeiconsIcon icon={Add01Icon} data-icon="inline-start" />
+                <Icon icon={Add01Icon} inline="start" />
                 新建
               </Button>
             )}
@@ -185,8 +190,6 @@ export function ServiceUnitsPage() {
           </Button>
         )}
       </DbToolbar>
-
-      {exporting.error && <p className="text-danger-text py-2 text-xs">{exporting.error.message}</p>}
 
       {!isPending && rows.length === 0 ? (
         <DbEmpty
@@ -243,7 +246,7 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
           {u.not_yet_effective && <Tag tone="gray">计划中</Tag>}
           {u.has_later_versions && (
             <span title="之后还有已确认的版本" className="text-fg-muted inline-flex">
-              <HugeiconsIcon icon={Clock01Icon} className="size-3.5" strokeWidth={1.75} />
+              <Icon icon={Clock01Icon} className="size-3.5" strokeWidth={1.75} />
             </span>
           )}
         </span>

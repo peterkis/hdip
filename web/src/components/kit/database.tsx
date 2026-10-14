@@ -1,5 +1,5 @@
 // Notion 数据库视图的基本件：工具栏、筛选胶囊、搜索、表格、底部计数。各列表页共用。
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+import { Icon, type AppIcon } from '@/components/kit/icon'
 import { ArrowDown01Icon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
@@ -34,18 +34,18 @@ export function FilterPill({
   value: string
   options: { value: string; label: string }[]
   onChange: (value: string) => void
-  icon?: IconSvgElement
+  icon?: AppIcon
 }) {
   const selected = options.find((o) => o.value === value)
   return (
     <span className="inline-flex items-center">
       <span className={cn(pill, selected ? pillActive : pillIdle, selected && 'rounded-r-none pr-1.5')}>
-        {icon && <HugeiconsIcon icon={icon} className="size-3.5" strokeWidth={1.75} />}
+        {icon && <Icon icon={icon} className="size-3.5" strokeWidth={1.75} />}
         {label}
         {selected ? (
           <span className="text-fg-strong max-w-40 truncate font-medium">：{selected.label}</span>
         ) : (
-          <HugeiconsIcon icon={ArrowDown01Icon} className="size-3.5 opacity-60" />
+          <Icon icon={ArrowDown01Icon} className="size-3.5 opacity-60" />
         )}
         <select
           aria-label={`按${label}筛选`}
@@ -67,7 +67,7 @@ export function FilterPill({
           className={cn(pill, pillActive, 'rounded-l-none border-l-0 pl-1 pr-2')}
           onClick={() => onChange('')}
         >
-          <HugeiconsIcon icon={Cancel01Icon} className="size-3" />
+          <Icon icon={Cancel01Icon} className="size-3" />
         </button>
       )}
     </span>
@@ -78,7 +78,7 @@ export function FilterPill({
 export function ToggleChip({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button aria-pressed={checked} className={cn(pill, checked ? pillActive : pillIdle)} onClick={() => onChange(!checked)}>
-      {checked && <HugeiconsIcon icon={Tick02Icon} className="size-3.5" />}
+      {checked && <Icon icon={Tick02Icon} className="size-3.5" />}
       {label}
     </button>
   )
@@ -87,7 +87,7 @@ export function ToggleChip({ label, checked, onChange }: { label: string; checke
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
     <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)">
-      <HugeiconsIcon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
+      <Icon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
       <input
         type="search"
         className="placeholder:text-fg-disabled w-40 bg-transparent text-xs outline-none"
@@ -102,7 +102,7 @@ export function SearchBox({ value, onChange, placeholder }: { value: string; onC
 // ------------------------------------------------------------------ 表格
 export interface DbColumn {
   label: string
-  icon?: IconSvgElement
+  icon?: AppIcon
   className?: string
 }
 
@@ -122,7 +122,7 @@ export function DbTable({ columns, children }: { columns: DbColumn[]; children: 
                 )}
               >
                 <span className="inline-flex items-center gap-1.5">
-                  {c.icon && <HugeiconsIcon icon={c.icon} className="size-4" strokeWidth={1.75} />}
+                  {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
                   {c.label}
                 </span>
               </th>

@@ -1,46 +1,30 @@
 // 应用外壳（Notion 风格）：左侧栏导航 + 顶栏面包屑与“查看日期” + 正文。
-// 尺寸、颜色全部来自令牌（--hd-sidebar-width、--hd-topbar-height、bg-surface-sidebar…），见 docs/design/ui-tokens.md。
-import { HugeiconsIcon, type IconSvgElement } from '@hugeicons/react'
+// 导航分组在 components/shell/nav.ts 配置；尺寸、颜色全部来自令牌，见 docs/design/ui-tokens.md。
 import {
-  Building03Icon,
+  ArrowDown01Icon,
+  ArrowRight01Icon,
   Calendar03Icon,
-  FileEditIcon,
-  GridViewIcon,
-  Hospital01Icon,
   Moon02Icon,
   PaintBoardIcon,
   SidebarLeftIcon,
   Sun03Icon,
   UnfoldMoreIcon,
-  UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useListChangeRequests } from '@/api/generated/changes/changes'
 import { useListUsers } from '@/api/generated/meta/meta'
+import { Icon, type AppIcon } from '@/components/kit/icon'
 import { CrumbProvider, useCurrentCrumb } from '@/components/shell/crumbs'
+import { findNav, itemPath, NAV_GROUPS, type NavGroup, type NavItem } from '@/components/shell/nav'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import { today } from '@/lib/format'
+import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-
-interface NavItem {
-  to: string
-  label: string
-  icon: IconSvgElement
-}
-
-const NAV: NavItem[] = [
-  { to: '/service-units', label: '服务单元', icon: GridViewIcon },
-  { to: '/departments', label: '部门', icon: UserGroupIcon },
-  { to: '/campuses', label: '院区', icon: Building03Icon },
-  { to: '/institutions', label: '主体', icon: Hospital01Icon },
-]
-
-const CHANGES: NavItem = { to: '/changes', label: '变更申请', icon: FileEditIcon }
 
 export function Layout() {
   // 窄屏（< 768px）默认收起侧栏
@@ -65,9 +49,10 @@ export function Layout() {
 // ================================================================== 侧栏
 function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   const { data: submitted = [] } = useListChangeRequests({ status: 'submitted' })
+  const counts: Record<string, number> = { '/changes': submitted.length }
   return (
     <aside className="bg-surface-sidebar border-line-subtle group/sidebar flex w-(--hd-sidebar-width) shrink-0 flex-col border-r">
-      <div className="flex h-(--hd-topbar-height) items-center gap-1 px-2">
+      <div className="flex h-(--hd-topbar-height) shrink-0 items-center gap-1 px-2">
         <Link
           to="/"
           className="hover:bg-surface-hover flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 transition-colors duration-(--hd-duration-fast)"
@@ -84,21 +69,18 @@ function Sidebar({ onCollapse }: { onCollapse: () => void }) {
           className="text-fg-muted opacity-0 group-hover/sidebar:opacity-100 focus-visible:opacity-100"
           onClick={onCollapse}
         >
-          <HugeiconsIcon icon={SidebarLeftIcon} />
+          <Icon icon={SidebarLeftIcon} />
         </Button>
       </div>
 
-      <nav className="mt-2 grid gap-px px-2">
-        <SectionLabel>主数据</SectionLabel>
-        {NAV.map((n) => (
-          <SideLink key={n.to} item={n} />
+      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {NAV_GROUPS.map((g) => (
+          <SideGroup key={g.key} group={g} counts={counts} />
         ))}
-        <SectionLabel>治理</SectionLabel>
-        <SideLink item={CHANGES} count={submitted.length} countHint="待确认" />
       </nav>
 
-      <div className="mt-auto grid gap-px px-2 pb-2">
-        <SideLink item={{ to: '/design', label: '设计规范', icon: PaintBoardIcon }} />
+      <div className="border-line-subtle grid shrink-0 gap-px border-t px-2 py-2">
+        <SideLink item={{ label: '设计规范', icon: PaintBoardIcon, to: '/design' }} />
         <ThemeToggle />
         <UserSwitcher />
       </div>
@@ -106,29 +88,60 @@ function Sidebar({ onCollapse }: { onCollapse: () => void }) {
   )
 }
 
-function SectionLabel({ children }: { children: ReactNode }) {
-  return <div className="text-fg-muted px-2 pt-3 pb-1 text-caption font-medium">{children}</div>
-}
-
 const sideItem =
   'flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-(--hd-duration-fast)'
 
-function SideLink({ item, count, countHint }: { item: NavItem; count?: number; countHint?: string }) {
+/** 一个主题域分组：标题可折叠（Notion 侧栏分区）；没有条目的分组显示“规划中” */
+function SideGroup({ group, counts }: { group: NavGroup; counts: Record<string, number> }) {
+  const [open, setOpen] = useState(true)
+  return (
+    <div className="mt-3 grid gap-px">
+      <button
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className="text-fg-muted hover:bg-surface-hover group/label flex h-6 items-center gap-1 rounded-md px-2 text-left text-caption font-medium transition-colors duration-(--hd-duration-fast)"
+      >
+        <span className="truncate">{group.label}</span>
+        <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3 opacity-0 group-hover/label:opacity-100" />
+      </button>
+      {open &&
+        (group.items.length === 0 ? (
+          <SideLink item={{ label: '规划中', icon: group.icon }} to={`/planned/${group.key}`} planned />
+        ) : (
+          group.items.map((item) => (
+            <SideLink
+              key={item.label}
+              item={item}
+              count={item.to ? counts[item.to] : undefined}
+              planned={!!item.planned}
+            />
+          ))
+        ))}
+    </div>
+  )
+}
+
+function SideLink({ item, to, count, planned }: { item: NavItem; to?: string; count?: number; planned?: boolean }) {
   return (
     <NavLink
-      to={item.to}
+      to={to ?? itemPath(item)}
+      title={planned ? '规划中，不在当前范围' : undefined}
       className={({ isActive }) =>
         cn(
           sideItem,
-          isActive ? 'bg-surface-selected text-fg-strong font-medium' : 'text-fg-secondary hover:bg-surface-hover',
+          isActive
+            ? 'bg-surface-selected text-fg-strong font-medium'
+            : planned
+              ? 'text-fg-muted hover:bg-surface-hover'
+              : 'text-fg-secondary hover:bg-surface-hover',
         )
       }
     >
-      <HugeiconsIcon icon={item.icon} className="size-4 shrink-0" strokeWidth={1.75} />
+      <Icon icon={item.icon} className={cn(planned && 'opacity-70')} />
       <span className="truncate">{item.label}</span>
       {!!count && (
         <span
-          title={countHint ? `${count} 张${countHint}` : undefined}
+          title={`${count} 张待确认`}
           className="bg-brand text-fg-on-brand ml-auto grid h-4 min-w-4 place-items-center rounded-full px-1 text-caption leading-none"
         >
           {count}
@@ -142,8 +155,11 @@ function ThemeToggle() {
   const theme = useTheme()
   const dark = theme.mode === 'dark'
   return (
-    <button className={cn(sideItem, 'text-fg-secondary hover:bg-surface-hover')} onClick={() => setTheme({ mode: dark ? 'light' : 'dark' })}>
-      <HugeiconsIcon icon={dark ? Sun03Icon : Moon02Icon} className="size-4 shrink-0" strokeWidth={1.75} />
+    <button
+      className={cn(sideItem, 'text-fg-secondary hover:bg-surface-hover')}
+      onClick={() => setTheme({ mode: dark ? 'light' : 'dark' })}
+    >
+      <Icon icon={dark ? Sun03Icon : Moon02Icon} />
       {dark ? '浅色模式' : '深色模式'}
     </button>
   )
@@ -167,7 +183,7 @@ function UserSwitcher() {
         <span className="text-fg truncate">{current?.display_name ?? username}</span>
         <span className="text-fg-muted text-caption">开发期身份</span>
       </span>
-      <HugeiconsIcon icon={UnfoldMoreIcon} className="text-fg-muted size-3.5 shrink-0" />
+      <Icon icon={UnfoldMoreIcon} className="text-fg-muted size-3.5" />
       <select
         aria-label="当前用户"
         className="absolute inset-0 cursor-pointer opacity-0"
@@ -175,6 +191,8 @@ function UserSwitcher() {
         onChange={(e) => {
           setCurrentUsername(e.target.value)
           qc.invalidateQueries()
+          const name = users.find((u) => u.username === e.target.value)?.display_name
+          notify.info(`已切换为“${name ?? e.target.value}”`)
         }}
       >
         {users.map((u) => (
@@ -191,24 +209,31 @@ function UserSwitcher() {
 function Topbar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => void }) {
   const { pathname } = useLocation()
   const crumb = useCurrentCrumb()
-  const section = [...NAV, CHANGES].find((n) => pathname.startsWith(n.to))
+  const found = findNav(pathname)
   return (
     <header className="flex h-(--hd-topbar-height) shrink-0 items-center gap-1 px-3 text-xs">
       {collapsed && (
         <Button variant="ghost" size="icon-sm" aria-label="展开侧栏" className="text-fg-muted" onClick={onExpand}>
-          <HugeiconsIcon icon={SidebarLeftIcon} />
+          <Icon icon={SidebarLeftIcon} />
         </Button>
       )}
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5">
-        {section && (
-          <Link to={section.to} className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5">
-            <HugeiconsIcon icon={section.icon} className="size-4" strokeWidth={1.75} />
-            <span className={cn(!crumb && 'text-fg')}>{section.label}</span>
-          </Link>
+        {found && <span className="text-fg-muted px-1.5 py-0.5">{found.group.label}</span>}
+        {found?.item && (
+          <>
+            <Sep />
+            <Link
+              to={itemPath(found.item)}
+              className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
+            >
+              <Icon icon={found.item.icon} />
+              <span className={cn(!crumb && 'text-fg')}>{found.item.label}</span>
+            </Link>
+          </>
         )}
         {crumb && (
           <>
-            <span className="text-fg-disabled">/</span>
+            <Sep />
             <span className="text-fg truncate rounded-sm px-1.5 py-0.5">{crumb}</span>
           </>
         )}
@@ -218,6 +243,10 @@ function Topbar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => v
       </div>
     </header>
   )
+}
+
+function Sep() {
+  return <span className="text-fg-disabled">/</span>
 }
 
 /** 全局“查看日期”：所有列表与详情按这一天取有效版本 */
@@ -239,7 +268,7 @@ function AsOfPicker() {
         )}
         title="按这一天查看各对象当时有效的版本"
       >
-        <HugeiconsIcon icon={Calendar03Icon} className={cn('size-4', isToday && 'text-fg-muted')} strokeWidth={1.75} />
+        <Icon icon={Calendar03Icon} className={cn(isToday && 'text-fg-muted')} />
         <span className={cn(isToday && 'text-fg-muted')}>查看日期</span>
         <input
           type="date"
@@ -253,6 +282,7 @@ function AsOfPicker() {
 }
 
 // ================================================================== 页面标题（Notion 页头）
+/** 图标与标题同一行；说明在下；操作在右上 */
 export function PageHeader({
   title,
   description,
@@ -262,23 +292,18 @@ export function PageHeader({
   title: ReactNode
   description?: ReactNode
   actions?: ReactNode
-  icon?: IconSvgElement
+  icon?: AppIcon
 }) {
   return (
-    <div className="mb-6">
-      {icon && (
-        <div className="text-fg-muted mb-2">
-          <HugeiconsIcon icon={icon} className="size-10" strokeWidth={1.25} />
-        </div>
-      )}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-fg-strong text-xl font-bold tracking-(--hd-type-title-tracking)">{title}</h1>
-          {description && <p className="text-fg-secondary mt-1 text-xs">{description}</p>}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 pt-1.5">{actions}</div>}
+    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="text-fg-strong flex items-center gap-3 text-xl font-bold tracking-(--hd-type-title-tracking)">
+          {icon && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
+          {title}
+        </h1>
+        {description && <p className="text-fg-secondary mt-1 text-xs">{description}</p>}
       </div>
+      {actions && <div className="flex flex-wrap items-center gap-2 pt-1.5">{actions}</div>}
     </div>
   )
 }
-
