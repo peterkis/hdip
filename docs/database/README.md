@@ -194,8 +194,12 @@ erDiagram
 - 曾用名由版本推出，不另存。
 
 **`classification_scheme`、`classification_code`（新增，配置）**
-- 方案：`code`、`name`、`version`、`purpose`、`is_exclusive`（是否单选）。按决定，**不记启用日、不设确认方**。
-- 代码：`scheme_id`、`code`、`name`、`criterion`（按什么判断）、`caution`（需要防止的误判）、`sort_order`。
+- 这两张是**配置表**，不经变更申请：
+  - 有维护人角色即可直接维护，不需确认，不记启用日、不设确认方。
+  - 每行记 `updated_by`、`updated_at`。
+  - 代码不删除，只停用（`is_active`）；代码值本身不可改（触发器）。
+- 方案：`code`、`name`、`version`、`purpose`、`is_exclusive`（是否单选）。
+- 代码：`scheme_id`、`code`、`name`、`criterion`（按什么判断）、`caution`（需要防止的误判）、`sort_order`、`is_active`。
 - 首期只有一个方案“部门管理主分类 v1”，单选，六个代码：`CLINICAL` 临床诊疗类、`MEDTECH` 医疗技术类、`SUPPORT` 医疗辅助与专业支持类、`ADMIN` 行政与业务管理类、`OPERATIONS` 运行保障类、`RESEARCH_EDU` 科研教学业务类。
 - 成本分类将来另设方案，与管理主分类允许有依据地不同。
 
@@ -204,6 +208,7 @@ erDiagram
 - 单选方案在同一时点只有一个赋值：
   - `(scheme_id, is_exclusive)` 外键引用方案上的同名唯一键，保证这一列与方案一致。
   - 再用 `EXCLUDE (department_id WITH =, scheme_id WITH =, daterange WITH &&) WHERE (is_exclusive)` 约束。
+- 赋值是业务数据，经变更申请（`department.classify`）提交、确认。赋值带生效日，默认当天。
 - 调整 = 结束旧赋值 + 新建赋值，历史保留。
 - 统计按主分类计数时，每个部门只计一次。
 
@@ -251,7 +256,16 @@ erDiagram
 - `mapping_relation` 沿用旧仓库码表：`EXACT` 等价 / `BROADER` 目标更宽 / `NARROWER` 目标更窄 / `RELATED` 相关 / `UNRESOLVED` 待裁决。
 - 行政隶属、主分类调整都不改动映射。“待裁决”的映射不进入导出。
 
-### 6.4 暂不建
+### 6.4 权限（预先设计）
+
+- 本期沿用 `app_user.roles` 的三角色（维护人 / 确认人 / 只读）。
+- 代码里改为按**权限键**判断，例如 `change.create`、`change.confirm`、`dictionary.maintain`。由一处映射“角色 → 权限键”：
+  - 维护人拥有 `dictionary.maintain`。
+  - 只读用户没有任何写权限键。
+- 以后细化权限时，把这处映射换成表（如 `role_permission`），或者按对象范围授权，调用处不变。
+- 变更申请的确认权限仍由 `approval_rule` 按“对象类型 × 动作”配置。
+
+### 6.5 暂不建
 
 - **负责人**：来自将来“岗位与任职”的有效任职关系，不在部门上存姓名。
 - **部门—服务单元的其他责任关系**：本期只有服务单元版本上的“所属部门”。
