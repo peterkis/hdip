@@ -263,6 +263,61 @@ class DepartmentAliasClose(_Item):
     valid_to: date
 
 
+class DepartmentSetParent(_Item):
+    """在某组织视图里调整直接上级：结束当前上级，自生效日起隶属新上级。
+
+    parent_code 为空 = 一级部门。
+    """
+
+    kind: Literal["department.set_parent"]
+    code: Code
+    view_code: SchemeCode = "ADMIN"
+    parent_code: Code | None
+    effective_date: date
+
+
+RelationKind = Literal["PROFESSIONAL_MGMT", "COLLABORATION", "CAMPUS_MGMT"]
+
+
+class DepartmentRelationCreate(_Item):
+    """部门管理关系。
+
+    专业管理：from 对 to 的某事项实施管理；协作：双方就某范围协作；
+    院区管理：from（院区管理组织）在某院区对某范围有管理职责，to 可空。
+    """
+
+    kind: Literal["department.relation_create"]
+    relation_kind: RelationKind
+    from_code: Code
+    to_code: Code | None = None
+    campus_code: Code | None = None
+    scope: Name
+    valid_from: date
+    valid_to: date | None = None
+
+    @model_validator(mode="after")
+    def _targets(self):
+        if self.relation_kind == "CAMPUS_MGMT":
+            if self.campus_code is None:
+                raise ValueError("院区管理须指明院区")
+        else:
+            if self.to_code is None:
+                raise ValueError("专业管理、协作须指明另一个部门")
+            if self.campus_code is not None:
+                raise ValueError("只有院区管理才填院区")
+        if self.to_code is not None and self.to_code == self.from_code:
+            raise ValueError("关系双方不能是同一个部门")
+        if self.valid_to is not None and self.valid_to < self.valid_from:
+            raise ValueError("结束日不能早于开始日")
+        return self
+
+
+class DepartmentRelationClose(_Item):
+    kind: Literal["department.relation_close"]
+    relation_id: int
+    valid_to: date
+
+
 class DepartmentRename(_Item):
     """已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。"""
 
@@ -424,6 +479,9 @@ ChangeItem = Annotated[
     | DepartmentAffiliate
     | DepartmentAliasAdd
     | DepartmentAliasClose
+    | DepartmentSetParent
+    | DepartmentRelationCreate
+    | DepartmentRelationClose
     | DepartmentRename
     | DepartmentChangeStatus
     | ServiceUnitCreate
@@ -454,6 +512,9 @@ KIND_LABELS: dict[str, str] = {
     "department.affiliate": "调整部门主体归属",
     "department.alias_add": "添加部门别名",
     "department.alias_close": "停用部门别名",
+    "department.set_parent": "调整行政隶属",
+    "department.relation_create": "建立部门管理关系",
+    "department.relation_close": "结束部门管理关系",
     "department.rename": "部门改名（旧）",
     "department.change_status": "停用/恢复部门（旧）",
     "service_unit.create": "新建服务单元",

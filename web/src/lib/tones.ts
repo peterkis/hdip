@@ -25,6 +25,13 @@ export const DEPARTMENT_LIFECYCLE_TONE: Record<string, Tone> = {
   SUPERSEDED: 'brown',
 }
 
+/** 部门管理关系类型 */
+export const DEPT_RELATION_TONE: Record<string, Tone> = {
+  PROFESSIONAL_MGMT: 'blue',
+  COLLABORATION: 'green',
+  CAMPUS_MGMT: 'purple',
+}
+
 /** 部门管理主分类：分类是维度不是状态，用不同颜色便于区分，含义不分好坏 */
 export const MAIN_CLASS_TONE: Record<string, Tone> = {
   CLINICAL: 'blue',

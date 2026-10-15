@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0006**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0007**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -8,7 +8,7 @@
 - **配置与用户**：[`app_user`](#app_user)、[`option_item`](#option_item)、[`approval_rule`](#approval_rule)
 - **变更申请**：[`change_request`](#change_request)
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
-- **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
+- **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -497,6 +497,76 @@
 - `org_view_code_uniq`（唯一）：`UNIQUE (code)`
 - `org_view_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'PLANNED'::text])))`
 
+### department_hierarchy
+
+组织视图内的上下级边：同一视图同一时点一个直接上级，禁止成环
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `view_id` | bigint | 是 |  | → `org_view` |
+| `parent_department_id` | bigint | 是 |  | → `department` |
+| `child_department_id` | bigint | 是 |  | → `department` |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `department_hierarchy_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_hierarchy_single_parent_excl`（排他）：`EXCLUDE USING gist (view_id WITH =, child_department_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_hierarchy_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `department_hierarchy_self_check`（检查）：`CHECK ((parent_department_id <> child_department_id))`
+
+索引：
+
+- `department_hierarchy_parent_idx`：`CREATE INDEX department_hierarchy_parent_idx ON public.department_hierarchy USING btree (view_id, parent_department_id)`
+
+触发器：
+
+- `department_hierarchy_guard`：`CREATE TRIGGER department_hierarchy_guard BEFORE UPDATE ON public.department_hierarchy FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
+### department_relation
+
+部门管理关系：专业管理、协作、院区管理
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `kind` | text | 是 |  |  |
+| `from_department_id` | bigint | 是 |  | → `department` |
+| `to_department_id` | bigint |  |  | → `department` |
+| `campus_id` | bigint |  |  | → `campus` |
+| `scope` | text | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `department_relation_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_relation_dup_excl`（排他）：`EXCLUDE USING gist (kind WITH =, from_department_id WITH =, COALESCE(to_department_id, (0)::bigint) WITH =, COALESCE(campus_id, (0)::bigint) WITH =, scope WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_relation_kind_check`（检查）：`CHECK ((kind = ANY (ARRAY['PROFESSIONAL_MGMT'::text, 'COLLABORATION'::text, 'CAMPUS_MGMT'::text])))`
+- `department_relation_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `department_relation_scope_check`（检查）：`CHECK ((btrim(scope) <> ''::text))`
+- `department_relation_self_check`（检查）：`CHECK (((to_department_id IS NULL) OR (to_department_id <> from_department_id)))`
+- `department_relation_target_check`（检查）：`CHECK ((((kind = 'CAMPUS_MGMT'::text) AND (campus_id IS NOT NULL)) OR ((kind <> 'CAMPUS_MGMT'::text) AND (campus_id IS NULL) AND (to_department_id IS NOT NULL))))`
+
+索引：
+
+- `department_relation_from_idx`：`CREATE INDEX department_relation_from_idx ON public.department_relation USING btree (from_department_id)`
+- `department_relation_to_idx`：`CREATE INDEX department_relation_to_idx ON public.department_relation USING btree (to_department_id)`
+
+触发器：
+
+- `department_relation_guard`：`CREATE TRIGGER department_relation_guard BEFORE UPDATE ON public.department_relation FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
 ### service_unit
 
 服务单元身份（单元类型属于身份，不可修订）
@@ -659,7 +729,9 @@ $function$
 | `department` | INSERT、SELECT、UPDATE |
 | `department_alias` | INSERT、SELECT、UPDATE |
 | `department_classification` | INSERT、SELECT、UPDATE |
+| `department_hierarchy` | INSERT、SELECT、UPDATE |
 | `department_institution` | INSERT、SELECT、UPDATE |
+| `department_relation` | INSERT、SELECT、UPDATE |
 | `department_version` | INSERT、SELECT、UPDATE |
 | `institution` | INSERT、SELECT、UPDATE |
 | `institution_version` | INSERT、SELECT、UPDATE |
@@ -702,8 +774,11 @@ $function$
 | department | change_status | confirmer | 是 |
 | department | classify | confirmer | 是 |
 | department | create | confirmer | 是 |
+| department | relation_close | confirmer | 是 |
+| department | relation_create | confirmer | 是 |
 | department | rename | confirmer | 是 |
 | department | revise | confirmer | 是 |
+| department | set_parent | confirmer | 是 |
 | institution | create | confirmer | 是 |
 | institution | revise | confirmer | 是 |
 | operator_relation | close | confirmer | 是 |

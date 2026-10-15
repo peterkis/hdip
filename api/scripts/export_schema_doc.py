@@ -52,6 +52,11 @@ TABLES: list[tuple[str, list[tuple[str, str]]]] = [
             ("classification_scheme", "分类方案（配置，维护人直接维护）"),
             ("classification_code", "分类代码（配置，代码值不可改、只停用）"),
             ("org_view", "组织视图：行政视图启用，运营、病案占位"),
+            (
+                "department_hierarchy",
+                "组织视图内的上下级边：同一视图同一时点一个直接上级，禁止成环",
+            ),
+            ("department_relation", "部门管理关系：专业管理、协作、院区管理"),
             ("service_unit", "服务单元身份（单元类型属于身份，不可修订）"),
             ("service_unit_version", "服务单元版本：部门 × 院区 × 运营主体 × 期间"),
             ("service_unit_lineage", "拆分 / 合并的前身 → 后继，只追加"),

@@ -2,7 +2,9 @@
 // 部门数口径：查看日期当天已设立、且组织生命周期为“正式履职”的部门；筹备、暂停等不计入。
 import {
   Add01Icon,
+  ArrowRight01Icon,
   Building03Icon,
+  HierarchyIcon,
   Calendar03Icon,
   Certificate01Icon,
   Download01Icon,
@@ -19,8 +21,8 @@ import {
 import { useMutation } from '@tanstack/react-query'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { useGetDepartment, useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
+import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
+import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
 import {
   DepartmentAffiliateDialog,
   DepartmentAliasCloseDialog,
@@ -28,6 +30,9 @@ import {
   DepartmentClassifyDialog,
   DepartmentCreateDialog,
   DepartmentLifecycleDialog,
+  DepartmentParentDialog,
+  DepartmentRelationCloseDialog,
+  DepartmentRelationDialog,
   DepartmentReviseDialog,
 } from '@/components/forms/department-forms'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
@@ -44,9 +49,9 @@ import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { DEPARTMENT_LIFECYCLE, ESTABLISHMENT_FORM, stamp, type DepartmentLifecycle } from '@/lib/format'
+import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, stamp, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
-import { DEPARTMENT_LIFECYCLE_TONE, MAIN_CLASS_TONE } from '@/lib/tones'
+import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -69,6 +74,8 @@ const COLUMNS: DbColumn[] = [
   { label: '代码', icon: HashtagIcon },
   { label: '部门管理主分类', icon: Tag01Icon },
   { label: '组织生命周期', icon: Loading03Icon },
+  { label: '层级', icon: HierarchyIcon },
+  { label: '行政上级', icon: Layers01Icon },
   { label: '设立形式', icon: ListViewIcon },
   { label: '主体归属', icon: Hospital01Icon },
   { label: '服务单元', icon: Building03Icon },
@@ -91,6 +98,8 @@ export function DepartmentsPage() {
   const cls = params.get('class') ?? ''
   const life = params.get('lifecycle') ?? ''
   const future = params.get('future') !== '0'
+  const lvl = params.get('level') ?? ''
+  const mode = params.get('view') === 'tree' ? 'tree' : 'table'
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query.trim())
   const [creating, setCreating] = useState(false)
@@ -105,10 +114,13 @@ export function DepartmentsPage() {
         (d) =>
           (future || !d.not_yet_effective) &&
           (!cls || (cls === '_none' ? !d.main_class : d.main_class?.code === cls)) &&
-          (!life || d.version.lifecycle === life),
+          (!life || d.version.lifecycle === life) &&
+          (!lvl || String(d.level) === lvl),
       ),
-    [all, future, cls, life],
+    [all, future, cls, life, lvl],
   )
+  // 层级树：按行政隶属深度优先排列，同级按代码
+  const ordered = useMemo(() => (mode === 'tree' ? treeOrder(rows) : rows), [rows, mode])
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
@@ -155,7 +167,15 @@ export function DepartmentsPage() {
           onChange={(v) => set('lifecycle', v)}
           options={Object.entries(DEPARTMENT_LIFECYCLE).map(([value, label]) => ({ value, label }))}
         />
+        <FilterPill
+          label="层级"
+          icon={HierarchyIcon}
+          value={lvl}
+          onChange={(v) => set('level', v)}
+          options={[1, 2, 3].map((n) => ({ value: String(n), label: levelName(n) }))}
+        />
         <ToggleChip label="含计划中" checked={future} onChange={(v) => set('future', v ? '' : '0')} />
+        <ToggleChip label="层级树" checked={mode === 'tree'} onChange={(v) => set('view', v ? 'tree' : '')} />
       </DbToolbar>
 
       {!isPending && rows.length === 0 ? (
@@ -165,10 +185,14 @@ export function DepartmentsPage() {
         />
       ) : (
         <DbTable columns={COLUMNS}>
-          {rows.map((d) => (
+          {ordered.map((d) => (
             <DbRow key={d.id}>
               <DbCell>
-                <span className="flex items-center gap-2">
+                <span
+                  className="flex items-center gap-2"
+                  style={mode === 'tree' ? { paddingLeft: `calc(var(--hd-space-20) * ${d.level - 1})` } : undefined}
+                >
+                  {mode === 'tree' && d.level > 1 && <Icon icon={ArrowRight01Icon} className="text-fg-disabled size-3" />}
                   <Link
                     to={`/departments/${d.id}`}
                     className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
@@ -189,6 +213,18 @@ export function DepartmentsPage() {
               <DbCell>
                 <LifecycleTag value={d.version.lifecycle} />
               </DbCell>
+              <DbCell>
+                <Tag tone={d.level === 1 ? 'gray' : 'brown'}>{levelName(d.level)}</Tag>
+              </DbCell>
+              <DbCell className="whitespace-nowrap">
+                {d.parent ? (
+                  <Link to={`/departments/${d.parent.id}`} className="hover:underline">
+                    {d.parent.name}
+                  </Link>
+                ) : (
+                  <span className="text-fg-disabled">—</span>
+                )}
+              </DbCell>
               <DbCell className="whitespace-nowrap">
                 {ESTABLISHMENT_FORM[d.version.establishment_form]}
                 {d.version.temporary_until && <span className="text-fg-muted text-caption"> · 至 {d.version.temporary_until}</span>}
@@ -208,6 +244,25 @@ export function DepartmentsPage() {
       {creating && <DepartmentCreateDialog open onOpenChange={setCreating} />}
     </>
   )
+}
+
+/** 层级树顺序：一级部门按代码，其下级紧随其后（深度优先） */
+function treeOrder(rows: DepartmentRow[]): DepartmentRow[] {
+  const ids = new Set(rows.map((r) => r.id))
+  const kids = new Map<number, DepartmentRow[]>()
+  const roots: DepartmentRow[] = []
+  for (const r of rows) {
+    if (r.parent && ids.has(r.parent.id)) kids.set(r.parent.id, [...(kids.get(r.parent.id) ?? []), r])
+    else roots.push(r)
+  }
+  const out: DepartmentRow[] = []
+  const walk = (list: DepartmentRow[]) =>
+    [...list].sort((a, b) => a.code.localeCompare(b.code)).forEach((r) => {
+      out.push(r)
+      walk(kids.get(r.id) ?? [])
+    })
+  walk(roots)
+  return out
 }
 
 /** 统计条：正式履职部门数、按主分类计数（每个部门只计一次）、不计入的筹备与暂停。点击按主分类筛选 */
@@ -270,8 +325,8 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
   'basis_note',
 ]
 
-type Dialog = 'revise' | 'lifecycle' | 'classify' | 'affiliate' | 'alias' | 'unit'
-type TabKey = 'props' | 'class' | 'units' | 'history'
+type Dialog = 'revise' | 'lifecycle' | 'classify' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation'
+type TabKey = 'props' | 'class' | 'org' | 'units' | 'history'
 
 export function DepartmentDetailPage() {
   const id = Number(useParams().id)
@@ -280,6 +335,9 @@ export function DepartmentDetailPage() {
   const { data } = useGetDepartment(id, { as_of: asOf })
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
+  const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
+  const { data: allDepts = [] } = useListDepartments({ as_of: asOf })
+  const { data: views = [] } = useListOrgViews()
   const [tab, setTab] = useState<TabKey>('props')
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
   if (!data) return null
@@ -375,8 +433,27 @@ export function DepartmentDetailPage() {
           { label: '行政级别', icon: Layers01Icon, value: shown.admin_grade },
           {
             label: '行政隶属',
-            icon: Layers01Icon,
-            value: <span className="text-fg-muted">一级 / 二级部门在 D2（行政视图）接入</span>,
+            icon: HierarchyIcon,
+            value: (
+              <span className="flex flex-wrap items-center gap-1">
+                {data.path.map((p, i) => (
+                  <span key={p.id} className="flex items-center gap-1">
+                    {i > 0 && <span className="text-fg-disabled">›</span>}
+                    {p.id === data.id ? (
+                      <span className="text-fg-strong">{p.name}</span>
+                    ) : (
+                      <Link to={`/departments/${p.id}`} className="hover:underline">
+                        {p.name}
+                      </Link>
+                    )}
+                  </span>
+                ))}
+                <Tag tone={data.level === 1 ? 'gray' : 'brown'} className="ml-1">
+                  {levelName(data.level)}
+                </Tag>
+                {edit('调整', 'parent')}
+              </span>
+            ),
           },
           {
             label: '当前负责人',
@@ -390,6 +467,7 @@ export function DepartmentDetailPage() {
         <TabsList variant="line">
           <TabsTrigger value="props">名称与说明</TabsTrigger>
           <TabsTrigger value="class">分类与归属</TabsTrigger>
+          <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
           <TabsTrigger value="units">服务单元（{data.units.length}）</TabsTrigger>
           <TabsTrigger value="history">版本与事件</TabsTrigger>
         </TabsList>
@@ -480,6 +558,67 @@ export function DepartmentDetailPage() {
           </>
         )}
 
+        {tab === 'org' && (
+          <>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="组织视图">
+              {views.map((v) => (
+                <Tag key={v.code} tone={v.status === 'ACTIVE' ? 'blue' : 'gray'} className={cn(v.status !== 'ACTIVE' && 'opacity-60')}>
+                  {v.name}
+                  {v.status !== 'ACTIVE' && ' · 占位'}
+                </Tag>
+              ))}
+            </div>
+            <Section title="行政隶属（行政视图）" action={edit('调整上级', 'parent')}>
+              <PeriodTable
+                head={['直接上级', '期间', '来源申请']}
+                rows={data.parents.map((e) => ({
+                  key: e.id,
+                  current: e.valid_from <= asOf && (e.valid_to === null || e.valid_to >= asOf),
+                  cells: [
+                    <Link to={`/departments/${e.parent.id}`} className="hover:underline">
+                      {e.parent.name}
+                    </Link>,
+                    `${e.valid_from} → ${e.valid_to ?? '长期'}`,
+                    <ChangeLink id={e.change_id} />,
+                  ],
+                }))}
+                empty="一直是一级部门（无上级）"
+              />
+              <p className="text-fg-muted text-caption">
+                下级部门（{asOf}）：
+                {data.children.length
+                  ? data.children.map((c) => (
+                      <Link key={c.id} to={`/departments/${c.id}`} className="text-fg ml-1.5 hover:underline">
+                        {c.name}
+                      </Link>
+                    ))
+                  : ' 无'}
+                。同一视图同一时点一个直接上级，不能成环；一级 / 二级部门由隶属关系计算。
+              </p>
+            </Section>
+            <Section
+              title="管理关系"
+              action={
+                isMaintainer && !terminal ? (
+                  <Button size="sm" variant="outline" onClick={() => setDialog('relation')}>
+                    建立关系
+                  </Button>
+                ) : null
+              }
+            >
+              <RelationsTable
+                deptId={data.id}
+                relations={data.relations}
+                asOf={asOf}
+                onClose={isMaintainer ? setClosingRelation : undefined}
+              />
+              <p className="text-fg-muted text-caption">
+                专业管理按事项记录，不构成行政上级（如医务部对临床医疗工作、护理部对护理专业）；关系由院内制度确认，系统不从名称推断。
+              </p>
+            </Section>
+          </>
+        )}
+
         {tab === 'units' && (
           <Section
             title={`服务单元（${asOf}）`}
@@ -524,11 +663,97 @@ export function DepartmentDetailPage() {
       {dialog === 'alias' && <DepartmentAliasDialog open onOpenChange={close} code={data.code} name={latest.name} />}
       {dialog === 'unit' && <UnitCreateDialog open onOpenChange={close} departmentCode={data.code} />}
       {closingAlias && <DepartmentAliasCloseDialog open alias={closingAlias} onOpenChange={(o) => !o && setClosingAlias(null)} />}
+      {dialog === 'parent' && (
+        <DepartmentParentDialog
+          open
+          onOpenChange={close}
+          code={data.code}
+          name={latest.name}
+          currentParent={data.path.length > 1 ? data.path[data.path.length - 2] : null}
+          exclude={[data.code, ...descendants(allDepts, data.id)]}
+        />
+      )}
+      {dialog === 'relation' && <DepartmentRelationDialog open onOpenChange={close} code={data.code} name={latest.name} />}
+      {closingRelation && (
+        <DepartmentRelationCloseDialog open relation={closingRelation} onOpenChange={(o) => !o && setClosingRelation(null)} />
+      )}
     </div>
   )
 }
 
 // ------------------------------------------------------------------ 小件
+/** 某部门在查看日期的全部下级代码（调整上级时不能选，否则成环） */
+function descendants(rows: DepartmentRow[], id: number): string[] {
+  const out: string[] = []
+  const walk = (pid: number) =>
+    rows.filter((r) => r.parent?.id === pid).forEach((r) => {
+      out.push(r.code)
+      walk(r.id)
+    })
+  walk(id)
+  return out
+}
+
+function RelationsTable({
+  deptId,
+  relations,
+  asOf,
+  onClose,
+}: {
+  deptId: number
+  relations: DepartmentRelationOut[]
+  asOf: string
+  onClose?: (r: DepartmentRelationOut) => void
+}) {
+  if (relations.length === 0) return <p className="text-fg-disabled text-xs">没有专业管理、协作或院区管理关系</p>
+  return (
+    <DbTable
+      columns={[
+        { label: '类型' },
+        { label: '关系' },
+        { label: '事项 / 范围', className: 'min-w-40' },
+        { label: '期间', icon: Calendar03Icon },
+        { label: '' },
+      ]}
+    >
+      {relations.map((r) => {
+        const current = r.valid_from <= asOf && (r.valid_to === null || r.valid_to >= asOf)
+        const dept = (x: { id: number; name: string }) =>
+          x.id === deptId ? (
+            <span className="text-fg-strong">本部门</span>
+          ) : (
+            <Link to={`/departments/${x.id}`} className="hover:underline">
+              {x.name}
+            </Link>
+          )
+        return (
+          <DbRow key={r.id} className={cn(!current && 'text-fg-muted')}>
+            <DbCell>
+              <Tag tone={DEPT_RELATION_TONE[r.kind]}>{DEPT_RELATION[r.kind as DeptRelationKind]}</Tag>
+            </DbCell>
+            <DbCell className="whitespace-nowrap">
+              {dept(r.from_department)}
+              <span className="text-fg-disabled mx-1.5">→</span>
+              {r.to_department ? dept(r.to_department) : <span className="text-fg-muted">整个院区</span>}
+              {r.campus_name && <span className="text-fg-muted ml-1.5 text-caption">@ {r.campus_name}</span>}
+            </DbCell>
+            <DbCell className="py-2 whitespace-normal">{r.scope}</DbCell>
+            <DbCell className="whitespace-nowrap">
+              {r.valid_from} → {r.valid_to ?? '长期'}
+            </DbCell>
+            <DbCell className="text-right">
+              {onClose && r.valid_to === null && (
+                <Button size="xs" variant="ghost" onClick={() => onClose(r)}>
+                  结束
+                </Button>
+              )}
+            </DbCell>
+          </DbRow>
+        )
+      })}
+    </DbTable>
+  )
+}
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="grid gap-2">

@@ -6,6 +6,7 @@
  */
 import type { ClassRef } from './classRef';
 import type { DepartmentVersionOut } from './departmentVersionOut';
+import type { DeptRef } from './deptRef';
 
 export interface DepartmentRow {
   id: number;
@@ -15,5 +16,7 @@ export interface DepartmentRow {
   has_later_versions: boolean;
   main_class: ClassRef | null;
   institution_name: string | null;
+  parent: DeptRef | null;
+  level: number;
   unit_count: number;
 }

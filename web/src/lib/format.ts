@@ -46,6 +46,18 @@ export const LIFECYCLE_NEXT: Record<DepartmentLifecycle, DepartmentLifecycle[]> 
   SUPERSEDED: [],
 }
 
+export const DEPT_RELATION = {
+  PROFESSIONAL_MGMT: '专业管理',
+  COLLABORATION: '协作',
+  CAMPUS_MGMT: '院区管理',
+} as const
+export type DeptRelationKind = keyof typeof DEPT_RELATION
+
+/** 行政视图中的组织层级 */
+export function levelName(level: number): string {
+  return ['', '一级部门', '二级部门', '三级部门', '四级部门'][level] ?? `${level} 级部门`
+}
+
 export const ESTABLISHMENT_FORM = {
   STANDING: '常设部门',
   TEMPORARY: '经批准的临时部门',
@@ -106,6 +118,12 @@ export const FIELD_LABELS: Record<string, string> = {
   class_name: '分类',
   alias_kind: '别名类别',
   value: '别名',
+  parent: '直接上级',
+  relation_kind: '关系类型',
+  from_department: '管理方 / 协作一方',
+  to_department: '对象部门',
+  scope: '事项 / 范围',
+  ended_links: '同时结束',
 }
 
 /** 选项表里的码值名称，按字段名索引：{ node_role: {HIGH_TECH: '高新院区'}, unit_type: {...} } */
@@ -128,6 +146,7 @@ export function stamp(value: string | null | undefined): string {
 
 export function formatValue(field: string, value: unknown, labels: OptionLabels = {}): string {
   if (field === 'valid_to' && value === null) return '长期'
+  if (field === 'parent' && value === null) return '无（一级部门）'
   if (value === null || value === undefined || value === '') return '—'
   if (field === 'operating_status') return OPERATING_STATUS[value as OperatingStatus] ?? String(value)
   if (field === 'relation_type') return RELATION_TYPE[value as RelationType] ?? String(value)
@@ -136,6 +155,7 @@ export function formatValue(field: string, value: unknown, labels: OptionLabels 
     return DEPARTMENT_LIFECYCLE[value as DepartmentLifecycle] ?? String(value)
   if (field === 'establishment_form') return ESTABLISHMENT_FORM[value as EstablishmentForm] ?? String(value)
   if (field === 'alias_kind') return value === 'SEARCH_CODE' ? '检索码' : '别名'
+  if (field === 'relation_kind') return DEPT_RELATION[value as DeptRelationKind] ?? String(value)
   if (Array.isArray(value)) return value.length ? value.join('、') : '—'
   if (labels[field]) return labels[field][value as string] ?? String(value)
   if (typeof value === 'boolean') return value ? '是' : '否'

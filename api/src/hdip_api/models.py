@@ -272,6 +272,30 @@ class DepartmentInstitution(_Period, Base):
     is_primary: Mapped[bool]
 
 
+class DepartmentHierarchy(_Period, Base):
+    """组织视图内的一条上下级边。"""
+
+    __tablename__ = "department_hierarchy"
+    __mapper_args__ = {"eager_defaults": True}
+
+    view_id: Mapped[int] = mapped_column(ForeignKey("org_view.id"))
+    parent_department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    child_department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+
+
+class DepartmentRelation(_Period, Base):
+    """专业管理、协作、院区管理。"""
+
+    __tablename__ = "department_relation"
+    __mapper_args__ = {"eager_defaults": True}
+
+    kind: Mapped[str] = mapped_column(Text)
+    from_department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    to_department_id: Mapped[int | None] = mapped_column(ForeignKey("department.id"))
+    campus_id: Mapped[int | None] = mapped_column(ForeignKey("campus.id"))
+    scope: Mapped[str] = mapped_column(Text)
+
+
 class OrgView(Base):
     __tablename__ = "org_view"
 

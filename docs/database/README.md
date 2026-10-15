@@ -41,6 +41,7 @@ erDiagram
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
 | 字典 | `classification_scheme`、`classification_code`、`org_view` | 配置：分类方案与代码（维护人可直接维护）、组织视图 |
+| 部门关系 | `department_hierarchy`、`department_relation` | 行政隶属（一级 / 二级部门）；专业管理、协作、院区管理（D2，迁移 0007） |
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系 |
 
 ## 2. 设计约定
@@ -116,6 +117,7 @@ stateDiagram-v2
 | 院区 | `campus.create`、`campus.revise`、`campus.change_status` | `campus`、`campus_version` |
 | 运营关系 | `operator_relation.create`、`operator_relation.close` | `operator_relation` |
 | 部门 | `department.create`、`.revise`、`.change_lifecycle`、`.classify`、`.affiliate`、`.alias_add`、`.alias_close`（旧的 `.rename`、`.change_status` 只保留读取，不能再应用） | `department`、`department_version`、`department_classification`、`department_institution`、`department_alias` |
+| 部门关系 | `department.set_parent`、`.relation_create`、`.relation_close`；撤销部门时自动结束它自己的上级边与参与的关系 | `department_hierarchy`、`department_relation` |
 | 服务单元 | `service_unit.create`、`.revise`、`.rebind`、`.change_department`、`.change_status`、`.retire` | `service_unit`、`service_unit_version` |
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
 
@@ -125,7 +127,7 @@ stateDiagram-v2
 - 列表默认也列出“尚未生效的计划对象”，并标 `not_yet_effective`。服务单元列表用 `include_future=false` 只看当天已生效的，这就是“某日在运营的单元”，含暂停。
 - 名称显示：主体、院区、部门都取当日版本的名称（部门自 D1 起有版本）。
 - 部门数口径：查看日期当天已设立且组织生命周期为“正式履职”的部门。
-- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，共六类数据，逻辑在 `services/export.py`。列名和列顺序是对外契约，新增列只能加在末尾。
+- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元、部门、院区、主体、运营关系、单元演变关系，以及部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）。列名和列顺序是对外契约，新增列只能加在末尾。
 
 ## 5. 迁移史
 
@@ -137,6 +139,7 @@ stateDiagram-v2
 | 0004 | 部门、服务单元及其版本；`hdip_guard_update` 改为通过 jsonb 读取 `valid_to`，以兼容没有这一列的表 |
 | 0005 | 服务单元演变关系；单元类型中文名；拆分 / 合并的确认规则 |
 | 0006 | 部门深化 D1：部门属性版本（回填现有部门为第 1 版）、别名、分类方案与代码（配置）、分类赋值、主体归属、组织视图；`department` 只留身份 |
+| 0007 | 部门深化 D2：行政隶属（视图内上下级）、部门管理关系（专业管理、协作、院区管理） |
 
 ### 新增一类对象或变更的检查单
 
@@ -146,7 +149,7 @@ stateDiagram-v2
 4. 写测试：剧本测试 `test_scriptN.py`；每条新约束在 `test_rules*.py` 里要有反例。
 5. `make migrate && make db-doc`，同步本文与 CLAUDE.md。
 
-## 6. 部门深化（D1 已实施，D2、D3 规划中）
+## 6. 部门深化（D1、D2 已实施，D3 规划中）
 
 需求与决定见 [部门主数据深化-实施计划](../部门主数据深化-实施计划.md)。
 
@@ -235,21 +238,25 @@ erDiagram
 - 每个现有部门回填第 1 版：名称取当前名称；生命周期由 在用 → 正式履职、停用 → 暂停履职；设立形式取常设。
 - 主分类、职责、行政级别留空，由维护人在页面里补齐。
 
-### 6.2 D2 管理关系
+### 6.2 D2 管理关系（已实施，迁移 0007）
 
 **`department_hierarchy`（新增，视图内上下级）**
 - 列：`view_id`、`parent_department_id`、`child_department_id`、期间、`change_id`。
 - 同一视图、同一时点每个部门最多一个直接上级：`EXCLUDE (view_id, child_department_id, daterange)`。
 - 不能以自己为上级（检查约束）。
-- 禁止成环：在申请全部应用后统一检查，与 `_check_units` 同一位置。
+- 禁止成环：在申请全部应用后统一检查（`_check_org`：在该视图每个边界日期重建当天的上下级，发现环即拒绝并列出环上部门）。
+- 只能写入 `ACTIVE` 的视图；运营、病案视图为占位，写入被拒。
+- 部门撤销或被替代时：它自己的上级边与参与的管理关系自动止于前一日；若仍有下级部门，阻止确认并列出，须先调整下级的隶属。
 - **一级 / 二级部门**指行政视图中的**组织层级**，不是专业分类层级，也不是 HIS 菜单分组：
   - 没有上级的是一级部门。
   - 上级是一级部门的是二级部门。例如信息中心之下的图书室、计算机中心。
   - 层级由关系在查看日期计算，不作为部门属性保存。
 - 子部门本身也是部门，有自己的身份、版本与分类。服务单元可以挂在二级部门下。
+- 首期不建“分组节点”：上级只能是真实部门。
 
 **`department_relation`（新增，管理关系）**
 - 列：`kind`（`PROFESSIONAL_MGMT` 专业管理 / `COLLABORATION` 协作 / `CAMPUS_MGMT` 院区管理）、`from_department_id`、`to_department_id`、`campus_id`（院区管理时）、`scope`（管理事项或协作范围）、期间、`change_id`。
+- 院区管理必须有院区，对象部门可空（整个院区）；专业管理、协作必须有对象部门（检查约束）。同类、同双方、同院区、同事项的关系期间不重叠（排他约束）。
 - 专业管理按事项记录，不构成行政上级。例如医务部对临床医疗工作、护理部对护理专业的管理。
 - 软件不从名称推断这些关系，由院内制度确认后录入。
 

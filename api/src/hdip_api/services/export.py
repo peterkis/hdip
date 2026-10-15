@@ -25,6 +25,8 @@ Dataset = Literal[
     "institutions",
     "operator-relations",
     "service-unit-lineage",
+    "department-hierarchy",
+    "department-relations",
 ]
 
 OPERATING_STATUS = {
@@ -42,6 +44,11 @@ LIFECYCLE = {
     "SUPERSEDED": "被替代",
 }
 FORM = {"STANDING": "常设部门", "TEMPORARY": "经批准的临时部门"}
+DEPT_RELATION = {
+    "PROFESSIONAL_MGMT": "专业管理",
+    "COLLABORATION": "协作",
+    "CAMPUS_MGMT": "院区管理",
+}
 RELATION_TYPE = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
 LINEAGE_TYPE = {"SPLIT": "拆分", "MERGE": "合并"}
 
@@ -101,7 +108,48 @@ def _departments(s: Session, day: date) -> Iterable[dict]:
             "version_no": v.version_no,
             "valid_from": v.valid_from,
             "valid_to": v.valid_to,
+            "admin_level": d.level,
+            "admin_parent_code": d.parent.code if d.parent else None,
+            "admin_parent_name": d.parent.name if d.parent else None,
         }
+
+
+def _hierarchy(s: Session, day: date) -> Iterable[dict]:
+    """行政视图在查看日期的结构：每个已设立部门一行，含层级与直接上级。"""
+    for d in queries.list_departments(s, day):
+        if d.not_yet_effective:
+            continue
+        yield {
+            "view_code": "ADMIN",
+            "department_code": d.code,
+            "department_name": d.version.name,
+            "level": d.level,
+            "parent_code": d.parent.code if d.parent else None,
+            "parent_name": d.parent.name if d.parent else None,
+        }
+
+
+def _department_relations(s: Session, day: date) -> Iterable[dict]:
+    """查看日期当天有效的专业管理、协作、院区管理关系。"""
+    seen: set[int] = set()
+    for d in queries.list_departments(s, day):
+        for r in queries.get_department(s, d.id, day).relations:
+            if r.id in seen or not queries.covers(r.valid_from, r.valid_to, day):
+                continue
+            seen.add(r.id)
+            yield {
+                "relation_id": r.id,
+                "relation_kind": r.kind,
+                "relation_kind_name": DEPT_RELATION[r.kind],
+                "from_code": r.from_department.code,
+                "from_name": r.from_department.name,
+                "to_code": r.to_department.code if r.to_department else None,
+                "to_name": r.to_department.name if r.to_department else None,
+                "campus_name": r.campus_name,
+                "scope": r.scope,
+                "valid_from": r.valid_from,
+                "valid_to": r.valid_to,
+            }
 
 
 def _campuses(s: Session, day: date) -> Iterable[dict]:
@@ -194,6 +242,14 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
         "short_name", "main_class", "main_class_name", "establishment_form",
         "establishment_form_name", "temporary_until", "admin_grade", "duties",
         "institution_name", "version_no", "valid_from", "valid_to",
+        "admin_level", "admin_parent_code", "admin_parent_name",
+    ]),
+    "department-hierarchy": (_hierarchy, [
+        "view_code", "department_code", "department_name", "level", "parent_code", "parent_name",
+    ]),
+    "department-relations": (_department_relations, [
+        "relation_id", "relation_kind", "relation_kind_name", "from_code", "from_name",
+        "to_code", "to_name", "campus_name", "scope", "valid_from", "valid_to",
     ]),
     "campuses": (_campuses, [
         "campus_code", "campus_name", "node_role", "node_role_name",

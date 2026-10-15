@@ -2,18 +2,20 @@
 // 按操作动线原则：名称在前、代码在后；引用主体按名称选择；只给能选的（生命周期只列合法的下一步）。
 import { useState } from 'react'
 import { useListClassificationSchemes } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentVersionOut } from '@/api/generated/model'
+import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentVersionOut } from '@/api/generated/model'
 import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
-import { InstitutionSelect } from '@/components/forms/ref-selects'
+import { CampusSelect, DepartmentSelect, InstitutionSelect } from '@/components/forms/ref-selects'
 import { Callout } from '@/components/kit/callout'
 import { TagInput } from '@/components/kit/tag-input'
 import {
   DEPARTMENT_LIFECYCLE,
+  DEPT_RELATION,
   ESTABLISHMENT_FORM,
   LIFECYCLE_NEXT,
   type DepartmentLifecycle,
+  type DeptRelationKind,
   type EstablishmentForm,
 } from '@/lib/format'
 
@@ -330,6 +332,163 @@ export function DepartmentAliasCloseDialog({ alias, ...props }: DialogProps & { 
       }
     >
       <TextField label="停用日" name="valid_to" type="date" required value={day} onChange={setDay} />
+    </ItemDialog>
+  )
+}
+
+// ------------------------------------------------------------------ 行政隶属（D2）
+export function DepartmentParentDialog({
+  code,
+  name,
+  currentParent,
+  exclude,
+  ...props
+}: DialogProps & { code: string; name: string; currentParent?: { code: string; name: string } | null; exclude: string[] }) {
+  const [parent, setParent] = useState(currentParent?.code ?? '')
+  const [day, setDay] = useEffectiveDate()
+  return (
+    <ItemDialog
+      {...props}
+      title={`调整行政隶属：${name}`}
+      description={`行政视图中同一时点只有一个直接上级，不能成环。${currentParent ? `当前上级：${currentParent.name}。` : '当前为一级部门。'}专业管理关系不受影响。`}
+      build={() => {
+        if ((parent || null) === (currentParent?.code ?? null)) return currentParent ? '上级没有变化' : '当前已是一级部门'
+        return (
+          requireFields([['effective_date', !!day, '请选择生效日期']]) ?? {
+            kind: 'department.set_parent',
+            code,
+            view_code: 'ADMIN',
+            parent_code: parent || null,
+            effective_date: day,
+          }
+        )
+      }}
+    >
+      <DepartmentSelect
+        label="直接上级"
+        name="parent"
+        value={parent}
+        onChange={setParent}
+        exclude={exclude}
+        placeholder="无上级（一级部门）"
+        hint="不列出本部门及其下级；选“无上级”即为一级部门"
+      />
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
+    </ItemDialog>
+  )
+}
+
+// ------------------------------------------------------------------ 管理关系（D2）
+const RELATION_HELP: Record<DeptRelationKind, { from: string; to: string; scope: string; note: string }> = {
+  PROFESSIONAL_MGMT: {
+    from: '管理方',
+    to: '被管理部门',
+    scope: '管理事项',
+    note: '按事项实施专业管理（如医务部对临床医疗工作、护理部对护理专业），不构成行政上级。',
+  },
+  COLLABORATION: { from: '协作一方', to: '协作另一方', scope: '协作范围', note: '与哪些部门共同承担某项服务或任务。' },
+  CAMPUS_MGMT: {
+    from: '院区管理组织',
+    to: '对象部门（可空）',
+    scope: '管理范围',
+    note: '某院区管理组织在某院区对某范围有管理职责；院区与管理组织分别引用。',
+  },
+}
+
+export function DepartmentRelationDialog({
+  code,
+  name,
+  ...props
+}: DialogProps & { code: string; name: string }) {
+  const [kind, setKind] = useState<DeptRelationKind>('PROFESSIONAL_MGMT')
+  // 默认本部门是“对象”一方（在被管理部门的页面上发起最常见）；可切换为本部门是管理方
+  const [selfIsFrom, setSelfIsFrom] = useState(false)
+  const [other, setOther] = useState('')
+  const [campus, setCampus] = useState('')
+  const [scope, setScope] = useState('')
+  const [validFrom, setValidFrom] = useEffectiveDate()
+  const [validTo, setValidTo] = useState('')
+  const help = RELATION_HELP[kind]
+  const isCampus = kind === 'CAMPUS_MGMT'
+  const from = selfIsFrom ? code : other
+  const to = selfIsFrom ? other : code
+  return (
+    <ItemDialog
+      {...props}
+      title={`建立管理关系：${name}`}
+      description={help.note}
+      build={() =>
+        requireFields([
+          ['other', isCampus && selfIsFrom ? true : !!other, `请选择${selfIsFrom ? help.to : help.from}`],
+          ['campus', !isCampus || !!campus, '请选择院区'],
+          ['scope', !!scope.trim(), `请填写${help.scope}`],
+          ['valid_from', !!validFrom, '请选择开始日'],
+          ['valid_to', !validTo || validTo >= validFrom, '结束日不能早于开始日'],
+        ]) ?? {
+          kind: 'department.relation_create',
+          relation_kind: kind,
+          from_code: from,
+          to_code: to || null,
+          campus_code: isCampus ? campus : null,
+          scope: scope.trim(),
+          valid_from: validFrom,
+          valid_to: orNull(validTo),
+        }
+      }
+    >
+      <div className="grid grid-cols-2 gap-3">
+        <SelectField
+          label="关系类型"
+          required
+          value={kind}
+          onChange={(v) => setKind(v as DeptRelationKind)}
+          options={Object.entries(DEPT_RELATION).map(([value, label]) => ({ value, label }))}
+        />
+        <SelectField
+          label={`${name}是`}
+          required
+          value={selfIsFrom ? 'from' : 'to'}
+          onChange={(v) => setSelfIsFrom(v === 'from')}
+          options={[
+            { value: 'to', label: help.to.replace('（可空）', '') },
+            { value: 'from', label: help.from },
+          ]}
+        />
+      </div>
+      <DepartmentSelect
+        label={selfIsFrom ? help.to : help.from}
+        name="other"
+        required={!(isCampus && selfIsFrom)}
+        value={other}
+        onChange={setOther}
+        exclude={code}
+        placeholder={isCampus && selfIsFrom ? '不指定（整个院区）' : undefined}
+      />
+      {isCampus && <CampusSelect label="院区" name="campus" required value={campus} onChange={setCampus} />}
+      <TextField label={help.scope} name="scope" required value={scope} onChange={setScope} />
+      <div className="grid grid-cols-2 gap-3">
+        <TextField label="开始日" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
+        <TextField label="结束日" name="valid_to" type="date" value={validTo} onChange={setValidTo} hint="不填为长期" />
+      </div>
+    </ItemDialog>
+  )
+}
+
+export function DepartmentRelationCloseDialog({ relation, ...props }: DialogProps & { relation: DepartmentRelationOut }) {
+  const [day, setDay] = useEffectiveDate()
+  return (
+    <ItemDialog
+      {...props}
+      title={`结束${DEPT_RELATION[relation.kind]}：${relation.scope}`}
+      description={`${relation.from_department.name}${relation.to_department ? ` → ${relation.to_department.name}` : ''}，自 ${relation.valid_from} 起。结束日当天仍有效。`}
+      build={() =>
+        requireFields([
+          ['valid_to', !!day, '请选择结束日'],
+          ['valid_to', day >= relation.valid_from, `结束日不能早于开始日 ${relation.valid_from}`],
+        ]) ?? { kind: 'department.relation_close', relation_id: relation.id, valid_to: day }
+      }
+    >
+      <TextField label="结束日" name="valid_to" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
 }

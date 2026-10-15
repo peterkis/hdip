@@ -7,7 +7,10 @@
 import type { DepartmentAffiliationOut } from './departmentAffiliationOut';
 import type { DepartmentAliasOut } from './departmentAliasOut';
 import type { DepartmentClassificationOut } from './departmentClassificationOut';
+import type { DepartmentEdgeOut } from './departmentEdgeOut';
+import type { DepartmentRelationOut } from './departmentRelationOut';
 import type { DepartmentVersionOut } from './departmentVersionOut';
+import type { DeptRef } from './deptRef';
 import type { ServiceUnitRow } from './serviceUnitRow';
 
 export interface DepartmentDetail {
@@ -20,5 +23,10 @@ export interface DepartmentDetail {
   affiliations: DepartmentAffiliationOut[];
   aliases: DepartmentAliasOut[];
   units: ServiceUnitRow[];
+  level: number;
+  path: DeptRef[];
+  parents: DepartmentEdgeOut[];
+  children: DeptRef[];
+  relations: DepartmentRelationOut[];
   change_ids: number[];
 }

@@ -2420,7 +2420,9 @@
                 "campuses",
                 "institutions",
                 "operator-relations",
-                "service-unit-lineage"
+                "service-unit-lineage",
+                "department-hierarchy",
+                "department-relations"
               ],
               "type": "string",
               "title": "Dataset"
@@ -3066,6 +3068,15 @@
                   "$ref": "#/components/schemas/DepartmentAliasClose"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentSetParent"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRelationCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRelationClose"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -3109,8 +3120,11 @@
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
                   "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
+                  "department.relation_close": "#/components/schemas/DepartmentRelationClose",
+                  "department.relation_create": "#/components/schemas/DepartmentRelationCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
                   "department.revise": "#/components/schemas/DepartmentRevise",
+                  "department.set_parent": "#/components/schemas/DepartmentSetParent",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
@@ -3451,6 +3465,15 @@
                   "$ref": "#/components/schemas/DepartmentAliasClose"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentSetParent"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRelationCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentRelationClose"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -3494,8 +3517,11 @@
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
                   "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
+                  "department.relation_close": "#/components/schemas/DepartmentRelationClose",
+                  "department.relation_create": "#/components/schemas/DepartmentRelationCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
                   "department.revise": "#/components/schemas/DepartmentRevise",
+                  "department.set_parent": "#/components/schemas/DepartmentSetParent",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
@@ -4394,6 +4420,38 @@
             "type": "array",
             "title": "Units"
           },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
+          "path": {
+            "items": {
+              "$ref": "#/components/schemas/DeptRef"
+            },
+            "type": "array",
+            "title": "Path"
+          },
+          "parents": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentEdgeOut"
+            },
+            "type": "array",
+            "title": "Parents"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/DeptRef"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentRelationOut"
+            },
+            "type": "array",
+            "title": "Relations"
+          },
           "change_ids": {
             "items": {
               "type": "integer"
@@ -4413,9 +4471,78 @@
           "affiliations",
           "aliases",
           "units",
+          "level",
+          "path",
+          "parents",
+          "children",
+          "relations",
           "change_ids"
         ],
         "title": "DepartmentDetail"
+      },
+      "DepartmentEdgeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "view_code": {
+            "type": "string",
+            "title": "View Code"
+          },
+          "view_name": {
+            "type": "string",
+            "title": "View Name"
+          },
+          "parent": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "view_code",
+          "view_name",
+          "parent",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id"
+        ],
+        "title": "DepartmentEdgeOut",
+        "description": "一条行政隶属边（本部门 → 上级）。"
       },
       "DepartmentPatch": {
         "properties": {
@@ -4529,6 +4656,216 @@
         "title": "DepartmentPatch",
         "description": "只写要改的字段；写 null 表示清空。名称、设立形式不能清空。"
       },
+      "DepartmentRelationClose": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.relation_close",
+            "title": "Kind"
+          },
+          "relation_id": {
+            "type": "integer",
+            "title": "Relation Id"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "relation_id",
+          "valid_to"
+        ],
+        "title": "DepartmentRelationClose"
+      },
+      "DepartmentRelationCreate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.relation_create",
+            "title": "Kind"
+          },
+          "relation_kind": {
+            "type": "string",
+            "enum": [
+              "PROFESSIONAL_MGMT",
+              "COLLABORATION",
+              "CAMPUS_MGMT"
+            ],
+            "title": "Relation Kind"
+          },
+          "from_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "From Code"
+          },
+          "to_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Code"
+          },
+          "campus_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Code"
+          },
+          "scope": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Scope"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "relation_kind",
+          "from_code",
+          "scope",
+          "valid_from"
+        ],
+        "title": "DepartmentRelationCreate",
+        "description": "部门管理关系。\n\n专业管理：from 对 to 的某事项实施管理；协作：双方就某范围协作；\n院区管理：from（院区管理组织）在某院区对某范围有管理职责，to 可空。"
+      },
+      "DepartmentRelationOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "PROFESSIONAL_MGMT",
+              "COLLABORATION",
+              "CAMPUS_MGMT"
+            ],
+            "title": "Kind"
+          },
+          "from_department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "to_department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "campus_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Id"
+          },
+          "campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Name"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "from_department",
+          "to_department",
+          "campus_id",
+          "campus_name",
+          "scope",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id"
+        ],
+        "title": "DepartmentRelationOut"
+      },
       "DepartmentRename": {
         "properties": {
           "kind": {
@@ -4631,6 +4968,20 @@
             ],
             "title": "Institution Name"
           },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "type": "integer",
+            "title": "Level"
+          },
           "unit_count": {
             "type": "integer",
             "title": "Unit Count"
@@ -4645,9 +4996,58 @@
           "has_later_versions",
           "main_class",
           "institution_name",
+          "parent",
+          "level",
           "unit_count"
         ],
         "title": "DepartmentRow"
+      },
+      "DepartmentSetParent": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.set_parent",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "view_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "View Code",
+            "default": "ADMIN"
+          },
+          "parent_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "parent_code",
+          "effective_date"
+        ],
+        "title": "DepartmentSetParent",
+        "description": "在某组织视图里调整直接上级：结束当前上级，自生效日起隶属新上级。\n\nparent_code 为空 = 一级部门。"
       },
       "DepartmentVersionOut": {
         "properties": {
@@ -4790,6 +5190,29 @@
           "basis_note"
         ],
         "title": "DepartmentVersionOut"
+      },
+      "DeptRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "title": "DeptRef"
       },
       "HTTPValidationError": {
         "properties": {

@@ -134,3 +134,20 @@ def classify(code, class_code, day, scheme="DEPT_MAIN_CLASS"):
     return dept_item(
         "classify", code, scheme_code=scheme, class_code=class_code, effective_date=day
     )
+
+
+def set_parent(code, parent, day, view="ADMIN"):
+    return dept_item("set_parent", code, view_code=view, parent_code=parent, effective_date=day)
+
+
+def dept_relation(kind, frm, scope, day="2026-01-01", to=None, campus=None, valid_to=None):
+    return {
+        "kind": "department.relation_create",
+        "relation_kind": kind,
+        "from_code": frm,
+        "to_code": to,
+        "campus_code": campus,
+        "scope": scope,
+        "valid_from": day,
+        "valid_to": valid_to,
+    }

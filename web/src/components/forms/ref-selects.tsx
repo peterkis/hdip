@@ -17,12 +17,15 @@ interface RefProps {
   onChange: (code: string) => void
   required?: boolean
   hint?: string
-  /** 不出现在选项里的代码（如“更换所属部门”时的当前部门） */
-  exclude?: string
+  /** 不出现在选项里的代码（如“更换所属部门”时的当前部门、调整上级时的本部门与下级） */
+  exclude?: string | string[]
+  /** 空选项的文字；默认“请选择…” */
+  placeholder?: string
 }
 
-function withExclude(options: Option[], exclude?: string) {
-  return exclude ? options.filter((o) => o.value !== exclude) : options
+function withExclude(options: Option[], exclude?: string | string[]) {
+  const set = new Set(Array.isArray(exclude) ? exclude : exclude ? [exclude] : [])
+  return options.filter((o) => !set.has(o.value))
 }
 
 /** 所属部门：不列撤销、被替代的部门；非正式履职的部门标出生命周期 */
@@ -40,7 +43,7 @@ export function DepartmentSelect(p: RefProps) {
       })),
     ...draft.flatMap((i) => (i.kind === 'department.create' ? [{ value: i.code, label: `${i.name}${NEW}` }] : [])),
   ]
-  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder="请选择部门" />
+  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder={p.placeholder ?? '请选择部门'} />
 }
 
 /** 所属院区：不列已停用的院区 */

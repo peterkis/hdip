@@ -19,7 +19,9 @@ from hdip_api.models import (
     Department,
     DepartmentAlias,
     DepartmentClassification,
+    DepartmentHierarchy,
     DepartmentInstitution,
+    DepartmentRelation,
     DepartmentVersion,
     Institution,
     InstitutionVersion,
@@ -43,8 +45,11 @@ from hdip_api.schemas.read import (
     DepartmentAliasOut,
     DepartmentClassificationOut,
     DepartmentDetail,
+    DepartmentEdgeOut,
+    DepartmentRelationOut,
     DepartmentRow,
     DepartmentVersionOut,
+    DeptRef,
     InstitutionDetail,
     InstitutionRow,
     InstitutionVersionOut,
@@ -385,6 +390,49 @@ def list_lineage(
 
 # ------------------------------------------------------------------ 部门
 MAIN_SCHEME = "DEPT_MAIN_CLASS"
+ADMIN_VIEW = "ADMIN"
+
+
+class _Org:
+    """行政视图在某日的结构：上级、层级、路径、下级；部门名称按该日版本。"""
+
+    def __init__(self, s: Session, day: date) -> None:
+        self.day = day
+        self.codes = {d.id: d.code for d in s.scalars(select(Department))}
+        self.versions = _versions_by(s, DepartmentVersion, "department_id")
+        view = s.scalar(select(OrgView).where(OrgView.code == ADMIN_VIEW))
+        self.view = view
+        edges = (
+            s.scalars(
+                select(DepartmentHierarchy).where(DepartmentHierarchy.view_id == view.id)
+            ).all()
+            if view
+            else []
+        )
+        self.edges = edges
+        self.parent = {
+            e.child_department_id: e.parent_department_id
+            for e in edges
+            if covers(e.valid_from, e.valid_to, day)
+        }
+        self.children: dict[int, list[int]] = defaultdict(list)
+        for child, parent in self.parent.items():
+            self.children[parent].append(child)
+
+    def ref(self, dept_id: int) -> DeptRef:
+        return DeptRef(
+            id=dept_id, code=self.codes[dept_id], name=_name_on(self.versions[dept_id], self.day)
+        )
+
+    def path(self, dept_id: int) -> list[int]:
+        """从一级部门到本部门；遇到环（数据库外的异常数据）时截断。"""
+        chain = [dept_id]
+        while chain[-1] in self.parent and self.parent[chain[-1]] not in chain:
+            chain.append(self.parent[chain[-1]])
+        return list(reversed(chain))
+
+    def level(self, dept_id: int) -> int:
+        return len(self.path(dept_id))
 
 
 class _ClassNames:
@@ -426,6 +474,7 @@ def list_departments(s: Session, as_of: date, q: str | None = None) -> list[Depa
     for row in list_service_units(s, as_of, include_future=False):
         counts[row.version.department_id] += 1
     needle = (q or "").strip().lower()
+    org = _Org(s, as_of)
 
     out = []
     for d in s.scalars(select(Department).order_by(Department.code)):
@@ -449,6 +498,8 @@ def list_departments(s: Session, as_of: date, q: str | None = None) -> list[Depa
                 has_later_versions=later,
                 main_class=names.ref(c.scheme_id, c.code) if c else None,
                 institution_name=_name_on(inst_v[a.institution_id], as_of) if a else None,
+                parent=org.ref(org.parent[d.id]) if d.id in org.parent else None,
+                level=org.level(d.id),
                 unit_count=counts[d.id],
             )
         )
@@ -482,9 +533,24 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
     ).all()
     inst_codes = {i.id: i.code for i in s.scalars(select(Institution))}
     inst_v = _versions_by(s, InstitutionVersion, "institution_id")
+    org = _Org(s, as_of)
+    parents = sorted(
+        (e for e in org.edges if e.child_department_id == d.id),
+        key=lambda e: e.valid_from,
+        reverse=True,
+    )
+    relations = s.scalars(
+        select(DepartmentRelation)
+        .where(
+            (DepartmentRelation.from_department_id == d.id)
+            | (DepartmentRelation.to_department_id == d.id)
+        )
+        .order_by(DepartmentRelation.valid_from.desc(), DepartmentRelation.id.desc())
+    ).all()
+    campus_v = _versions_by(s, CampusVersion, "campus_id")
 
     related = {d.created_change_id, *(v.change_id for v in versions)}
-    for rows in (classes, affiliations, aliases):
+    for rows in (classes, affiliations, aliases, parents, relations):
         for r in rows:
             related.add(r.change_id)
             if r.closed_change_id:
@@ -540,6 +606,38 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
             for a in aliases
         ],
         units=list_service_units(s, as_of, department_id=d.id),
+        level=org.level(d.id),
+        path=[org.ref(x) for x in org.path(d.id)],
+        parents=[
+            DepartmentEdgeOut(
+                id=e.id,
+                view_code=org.view.code,
+                view_name=org.view.name,
+                parent=org.ref(e.parent_department_id),
+                valid_from=e.valid_from,
+                valid_to=e.valid_to,
+                change_id=e.change_id,
+                closed_change_id=e.closed_change_id,
+            )
+            for e in parents
+        ],
+        children=sorted((org.ref(c) for c in org.children.get(d.id, [])), key=lambda r: r.code),
+        relations=[
+            DepartmentRelationOut(
+                id=r.id,
+                kind=r.kind,
+                from_department=org.ref(r.from_department_id),
+                to_department=org.ref(r.to_department_id) if r.to_department_id else None,
+                campus_id=r.campus_id,
+                campus_name=_name_on(campus_v[r.campus_id], as_of) if r.campus_id else None,
+                scope=r.scope,
+                valid_from=r.valid_from,
+                valid_to=r.valid_to,
+                change_id=r.change_id,
+                closed_change_id=r.closed_change_id,
+            )
+            for r in relations
+        ],
         change_ids=change_ids,
     )
 

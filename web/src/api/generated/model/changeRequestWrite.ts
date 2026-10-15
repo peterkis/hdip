@@ -14,8 +14,11 @@ import type { DepartmentChangeLifecycle } from './departmentChangeLifecycle';
 import type { DepartmentChangeStatus } from './departmentChangeStatus';
 import type { DepartmentClassify } from './departmentClassify';
 import type { DepartmentCreate } from './departmentCreate';
+import type { DepartmentRelationClose } from './departmentRelationClose';
+import type { DepartmentRelationCreate } from './departmentRelationCreate';
 import type { DepartmentRename } from './departmentRename';
 import type { DepartmentRevise } from './departmentRevise';
+import type { DepartmentSetParent } from './departmentSetParent';
 import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { OperatorRelationClose } from './operatorRelationClose';
@@ -30,6 +33,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge)[];
   note?: string | null;
 }

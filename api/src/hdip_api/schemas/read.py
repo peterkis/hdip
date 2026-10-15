@@ -227,6 +227,40 @@ class DepartmentAliasOut(BaseModel):
     change_id: int
 
 
+class DeptRef(BaseModel):
+    id: int
+    code: str
+    name: str
+    """查看日期当天的名称。"""
+
+
+class DepartmentEdgeOut(BaseModel):
+    """一条行政隶属边（本部门 → 上级）。"""
+
+    id: int
+    view_code: str
+    view_name: str
+    parent: DeptRef
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+
+
+class DepartmentRelationOut(BaseModel):
+    id: int
+    kind: Literal["PROFESSIONAL_MGMT", "COLLABORATION", "CAMPUS_MGMT"]
+    from_department: DeptRef
+    to_department: DeptRef | None
+    campus_id: int | None
+    campus_name: str | None
+    scope: str
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+
+
 class DepartmentRow(BaseModel):
     id: int
     code: str
@@ -238,6 +272,10 @@ class DepartmentRow(BaseModel):
     """查看日期当天的部门管理主分类。"""
     institution_name: str | None
     """查看日期当天的主归属主体。"""
+    parent: DeptRef | None
+    """查看日期当天行政视图中的直接上级；无上级为一级部门。"""
+    level: int
+    """行政视图中的组织层级：1 = 一级部门，2 = 二级部门……由隶属关系计算。"""
     unit_count: int
     """查看日期当天挂在该部门下、已生效的服务单元数。"""
 
@@ -254,6 +292,16 @@ class DepartmentDetail(BaseModel):
     aliases: list[DepartmentAliasOut]
     units: list[ServiceUnitRow]
     """查看日期当天挂在该部门下的服务单元（含计划中）。"""
+    level: int
+    """查看日期当天在行政视图中的层级。"""
+    path: list[DeptRef]
+    """查看日期当天从一级部门到本部门的行政隶属路径（含本部门）。"""
+    parents: list[DepartmentEdgeOut]
+    """本部门在行政视图中的上级历史，新到旧。"""
+    children: list[DeptRef]
+    """查看日期当天的直接下级部门。"""
+    relations: list[DepartmentRelationOut]
+    """本部门参与的专业管理、协作、院区管理关系（含已结束的），新到旧。"""
     change_ids: list[int]
     """改动过该部门的已确认申请。"""
 
