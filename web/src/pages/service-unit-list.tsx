@@ -160,7 +160,7 @@ export function ServiceUnitsPage() {
           icon={UserGroupIcon}
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
-          options={departments.map((d) => ({ value: String(d.id), label: d.name }))}
+          options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
         />
         <FilterPill
           label="运营主体"
@@ -257,7 +257,7 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
         <Link to={`/departments/${v.department_id}`} className="hover:underline">
           {v.department_name}
         </Link>
-        {v.department_status !== 'ACTIVE' && <span className="text-danger-text ml-1.5 text-caption">部门已停用</span>}
+        {v.department_lifecycle !== 'ACTIVE' && <span className="text-danger-text ml-1.5 text-caption">部门非正式履职</span>}
       </DbCell>
       <DbCell className="whitespace-nowrap">
         <Link to={`/campuses/${v.campus_id}`} className="hover:underline">

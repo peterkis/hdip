@@ -10,4 +10,5 @@ export interface UserOut {
   username: string;
   display_name: string;
   roles: string[];
+  permissions: string[];
 }

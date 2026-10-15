@@ -19,7 +19,13 @@ from hdip_api.core.errors import BusinessError, ProblemItem
 from hdip_api.models import (
     Campus,
     CampusVersion,
+    ClassificationCode,
+    ClassificationScheme,
     Department,
+    DepartmentAlias,
+    DepartmentClassification,
+    DepartmentInstitution,
+    DepartmentVersion,
     Institution,
     InstitutionVersion,
     OperatorRelation,
@@ -35,9 +41,15 @@ from hdip_api.schemas.items import (
     CampusCreate,
     CampusRevise,
     ChangeItem,
+    DepartmentAffiliate,
+    DepartmentAliasAdd,
+    DepartmentAliasClose,
+    DepartmentChangeLifecycle,
     DepartmentChangeStatus,
+    DepartmentClassify,
     DepartmentCreate,
     DepartmentRename,
+    DepartmentRevise,
     InstitutionCreate,
     InstitutionRevise,
     OperatorRelationClose,
@@ -61,12 +73,20 @@ STATUS_LABELS = {
 }
 RELATION_LABELS = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
 UNIT_STATUS_LABELS = {"ACTIVE": "在用", "SUSPENDED": "暂停"}
-DEPARTMENT_STATUS_LABELS = {
-    "ACTIVE": "在用",
-    "INACTIVE": "停用",
-    "DEPRECATED": "弃用",
+LIFECYCLE_LABELS = {
+    "PREPARING": "筹备",
+    "ACTIVE": "正式履职",
+    "SUSPENDED": "暂停履职",
+    "REVOKED": "撤销",
     "SUPERSEDED": "被替代",
 }
+# 组织生命周期的合法变化：筹备 → 正式履职 ⇄ 暂停履职 → 撤销；被替代只由将来的部门拆并产生
+LIFECYCLE_NEXT = {
+    "PREPARING": {"ACTIVE", "REVOKED"},
+    "ACTIVE": {"SUSPENDED", "REVOKED"},
+    "SUSPENDED": {"ACTIVE", "REVOKED"},
+}
+LIFECYCLE_TERMINAL = {"REVOKED", "SUPERSEDED"}
 
 CONSTRAINT_MESSAGES: dict[str, str] = {
     "institution_code_uniq": "主体代码已被使用（含已退出对象），代码永不复用",
@@ -81,7 +101,15 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "operator_relation_primary_operate_check": "只有“运营”类型的关系可以作为主要运营方",
     "operator_relation_period_check": "结束日不能早于开始日",
     "hdip_history_immutable": "历史记录不可修改",
-    "department_code_uniq": "部门代码已被使用（含已停用部门），代码永不复用",
+    "department_code_uniq": "部门代码已被使用（含已撤销部门），代码永不复用",
+    "department_version_no_overlap": "与该部门已有版本的期间重叠",
+    "department_version_temporary_check": "经批准的临时部门必须填期限；常设部门不填期限",
+    "department_version_name_check": "部门名称不能为空",
+    "department_alias_dup_excl": "该部门在这段期间已有相同的别名",
+    "department_classification_exclusive_excl": "该部门在这段期间已有主分类，同一时点只能有一个",
+    "department_classification_dup_excl": "该部门在这段期间已有相同的分类",
+    "department_classification_code_fk": "分类代码不在该方案中",
+    "department_institution_primary_excl": "该部门在这段期间已有主归属主体",
     "department_code_check": "代码只能包含字母、数字、点、下划线、短横线，且以字母或数字开头",
     "service_unit_code_uniq": "服务单元代码已被使用（含已退出单元），代码永不复用",
     "service_unit_code_check": "代码只能包含字母、数字、点、下划线、短横线，且以字母或数字开头",
@@ -109,6 +137,8 @@ class Ctx:
     # 本申请新写的单元版本 id → 项序号；本申请影响到的院区 id → 项序号
     new_unit_versions: dict[int, int] = field(default_factory=dict)
     touched_campuses: dict[int, int] = field(default_factory=dict)
+    # 生命周期变为非“正式履职”的部门 id → 项序号（依赖它的单元要重新校验）
+    touched_departments: dict[int, int] = field(default_factory=dict)
 
 
 def _json(value: Any) -> Any:
@@ -117,7 +147,7 @@ def _json(value: Any) -> Any:
     return value
 
 
-def version_snapshot(v: InstitutionVersion | CampusVersion) -> dict[str, Any]:
+def version_snapshot(v: InstitutionVersion | CampusVersion | DepartmentVersion) -> dict[str, Any]:
     keys = ("version_no", "valid_from", "valid_to", *v.CONTENT)
     return {k: _json(getattr(v, k)) for k in keys}
 
@@ -384,74 +414,318 @@ def _relation_close(ctx: Ctx, item: OperatorRelationClose) -> dict:
 
 # ------------------------------------------------------------------ 部门
 def _department(s: Session, code: str, field_name: str = "code") -> Department:
-    obj = s.scalar(select(Department).where(Department.code == code).with_for_update())
+    obj = s.scalar(select(Department).where(Department.code == code))
     if obj is None:
         raise ItemError(f"部门代码 {code} 不存在", field_name)
     return obj
 
 
-def department_snapshot(d: Department) -> dict[str, Any]:
-    return {"code": d.code, "name": d.name, "department_status": d.status}
+def _today(s: Session) -> date:
+    return s.scalar(select(func.current_date()))
 
 
-def _units_of_department(s: Session, dept_id: int) -> list[str]:
-    """当前及计划中仍挂在该部门下的单元（最新版本未结束）。"""
-    rows = s.execute(
-        select(ServiceUnit.code, ServiceUnitVersion.name)
-        .join(ServiceUnitVersion, ServiceUnitVersion.service_unit_id == ServiceUnit.id)
-        .where(ServiceUnitVersion.department_id == dept_id, ServiceUnitVersion.valid_to.is_(None))
-        .order_by(ServiceUnit.code)
+def _dept_latest(s: Session, d: Department) -> DepartmentVersion:
+    return _latest(s, DepartmentVersion, DepartmentVersion.department_id, d.id)
+
+
+def _dept_label(s: Session, d: Department, day: date | None = None) -> str:
+    v = None
+    if day is not None:
+        v = _version_on(s, DepartmentVersion, DepartmentVersion.department_id, d.id, day)
+    return f"{d.code} {(v or _dept_latest(s, d)).name}"
+
+
+def _dept_start(s: Session, d: Department) -> date:
+    return s.scalar(
+        select(func.min(DepartmentVersion.valid_from)).where(
+            DepartmentVersion.department_id == d.id
+        )
     )
-    return [f"{code} {name}" for code, name in rows]
+
+
+def _require_not_terminal(v: DepartmentVersion) -> None:
+    if v.lifecycle in LIFECYCLE_TERMINAL:
+        raise ItemError(
+            f"部门已于 {v.valid_from.isoformat()} {LIFECYCLE_LABELS[v.lifecycle]}，不能再调整"
+        )
+
+
+def _require_after_start(s: Session, d: Department, day: date, field_name: str) -> None:
+    start = _dept_start(s, d)
+    if day < start:
+        raise ItemError(f"生效日不能早于部门的设立日 {start.isoformat()}", field_name)
 
 
 def _department_create(ctx: Ctx, item: DepartmentCreate) -> dict:
     s = ctx.session
     if s.scalar(select(Department.id).where(Department.code == item.code)):
         raise ItemError(f"部门代码 {item.code} 已被使用，代码永不复用", "code")
-    d = Department(
-        code=item.code,
-        name=item.name,
-        status="ACTIVE",
-        created_change_id=ctx.change_id,
-        last_change_id=ctx.change_id,
-    )
+    inst = None
+    if item.institution_code:
+        inst = _ref(s, _institution, item.institution_code, "institution_code")
+    day = item.valid_from or _today(s)
+    d = Department(code=item.code, created_change_id=ctx.change_id)
     s.add(d)
     s.flush()
-    return {"target": f"部门 {d.code} {d.name}", "before": None, "after": department_snapshot(d)}
+    v = DepartmentVersion(
+        department_id=d.id,
+        version_no=1,
+        valid_from=day,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+        name=item.name,
+        short_name=item.short_name,
+        description=item.description,
+        establishment_form=item.establishment_form,
+        temporary_until=item.temporary_until,
+        lifecycle=item.lifecycle,
+        admin_grade=item.admin_grade,
+        duties=list(item.duties),
+        basis_note=item.basis_note,
+    )
+    s.add(v)
+    if inst:
+        s.add(
+            DepartmentInstitution(
+                department_id=d.id,
+                institution_id=inst.id,
+                is_primary=True,
+                valid_from=day,
+                change_id=ctx.change_id,
+                recorded_by=ctx.user_id,
+            )
+        )
+    s.flush()
+    after = version_snapshot(v) | {"affiliation": inst.code if inst else None}
+    return {"target": f"部门 {d.code} {v.name}", "before": None, "after": after}
 
 
-def _department_touch(ctx: Ctx, d: Department) -> None:
-    d.last_change_id = ctx.change_id
-    d.updated_at = ctx.session.scalar(select(func.localtimestamp()))
+def _department_revise(ctx: Ctx, item: DepartmentRevise) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    latest = _dept_latest(s, d)
+    _require_not_terminal(latest)
+    before = version_snapshot(latest)
+    content = {k: getattr(latest, k) for k in DepartmentVersion.CONTENT}
+    content |= item.changes.model_dump(exclude_unset=True)
+    if content["establishment_form"] == "STANDING":
+        content["temporary_until"] = None
+    elif content["temporary_until"] is None:
+        raise ItemError("经批准的临时部门必须填期限", "changes.temporary_until")
+    content["duties"] = list(content["duties"] or [])
+    new = _next_version(
+        ctx, DepartmentVersion, "department_id", d.id, latest, item.effective_date, content
+    )
+    return {
+        "target": f"部门 {d.code} {new.name}",
+        "before": before,
+        "after": version_snapshot(new),
+    }
+
+
+def _department_change_lifecycle(ctx: Ctx, item: DepartmentChangeLifecycle) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    latest = _dept_latest(s, d)
+    _require_not_terminal(latest)
+    cur, target = latest.lifecycle, item.lifecycle
+    if target not in LIFECYCLE_NEXT[cur]:
+        raise ItemError(
+            f"当前为{LIFECYCLE_LABELS[cur]}，不能变为{LIFECYCLE_LABELS[target]}"
+            "（筹备 → 正式履职 ⇄ 暂停履职 → 撤销）",
+            "lifecycle",
+        )
+    before = version_snapshot(latest)
+    content = {k: getattr(latest, k) for k in DepartmentVersion.CONTENT} | {"lifecycle": target}
+    new = _next_version(
+        ctx, DepartmentVersion, "department_id", d.id, latest, item.effective_date, content
+    )
+    if target != "ACTIVE":
+        # 依赖它的服务单元由 _check_units 统一校验，仍有依赖则阻止并列出
+        ctx.touched_departments[d.id] = ctx.index
+    return {
+        "target": f"部门 {d.code} {new.name}",
+        "before": before,
+        "after": version_snapshot(new),
+    }
+
+
+def _close_open(ctx: Ctx, row, day: date, what: str) -> None:
+    """结束一条带期间的行（分类赋值、主体归属）：止于 day 前一日，记下关闭它的申请。"""
+    if day <= row.valid_from:
+        raise ItemError(
+            f"生效日须晚于当前{what}的开始日 {row.valid_from.isoformat()}", "effective_date"
+        )
+    row.valid_to = day - timedelta(days=1)
+    row.closed_change_id = ctx.change_id
     ctx.session.flush()
 
 
-def _department_rename(ctx: Ctx, item: DepartmentRename) -> dict:
-    d = _department(ctx.session, item.code)
-    if d.name == item.name:
-        raise ItemError("名称没有变化", "name")
-    before = department_snapshot(d)
-    d.name = item.name
-    _department_touch(ctx, d)
-    return {"target": f"部门 {d.code}", "before": before, "after": department_snapshot(d)}
+def classification_snapshot(s: Session, c: DepartmentClassification | None) -> dict | None:
+    if c is None:
+        return None
+    name = s.scalar(
+        select(ClassificationCode.name).where(
+            ClassificationCode.scheme_id == c.scheme_id, ClassificationCode.code == c.code
+        )
+    )
+    return {
+        "class_code": c.code,
+        "class_name": name,
+        "valid_from": _json(c.valid_from),
+        "valid_to": _json(c.valid_to),
+    }
 
 
-def _department_change_status(ctx: Ctx, item: DepartmentChangeStatus) -> dict:
-    d = _department(ctx.session, item.code)
-    if d.status not in ("ACTIVE", "INACTIVE"):
-        raise ItemError(f"部门状态为{DEPARTMENT_STATUS_LABELS[d.status]}，不能停用或恢复")
-    if d.status == item.status:
-        raise ItemError(f"部门已是{DEPARTMENT_STATUS_LABELS[d.status]}", "status")
-    before = department_snapshot(d)
-    d.status = item.status
-    _department_touch(ctx, d)
-    after = department_snapshot(d)
-    if item.status == "INACTIVE":
-        # 只提示不处置：已有单元保留引用（设计文档第 5、8 节）
-        units = _units_of_department(ctx.session, d.id)
-        after["affected_units"] = "、".join(units) if units else None
-    return {"target": f"部门 {d.code} {d.name}", "before": before, "after": after}
+def _department_classify(ctx: Ctx, item: DepartmentClassify) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    _require_not_terminal(_dept_latest(s, d))
+    _require_after_start(s, d, item.effective_date, "effective_date")
+    scheme = s.scalar(
+        select(ClassificationScheme).where(
+            ClassificationScheme.code == item.scheme_code, ClassificationScheme.is_active
+        )
+    )
+    if scheme is None:
+        raise ItemError(f"分类方案 {item.scheme_code} 不存在或已停用", "scheme_code")
+    if item.class_code is not None:
+        ok = s.scalar(
+            select(ClassificationCode.id).where(
+                ClassificationCode.scheme_id == scheme.id,
+                ClassificationCode.code == item.class_code,
+                ClassificationCode.is_active,
+            )
+        )
+        if ok is None:
+            raise ItemError(
+                f"分类代码 {item.class_code} 不在“{scheme.name}”中或已停用", "class_code"
+            )
+    current = None
+    if scheme.is_exclusive:
+        # 单选方案：结束当前赋值再新建；多选方案只新增
+        current = s.scalar(
+            select(DepartmentClassification)
+            .where(
+                DepartmentClassification.department_id == d.id,
+                DepartmentClassification.scheme_id == scheme.id,
+                DepartmentClassification.valid_to.is_(None),
+            )
+            .order_by(DepartmentClassification.valid_from.desc())
+            .limit(1)
+            .with_for_update()
+        )
+    if current is not None and current.code == item.class_code:
+        raise ItemError("分类没有变化", "class_code")
+    if current is None and item.class_code is None:
+        raise ItemError("当前没有分类，无需结束", "class_code")
+    before = classification_snapshot(s, current)
+    if current is not None:
+        _close_open(ctx, current, item.effective_date, "分类")
+    new = None
+    if item.class_code is not None:
+        new = DepartmentClassification(
+            department_id=d.id,
+            scheme_id=scheme.id,
+            is_exclusive=scheme.is_exclusive,
+            code=item.class_code,
+            valid_from=item.effective_date,
+            change_id=ctx.change_id,
+            recorded_by=ctx.user_id,
+        )
+        s.add(new)
+        s.flush()
+    return {
+        "target": f"部门 {_dept_label(s, d, item.effective_date)} · {scheme.name}",
+        "before": before,
+        "after": classification_snapshot(s, new) or {"class_code": None},
+    }
+
+
+def _department_affiliate(ctx: Ctx, item: DepartmentAffiliate) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    _require_not_terminal(_dept_latest(s, d))
+    _require_after_start(s, d, item.effective_date, "effective_date")
+    inst = _ref(s, _institution, item.institution_code, "institution_code")
+    current = s.scalar(
+        select(DepartmentInstitution)
+        .where(
+            DepartmentInstitution.department_id == d.id,
+            DepartmentInstitution.is_primary,
+            DepartmentInstitution.valid_to.is_(None),
+        )
+        .with_for_update()
+    )
+    if current is not None and current.institution_id == inst.id:
+        raise ItemError("主体归属没有变化", "institution_code")
+
+    def snap(r: DepartmentInstitution | None) -> dict | None:
+        if r is None:
+            return None
+        return {
+            "affiliation": s.get(Institution, r.institution_id).code,
+            "valid_from": _json(r.valid_from),
+            "valid_to": _json(r.valid_to),
+        }
+
+    before = snap(current)
+    if current is not None:
+        _close_open(ctx, current, item.effective_date, "主体归属")
+    new = DepartmentInstitution(
+        department_id=d.id,
+        institution_id=inst.id,
+        is_primary=True,
+        valid_from=item.effective_date,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(new)
+    s.flush()
+    return {"target": f"部门 {_dept_label(s, d)} · 主体归属", "before": before, "after": snap(new)}
+
+
+def _department_alias_add(ctx: Ctx, item: DepartmentAliasAdd) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    a = DepartmentAlias(
+        department_id=d.id,
+        kind=item.alias_kind,
+        value=item.value,
+        valid_from=item.valid_from or _today(s),
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(a)
+    s.flush()
+    after = {"alias_kind": a.kind, "value": a.value, "valid_from": _json(a.valid_from)}
+    return {"target": f"部门 {_dept_label(s, d)} · 别名", "before": None, "after": after}
+
+
+def _department_alias_close(ctx: Ctx, item: DepartmentAliasClose) -> dict:
+    s = ctx.session
+    a = s.get(DepartmentAlias, item.alias_id, with_for_update=True)
+    if a is None:
+        raise ItemError(f"别名 #{item.alias_id} 不存在", "alias_id")
+    if a.valid_to is not None:
+        raise ItemError(f"该别名已于 {a.valid_to.isoformat()} 停用", "alias_id")
+    if item.valid_to < a.valid_from:
+        raise ItemError(f"停用日不能早于开始日 {a.valid_from.isoformat()}", "valid_to")
+    before = {"value": a.value, "valid_to": None}
+    a.valid_to = item.valid_to
+    a.closed_change_id = ctx.change_id
+    s.flush()
+    d = s.get(Department, a.department_id)
+    return {
+        "target": f"部门 {_dept_label(s, d)} · 别名",
+        "before": before,
+        "after": {"value": a.value, "valid_to": _json(a.valid_to)},
+    }
+
+
+def _department_legacy(ctx: Ctx, item: DepartmentRename | DepartmentChangeStatus) -> dict:
+    replacement = "修订部门属性" if item.kind == "department.rename" else "变更部门生命周期"
+    raise ItemError(f"这是部门有版本之前的旧变更类型，请改用“{replacement}”")
 
 
 # ------------------------------------------------------------------ 服务单元
@@ -463,10 +737,14 @@ def _unit(s: Session, code: str) -> ServiceUnit:
 
 
 def _active_department(s: Session, code: str, field_name: str) -> Department:
+    """选用部门：须存在且未撤销；“单元期间内部门须为正式履职”由 _check_units 统一校验。"""
     d = _department(s, code, field_name)
-    if d.status != "ACTIVE":
-        label = DEPARTMENT_STATUS_LABELS[d.status]
-        raise ItemError(f"部门 {d.code} {d.name} 已{label}，不能被新建或改挂的单元选用", field_name)
+    latest = _dept_latest(s, d)
+    if latest.lifecycle in LIFECYCLE_TERMINAL:
+        raise ItemError(
+            f"部门 {d.code} {latest.name} 已{LIFECYCLE_LABELS[latest.lifecycle]}，不能被选用",
+            field_name,
+        )
     return d
 
 
@@ -479,6 +757,9 @@ def _ref(s: Session, finder, code: str, field_name: str):
 
 def unit_snapshot(s: Session, v: ServiceUnitVersion) -> dict[str, Any]:
     dept = s.get(Department, v.department_id)
+    dept_v = _version_on(
+        s, DepartmentVersion, DepartmentVersion.department_id, dept.id, v.valid_from
+    ) or _dept_latest(s, dept)
     campus = s.get(Campus, v.campus_id)
     inst = s.get(Institution, v.institution_id)
     campus_v = _version_on(s, CampusVersion, CampusVersion.campus_id, campus.id, v.valid_from)
@@ -492,7 +773,7 @@ def unit_snapshot(s: Session, v: ServiceUnitVersion) -> dict[str, Any]:
         "valid_to": _json(v.valid_to),
         "unit_type": unit.unit_type,
         "name": v.name,
-        "department": f"{dept.code} {dept.name}",
+        "department": f"{dept.code} {dept_v.name}",
         "campus": f"{campus.code} {campus_v.name if campus_v else ''}".strip(),
         "institution": f"{inst.code} {inst_v.name if inst_v else ''}".strip(),
         "status": v.status,
@@ -753,6 +1034,20 @@ def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
     gap = _uncovered_from(list(relations), v.valid_from, v.valid_to)
     if gap is not None:
         return f"主体 {inst.code} 与院区 {campus.code} 自 {gap.isoformat()} 起没有“运营”关系"
+    # 所属部门在单元整个期间内须为“正式履职”
+    dept = s.get(Department, v.department_id)
+    dept_versions = sorted(
+        s.scalars(select(DepartmentVersion).where(DepartmentVersion.department_id == dept.id)),
+        key=lambda x: x.valid_from,
+    )
+    if not any(dv.valid_from <= v.valid_from for dv in dept_versions):
+        return f"部门 {dept.code} 在 {v.valid_from.isoformat()} 尚未设立"
+    for dv in dept_versions:
+        if overlaps(dv) and dv.lifecycle != "ACTIVE":
+            return (
+                f"部门 {dept.code} {dv.name} 自 {dv.valid_from.isoformat()} 起为"
+                f"{LIFECYCLE_LABELS[dv.lifecycle]}"
+            )
     return None
 
 
@@ -766,6 +1061,14 @@ def _check_units(ctx: Ctx) -> list[ProblemItem]:
         )
         for v in rows:
             checks.setdefault(v.id, ctx.touched_campuses[v.campus_id])
+    if ctx.touched_departments:
+        rows = s.scalars(
+            select(ServiceUnitVersion).where(
+                ServiceUnitVersion.department_id.in_(ctx.touched_departments)
+            )
+        )
+        for v in rows:
+            checks.setdefault(v.id, ctx.touched_departments[v.department_id])
     # 项序号 → (本项新写的单元版本的问题, 本项影响到的已有单元)
     blocked: dict[int, tuple[list[str], list[str]]] = {}
     for version_id, index in sorted(checks.items()):
@@ -796,8 +1099,14 @@ HANDLERS = {
     "operator_relation.create": _relation_create,
     "operator_relation.close": _relation_close,
     "department.create": _department_create,
-    "department.rename": _department_rename,
-    "department.change_status": _department_change_status,
+    "department.revise": _department_revise,
+    "department.change_lifecycle": _department_change_lifecycle,
+    "department.classify": _department_classify,
+    "department.affiliate": _department_affiliate,
+    "department.alias_add": _department_alias_add,
+    "department.alias_close": _department_alias_close,
+    "department.rename": _department_legacy,
+    "department.change_status": _department_legacy,
     "service_unit.create": _unit_create,
     "service_unit.revise": _unit_revise,
     "service_unit.rebind": _unit_rebind,

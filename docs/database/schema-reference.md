@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0005**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0006**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -8,7 +8,7 @@
 - **配置与用户**：[`app_user`](#app_user)、[`option_item`](#option_item)、[`approval_rule`](#approval_rule)
 - **变更申请**：[`change_request`](#change_request)
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
-- **部门与服务单元**：[`department`](#department)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
+- **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -267,30 +267,235 @@
 
 ### department
 
-部门（当前无版本表；见 README 第 6 节的深化计划）
+部门身份（id、管理编码）；属性在 department_version
 
 | 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
 | --- | --- | --- | --- | --- |
 | `id` | bigint | 是 | IDENTITY |  |
 | `code` | text | 是 |  |  |
-| `name` | text | 是 |  |  |
-| `status` | text | 是 | 'ACTIVE'::text |  |
 | `created_change_id` | bigint | 是 |  | → `change_request` |
 | `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
-| `last_change_id` | bigint | 是 |  | → `change_request` |
-| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
 
 约束：
 
 - `department_pkey`（主键）：`PRIMARY KEY (id)`
 - `department_code_uniq`（唯一）：`UNIQUE (code)`
 - `department_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
-- `department_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
-- `department_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text, 'DEPRECATED'::text, 'SUPERSEDED'::text])))`
 
 触发器：
 
-- `department_guard`：`CREATE TRIGGER department_guard BEFORE UPDATE ON public.department FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'status', 'last_change_id', 'updated_at')`
+- `department_guard`：`CREATE TRIGGER department_guard BEFORE UPDATE ON public.department FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### department_version
+
+部门属性版本：名称、生命周期、设立形式、行政级别、承担职责、依据
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `department_id` | bigint | 是 |  | → `department` |
+| `version_no` | integer | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `name` | text | 是 |  |  |
+| `short_name` | text |  |  |  |
+| `description` | text |  |  |  |
+| `establishment_form` | text | 是 | 'STANDING'::text |  |
+| `temporary_until` | date |  |  |  |
+| `lifecycle` | text | 是 |  |  |
+| `admin_grade` | text |  |  |  |
+| `duties` | text[] | 是 | '{}'::text[] |  |
+| `basis_note` | text |  |  |  |
+
+约束：
+
+- `department_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_version_no_uniq`（唯一）：`UNIQUE (department_id, version_no)`
+- `department_version_no_overlap`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_version_form_check`（检查）：`CHECK ((establishment_form = ANY (ARRAY['STANDING'::text, 'TEMPORARY'::text])))`
+- `department_version_lifecycle_check`（检查）：`CHECK ((lifecycle = ANY (ARRAY['PREPARING'::text, 'ACTIVE'::text, 'SUSPENDED'::text, 'REVOKED'::text, 'SUPERSEDED'::text])))`
+- `department_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `department_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `department_version_temporary_check`（检查）：`CHECK (((establishment_form = 'TEMPORARY'::text) = (temporary_until IS NOT NULL)))`
+
+触发器：
+
+- `department_version_guard`：`CREATE TRIGGER department_version_guard BEFORE UPDATE ON public.department_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to')`
+
+### department_alias
+
+部门别名与检索码
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `department_id` | bigint | 是 |  | → `department` |
+| `kind` | text | 是 |  |  |
+| `value` | text | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `department_alias_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_alias_dup_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, kind WITH =, value WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_alias_kind_check`（检查）：`CHECK ((kind = ANY (ARRAY['ALIAS'::text, 'SEARCH_CODE'::text])))`
+- `department_alias_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `department_alias_value_check`（检查）：`CHECK ((btrim(value) <> ''::text))`
+
+索引：
+
+- `department_alias_value_idx`：`CREATE INDEX department_alias_value_idx ON public.department_alias USING btree (value)`
+
+触发器：
+
+- `department_alias_guard`：`CREATE TRIGGER department_alias_guard BEFORE UPDATE ON public.department_alias FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
+### department_classification
+
+部门分类赋值（单选方案同一时点一个）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `department_id` | bigint | 是 |  | → `department` |
+| `scheme_id` | bigint | 是 |  |  |
+| `is_exclusive` | boolean | 是 |  |  |
+| `code` | text | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `department_classification_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_classification_dup_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, scheme_id WITH =, code WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_classification_exclusive_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, scheme_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE (is_exclusive)`
+- `department_classification_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+
+索引：
+
+- `department_classification_dept_idx`：`CREATE INDEX department_classification_dept_idx ON public.department_classification USING btree (department_id)`
+
+触发器：
+
+- `department_classification_guard`：`CREATE TRIGGER department_classification_guard BEFORE UPDATE ON public.department_classification FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
+### department_institution
+
+部门主体归属
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `department_id` | bigint | 是 |  | → `department` |
+| `institution_id` | bigint | 是 |  | → `institution` |
+| `is_primary` | boolean | 是 | true |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `department_institution_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_institution_primary_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE (is_primary)`
+- `department_institution_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+
+索引：
+
+- `department_institution_dept_idx`：`CREATE INDEX department_institution_dept_idx ON public.department_institution USING btree (department_id)`
+
+触发器：
+
+- `department_institution_guard`：`CREATE TRIGGER department_institution_guard BEFORE UPDATE ON public.department_institution FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
+### classification_scheme
+
+分类方案（配置，维护人直接维护）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `version` | text | 是 |  |  |
+| `purpose` | text |  |  |  |
+| `is_exclusive` | boolean | 是 |  |  |
+| `is_active` | boolean | 是 | true |  |
+| `updated_by` | bigint |  |  | → `app_user` |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `classification_scheme_pkey`（主键）：`PRIMARY KEY (id)`
+- `classification_scheme_code_uniq`（唯一）：`UNIQUE (code)`
+- `classification_scheme_exclusive_uniq`（唯一）：`UNIQUE (id, is_exclusive)`
+- `classification_scheme_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+
+触发器：
+
+- `classification_scheme_guard`：`CREATE TRIGGER classification_scheme_guard BEFORE UPDATE ON public.classification_scheme FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'purpose', 'is_active', 'updated_by', 'updated_at')`
+
+### classification_code
+
+分类代码（配置，代码值不可改、只停用）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `scheme_id` | bigint | 是 |  | → `classification_scheme` |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `criterion` | text |  |  |  |
+| `caution` | text |  |  |  |
+| `sort_order` | integer | 是 | 0 |  |
+| `is_active` | boolean | 是 | true |  |
+| `updated_by` | bigint |  |  | → `app_user` |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `classification_code_pkey`（主键）：`PRIMARY KEY (id)`
+- `classification_code_uniq`（唯一）：`UNIQUE (scheme_id, code)`
+- `classification_code_code_check`（检查）：`CHECK ((code ~ '^[A-Z][A-Z0-9_]{0,63}$'::text))`
+- `classification_code_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+
+触发器：
+
+- `classification_code_guard`：`CREATE TRIGGER classification_code_guard BEFORE UPDATE ON public.classification_code FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'criterion', 'caution', 'sort_order', 'is_active', 'updated_by', 'updated_at')`
+
+### org_view
+
+组织视图：行政视图启用，运营、病案占位
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `purpose` | text |  |  |  |
+| `single_parent` | boolean | 是 | true |  |
+| `status` | text | 是 |  |  |
+| `sort_order` | integer | 是 | 0 |  |
+
+约束：
+
+- `org_view_pkey`（主键）：`PRIMARY KEY (id)`
+- `org_view_code_uniq`（唯一）：`UNIQUE (code)`
+- `org_view_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'PLANNED'::text])))`
 
 ### service_unit
 
@@ -449,11 +654,18 @@ $function$
 | `campus` | INSERT、SELECT、UPDATE |
 | `campus_version` | INSERT、SELECT、UPDATE |
 | `change_request` | INSERT、SELECT、UPDATE |
+| `classification_code` | INSERT、SELECT、UPDATE |
+| `classification_scheme` | INSERT、SELECT、UPDATE |
 | `department` | INSERT、SELECT、UPDATE |
+| `department_alias` | INSERT、SELECT、UPDATE |
+| `department_classification` | INSERT、SELECT、UPDATE |
+| `department_institution` | INSERT、SELECT、UPDATE |
+| `department_version` | INSERT、SELECT、UPDATE |
 | `institution` | INSERT、SELECT、UPDATE |
 | `institution_version` | INSERT、SELECT、UPDATE |
 | `operator_relation` | INSERT、SELECT、UPDATE |
 | `option_item` | INSERT、SELECT、UPDATE |
+| `org_view` | INSERT、SELECT、UPDATE |
 | `service_unit` | INSERT、SELECT、UPDATE |
 | `service_unit_lineage` | INSERT、SELECT、UPDATE |
 | `service_unit_version` | INSERT、SELECT、UPDATE |
@@ -483,9 +695,15 @@ $function$
 | campus | change_status | confirmer | 是 |
 | campus | create | confirmer | 是 |
 | campus | revise | confirmer | 是 |
+| department | affiliate | confirmer | 是 |
+| department | alias_add | confirmer | 是 |
+| department | alias_close | confirmer | 是 |
+| department | change_lifecycle | confirmer | 是 |
 | department | change_status | confirmer | 是 |
+| department | classify | confirmer | 是 |
 | department | create | confirmer | 是 |
 | department | rename | confirmer | 是 |
+| department | revise | confirmer | 是 |
 | institution | create | confirmer | 是 |
 | institution | revise | confirmer | 是 |
 | operator_relation | close | confirmer | 是 |

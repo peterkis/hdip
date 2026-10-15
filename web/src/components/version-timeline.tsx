@@ -38,7 +38,8 @@ export function VersionTimeline<V extends Version>({
       <TableBody>
         {versions.map((v, i) => {
           const prev = versions[i + 1]
-          const changed = fields.filter((f) => !prev || prev[f] !== v[f])
+          // 数组（如承担职责）按内容比较
+          const changed = fields.filter((f) => !prev || JSON.stringify(prev[f]) !== JSON.stringify(v[f]))
           const current = v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf)
           return (
             <TableRow key={v.version_no} className={cn(current && 'bg-muted/50')}>
@@ -46,7 +47,7 @@ export function VersionTimeline<V extends Version>({
               <TableCell className="whitespace-nowrap">{period(v.valid_from, v.valid_to)}</TableCell>
               <TableCell className="whitespace-normal">
                 {changed
-                  .filter((f) => prev || v[f] !== null)
+                  .filter((f) => prev || (v[f] !== null && !(Array.isArray(v[f]) && v[f].length === 0)))
                   .map((f) => (
                     <span key={String(f)} className="mr-3 inline-block">
                       <span className="text-muted-foreground">{FIELD_LABELS[String(f)]}：</span>

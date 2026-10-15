@@ -19,6 +19,8 @@ class UserRef(BaseModel):
 
 class UserOut(UserRef):
     roles: list[str]
+    permissions: list[str]
+    """权限键（见 core/permissions.py），页面据此显示可用操作。"""
 
 
 class OptionOut(BaseModel):
@@ -123,8 +125,9 @@ class ServiceUnitVersionOut(VersionMeta):
     department_id: int
     department_code: str
     department_name: str
-    """部门暂无版本，按历史日期查询时显示的是部门当前名称（设计文档第 6 节局限）。"""
-    department_status: str
+    """查看日期当天的部门名称（部门有版本后按日期准确）。"""
+    department_lifecycle: str
+    """查看日期当天部门的组织生命周期（PREPARING/ACTIVE/SUSPENDED/REVOKED/SUPERSEDED）。"""
     campus_id: int
     campus_code: str
     campus_name: str
@@ -177,24 +180,130 @@ class ServiceUnitDetail(BaseModel):
     """本单元拆分或合并成了哪些单元。"""
 
 
+class DepartmentVersionOut(VersionMeta):
+    name: str
+    short_name: str | None
+    description: str | None
+    establishment_form: Literal["STANDING", "TEMPORARY"]
+    temporary_until: date | None
+    lifecycle: Literal["PREPARING", "ACTIVE", "SUSPENDED", "REVOKED", "SUPERSEDED"]
+    admin_grade: str | None
+    duties: list[str]
+    basis_note: str | None
+
+
+class ClassRef(BaseModel):
+    scheme_code: str
+    scheme_name: str
+    code: str
+    name: str
+
+
+class DepartmentClassificationOut(ClassRef):
+    id: int
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+
+
+class DepartmentAffiliationOut(BaseModel):
+    id: int
+    institution_id: int
+    institution_code: str
+    institution_name: str
+    is_primary: bool
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+
+
+class DepartmentAliasOut(BaseModel):
+    id: int
+    kind: Literal["ALIAS", "SEARCH_CODE"]
+    value: str
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+
+
 class DepartmentRow(BaseModel):
     id: int
     code: str
-    name: str
-    status: str
+    version: DepartmentVersionOut
+    """查看日期当天有效的版本；当天尚未设立时为最早的版本。"""
+    not_yet_effective: bool
+    has_later_versions: bool
+    main_class: ClassRef | None
+    """查看日期当天的部门管理主分类。"""
+    institution_name: str | None
+    """查看日期当天的主归属主体。"""
     unit_count: int
-    """查看日期当天挂在该部门下的服务单元数。"""
+    """查看日期当天挂在该部门下、已生效的服务单元数。"""
 
 
-class DepartmentDetail(DepartmentRow):
+class DepartmentDetail(BaseModel):
+    id: int
+    code: str
     created_at: datetime
     created_change_id: int
-    updated_at: datetime
-    last_change_id: int
+    versions: list[DepartmentVersionOut]
+    """新到旧。旧版本的名称即曾用名。"""
+    classifications: list[DepartmentClassificationOut]
+    affiliations: list[DepartmentAffiliationOut]
+    aliases: list[DepartmentAliasOut]
     units: list[ServiceUnitRow]
-    """查看日期当天挂在该部门下的服务单元。"""
+    """查看日期当天挂在该部门下的服务单元（含计划中）。"""
     change_ids: list[int]
-    """改动过该部门的已确认申请（部门无版本表，历史以申请为准）。"""
+    """改动过该部门的已确认申请。"""
+
+
+class ClassificationCodeOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    criterion: str | None
+    caution: str | None
+    sort_order: int
+    is_active: bool
+    updated_at: datetime
+    updated_by: UserRef | None
+
+
+class ClassificationSchemeOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    version: str
+    purpose: str | None
+    is_exclusive: bool
+    is_active: bool
+    codes: list[ClassificationCodeOut]
+
+
+class ClassificationCodeWrite(BaseModel):
+    """维护分类字典（配置，不经变更申请）。代码值不可改，不删除只停用。"""
+
+    name: str | None = None
+    criterion: str | None = None
+    caution: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class ClassificationCodeCreate(BaseModel):
+    code: str
+    name: str
+    criterion: str | None = None
+    caution: str | None = None
+    sort_order: int = 0
+
+
+class OrgViewOut(BaseModel):
+    code: str
+    name: str
+    purpose: str | None
+    status: Literal["ACTIVE", "PLANNED"]
 
 
 # ------------------------------------------------------------------ 变更申请

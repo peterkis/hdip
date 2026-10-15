@@ -111,9 +111,9 @@ export function ServiceUnitDetailPage() {
                     <Link className="hover:underline" to={`/departments/${onDay.department_id}`}>
                       {onDay.department_name}
                     </Link>
-                    {onDay.department_status !== 'ACTIVE' && (
+                    {onDay.department_lifecycle !== 'ACTIVE' && (
                       <Badge variant="destructive" className="ml-2">
-                        所属部门已停用
+                        所属部门非正式履职
                       </Badge>
                     )}
                   </dd>

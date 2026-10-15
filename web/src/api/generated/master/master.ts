@@ -22,6 +22,7 @@ import type {
 import type {
   CampusDetail,
   CampusRow,
+  ClassificationSchemeOut,
   DepartmentDetail,
   DepartmentRow,
   GetCampusParams,
@@ -35,6 +36,7 @@ import type {
   ListInstitutionsParams,
   ListOperatorRelationsParams,
   ListServiceUnitsParams,
+  OrgViewOut,
   Problem,
   RelationOut,
   ServiceUnitDetail,
@@ -631,7 +633,9 @@ export const getListDepartmentsUrl = (params?: ListDepartmentsParams,) => {
 }
 
 /**
- * 全部部门（含停用），附查看日期当天挂在其下的单元数。
+ * 全部部门（含尚未设立的计划部门），附查看日期当天的版本、主分类、主归属与已生效单元数。
+ *
+ * 部门数口径：只计查看日期当天组织生命周期为“正式履职”（ACTIVE）且已生效的部门。
  * @summary List Departments
  */
 export const listDepartments = async (params?: ListDepartmentsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DepartmentRow[]> => {
@@ -1052,6 +1056,208 @@ export function useGetServiceUnit<TData = Awaited<ReturnType<typeof getServiceUn
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetServiceUnitQueryOptions(unitId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListClassificationSchemesUrl = () => {
+
+
+
+
+  return `/api/classification-schemes`
+}
+
+/**
+ * 分类方案与代码（含已停用的代码，以 is_active 标出）。
+ * @summary List Classification Schemes
+ */
+export const listClassificationSchemes = async ( options?: Parameters<typeof hdipFetch>[1]): Promise<ClassificationSchemeOut[]> => {
+
+  return hdipFetch<ClassificationSchemeOut[]>(getListClassificationSchemesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListClassificationSchemesQueryKey = () => {
+    return [
+    `/api/classification-schemes`
+    ] as const;
+    }
+
+
+export const getListClassificationSchemesQueryOptions = <TData = Awaited<ReturnType<typeof listClassificationSchemes>>, TError = Problem>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListClassificationSchemesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listClassificationSchemes>>> = ({ signal }) => listClassificationSchemes({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListClassificationSchemesQueryResult = NonNullable<Awaited<ReturnType<typeof listClassificationSchemes>>>
+export type ListClassificationSchemesQueryError = Problem
+
+
+export function useListClassificationSchemes<TData = Awaited<ReturnType<typeof listClassificationSchemes>>, TError = Problem>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listClassificationSchemes>>,
+          TError,
+          Awaited<ReturnType<typeof listClassificationSchemes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListClassificationSchemes<TData = Awaited<ReturnType<typeof listClassificationSchemes>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listClassificationSchemes>>,
+          TError,
+          Awaited<ReturnType<typeof listClassificationSchemes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListClassificationSchemes<TData = Awaited<ReturnType<typeof listClassificationSchemes>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Classification Schemes
+ */
+
+export function useListClassificationSchemes<TData = Awaited<ReturnType<typeof listClassificationSchemes>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listClassificationSchemes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListClassificationSchemesQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListOrgViewsUrl = () => {
+
+
+
+
+  return `/api/org-views`
+}
+
+/**
+ * 组织视图：行政视图启用；运营、病案视图占位（status = PLANNED）。
+ * @summary List Org Views
+ */
+export const listOrgViews = async ( options?: Parameters<typeof hdipFetch>[1]): Promise<OrgViewOut[]> => {
+
+  return hdipFetch<OrgViewOut[]>(getListOrgViewsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListOrgViewsQueryKey = () => {
+    return [
+    `/api/org-views`
+    ] as const;
+    }
+
+
+export const getListOrgViewsQueryOptions = <TData = Awaited<ReturnType<typeof listOrgViews>>, TError = Problem>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListOrgViewsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listOrgViews>>> = ({ signal }) => listOrgViews({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListOrgViewsQueryResult = NonNullable<Awaited<ReturnType<typeof listOrgViews>>>
+export type ListOrgViewsQueryError = Problem
+
+
+export function useListOrgViews<TData = Awaited<ReturnType<typeof listOrgViews>>, TError = Problem>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listOrgViews>>,
+          TError,
+          Awaited<ReturnType<typeof listOrgViews>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListOrgViews<TData = Awaited<ReturnType<typeof listOrgViews>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listOrgViews>>,
+          TError,
+          Awaited<ReturnType<typeof listOrgViews>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListOrgViews<TData = Awaited<ReturnType<typeof listOrgViews>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Org Views
+ */
+
+export function useListOrgViews<TData = Awaited<ReturnType<typeof listOrgViews>>, TError = Problem>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listOrgViews>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListOrgViewsQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

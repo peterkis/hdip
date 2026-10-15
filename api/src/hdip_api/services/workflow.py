@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hdip_api.core.errors import BusinessError, Forbidden, NotFound
+from hdip_api.core.permissions import CHANGE_CREATE, require_permission
 from hdip_api.models import ApprovalRule, AppUser, ChangeRequest
 from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
@@ -29,11 +30,6 @@ def parse_items(cr: ChangeRequest) -> list[ChangeItem]:
 
 def _now(s: Session):
     return s.scalar(select(func.localtimestamp()))
-
-
-def _require_role(user: AppUser, role: str) -> None:
-    if role not in user.roles:
-        raise Forbidden(f"需要{ROLE_LABELS[role]}角色")
 
 
 def get_for_update(s: Session, change_id: int) -> ChangeRequest:
@@ -89,7 +85,7 @@ def return_block_reason(s: Session, cr: ChangeRequest, user: AppUser) -> str | N
 def create_draft(
     s: Session, user: AppUser, items: list[ChangeItem], note: str | None
 ) -> ChangeRequest:
-    _require_role(user, "maintainer")
+    require_permission(user, CHANGE_CREATE)
     cr = ChangeRequest(items=dump_items(items), note=_clean(note), created_by=user.id)
     s.add(cr)
     s.flush()
@@ -113,7 +109,7 @@ def submit(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
     cr = get_for_update(s, change_id)
     _require_status(cr, "draft")
     _require_creator(cr, user)
-    _require_role(user, "maintainer")
+    require_permission(user, CHANGE_CREATE)
     dry_run(s, parse_items(cr), cr.id, user.id)  # 不通过即抛错
     now = _now(s)
     cr.status, cr.submitted_by, cr.submitted_at, cr.updated_at = "submitted", user.id, now, now
@@ -168,7 +164,7 @@ def cancel(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
 
 
 def copy_as_draft(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
-    _require_role(user, "maintainer")
+    require_permission(user, CHANGE_CREATE)
     src = s.get(ChangeRequest, change_id)
     if src is None:
         raise NotFound(f"变更申请 #{change_id} 不存在")

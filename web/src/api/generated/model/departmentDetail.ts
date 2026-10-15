@@ -4,18 +4,21 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DepartmentAffiliationOut } from './departmentAffiliationOut';
+import type { DepartmentAliasOut } from './departmentAliasOut';
+import type { DepartmentClassificationOut } from './departmentClassificationOut';
+import type { DepartmentVersionOut } from './departmentVersionOut';
 import type { ServiceUnitRow } from './serviceUnitRow';
 
 export interface DepartmentDetail {
   id: number;
   code: string;
-  name: string;
-  status: string;
-  unit_count: number;
   created_at: string;
   created_change_id: number;
-  updated_at: string;
-  last_change_id: number;
+  versions: DepartmentVersionOut[];
+  classifications: DepartmentClassificationOut[];
+  affiliations: DepartmentAffiliationOut[];
+  aliases: DepartmentAliasOut[];
   units: ServiceUnitRow[];
   change_ids: number[];
 }

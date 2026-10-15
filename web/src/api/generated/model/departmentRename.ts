@@ -5,6 +5,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
+/**
+ * 已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。
+ */
 export interface DepartmentRename {
   kind: 'department.rename';
   /** @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ */

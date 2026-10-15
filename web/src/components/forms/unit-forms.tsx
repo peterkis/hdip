@@ -1,75 +1,13 @@
-// 部门与服务单元的变更表单。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
+// 服务单元的变更表单（部门的在 department-forms.tsx）。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
 // 引用其他对象一律“按名称选择”（ref-selects.tsx），代码由选择带出，操作人员不需要记代码。
 import { useState } from 'react'
-import type { DepartmentRow, ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
+import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
 import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
-import { DEPARTMENT_STATUS, UNIT_STATUS, type DepartmentStatus, type UnitStatus } from '@/lib/format'
-
-// ------------------------------------------------------------------ 部门
-export function DepartmentCreateDialog(props: DialogProps) {
-  const [code, setCode] = useState('')
-  const [name, setName] = useState('')
-  return (
-    <ItemDialog
-      {...props}
-      title="新建部门"
-      description="部门不写院区、不拼院区；同一部门在多个院区 = 一个部门 + 多个服务单元。"
-      build={() =>
-        requireFields([
-          ['name', !!name.trim(), '请填写部门名称'],
-          ['code', !!code.trim(), '请填写部门代码'],
-          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
-        ]) ?? { kind: 'department.create', code: code.trim(), name: name.trim() }
-      }
-    >
-      <TextField label="名称" name="name" required value={name} onChange={setName} />
-      <TextField label="部门代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
-    </ItemDialog>
-  )
-}
-
-export function DepartmentRenameDialog({ department, ...props }: DialogProps & { department: DepartmentRow }) {
-  const [name, setName] = useState(department.name)
-  return (
-    <ItemDialog
-      {...props}
-      title={`部门改名：${department.name}`}
-      description="部门暂无版本，确认后立即生效；按历史日期查询时也会显示新名称（改动前后记在变更申请里）。"
-      build={() =>
-        requireFields([
-          ['name', !!name.trim(), '请填写新名称'],
-          ['name', name.trim() !== department.name, '名称没有变化'],
-        ]) ?? { kind: 'department.rename', code: department.code, name: name.trim() }
-      }
-    >
-      <TextField label="新名称" name="name" required value={name} onChange={setName} />
-    </ItemDialog>
-  )
-}
-
-export function DepartmentStatusDialog({ department, ...props }: DialogProps & { department: DepartmentRow }) {
-  const next: DepartmentStatus = department.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'
-  return (
-    <ItemDialog
-      {...props}
-      title={`${next === 'INACTIVE' ? '停用' : '恢复'}部门：${department.name}`}
-      description={
-        next === 'INACTIVE'
-          ? '停用后不能被新建或改挂的单元选用；已有单元保留引用，并标出“所属部门已停用”。确认后立即生效。'
-          : '恢复后可再被单元选用。确认后立即生效。'
-      }
-      build={() => ({ kind: 'department.change_status', code: department.code, status: next })}
-    >
-      <p className="text-xs">
-        状态：{DEPARTMENT_STATUS[department.status as DepartmentStatus]} → {DEPARTMENT_STATUS[next]}
-      </p>
-    </ItemDialog>
-  )
-}
+import { UNIT_STATUS, type UnitStatus } from '@/lib/format'
 
 // ------------------------------------------------------------------ 服务单元
 export function UnitCreateDialog({

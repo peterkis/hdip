@@ -28,7 +28,9 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
-    "service_unit_lineage, service_unit_version, service_unit, department, "
+    "service_unit_lineage, service_unit_version, service_unit, "
+    "department_alias, department_classification, department_institution, department_version, "
+    "department, "
     "operator_relation, campus_version, campus, institution_version, institution, change_request"
 )
 
@@ -51,6 +53,8 @@ def clean(owner_engine):
     with owner_engine.begin() as c:
         c.execute(text(f"TRUNCATE {BUSINESS_TABLES} RESTART IDENTITY CASCADE"))
         c.execute(text("UPDATE approval_rule SET allow_self_confirm = true"))
+        # 字典测试新增的代码（配置表不在 TRUNCATE 之列）
+        c.execute(text("DELETE FROM classification_code WHERE code LIKE 'TEST\\_%'"))
     yield
 
 

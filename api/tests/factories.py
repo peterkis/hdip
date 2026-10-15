@@ -45,8 +45,14 @@ def change_status(code="GX", status="TRIAL_RUNNING", effective_date="2026-11-01"
     }
 
 
-def dept_create(code="XNK", name="心血管内科"):
-    return {"kind": "department.create", "code": code, "name": name}
+def dept_create(code="XNK", name="心血管内科", valid_from="2020-01-01", **fields):
+    return {
+        "kind": "department.create",
+        "code": code,
+        "name": name,
+        "valid_from": valid_from,
+        **fields,
+    }
 
 
 def unit_create(
@@ -118,3 +124,13 @@ def merge(codes, effective_date, successor_spec):
         "effective_date": effective_date,
         "successor": successor_spec,
     }
+
+
+def dept_item(kind, code="XNK", **kw):
+    return {"kind": f"department.{kind}", "code": code, **kw}
+
+
+def classify(code, class_code, day, scheme="DEPT_MAIN_CLASS"):
+    return dept_item(
+        "classify", code, scheme_code=scheme, class_code=class_code, effective_date=day
+    )

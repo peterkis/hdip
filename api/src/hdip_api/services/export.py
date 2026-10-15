@@ -34,12 +34,14 @@ OPERATING_STATUS = {
     "SUSPENDED": "停用",
 }
 UNIT_STATUS = {"ACTIVE": "在用", "SUSPENDED": "暂停"}
-DEPARTMENT_STATUS = {
-    "ACTIVE": "在用",
-    "INACTIVE": "停用",
-    "DEPRECATED": "弃用",
+LIFECYCLE = {
+    "PREPARING": "筹备",
+    "ACTIVE": "正式履职",
+    "SUSPENDED": "暂停履职",
+    "REVOKED": "撤销",
     "SUPERSEDED": "被替代",
 }
+FORM = {"STANDING": "常设部门", "TEMPORARY": "经批准的临时部门"}
 RELATION_TYPE = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
 LINEAGE_TYPE = {"SPLIT": "拆分", "MERGE": "合并"}
 
@@ -62,7 +64,7 @@ def _service_units(s: Session, day: date) -> Iterable[dict]:
             "status_name": UNIT_STATUS[v.status],
             "department_code": v.department_code,
             "department_name": v.department_name,
-            "department_status": v.department_status,
+            "department_status": v.department_lifecycle,
             "campus_code": v.campus_code,
             "campus_name": v.campus_name,
             "institution_code": v.institution_code,
@@ -76,13 +78,29 @@ def _service_units(s: Session, day: date) -> Iterable[dict]:
 
 
 def _departments(s: Session, day: date) -> Iterable[dict]:
+    """当天已设立的部门（不含计划中尚未设立的）。status 列自 D1 起为组织生命周期。"""
     for d in queries.list_departments(s, day):
+        if d.not_yet_effective:
+            continue
+        v, c = d.version, d.main_class
         yield {
             "department_code": d.code,
-            "department_name": d.name,
-            "status": d.status,
-            "status_name": DEPARTMENT_STATUS[d.status],
+            "department_name": v.name,
+            "status": v.lifecycle,
+            "status_name": LIFECYCLE[v.lifecycle],
             "unit_count": d.unit_count,
+            "short_name": v.short_name,
+            "main_class": c.code if c else None,
+            "main_class_name": c.name if c else None,
+            "establishment_form": v.establishment_form,
+            "establishment_form_name": FORM[v.establishment_form],
+            "temporary_until": v.temporary_until,
+            "admin_grade": v.admin_grade,
+            "duties": "、".join(v.duties),
+            "institution_name": d.institution_name,
+            "version_no": v.version_no,
+            "valid_from": v.valid_from,
+            "valid_to": v.valid_to,
         }
 
 
@@ -173,6 +191,9 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
     ]),
     "departments": (_departments, [
         "department_code", "department_name", "status", "status_name", "unit_count",
+        "short_name", "main_class", "main_class_name", "establishment_form",
+        "establishment_form_name", "temporary_until", "admin_grade", "duties",
+        "institution_name", "version_no", "valid_from", "valid_to",
     ]),
     "campuses": (_campuses, [
         "campus_code", "campus_name", "node_role", "node_role_name",

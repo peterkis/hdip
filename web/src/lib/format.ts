@@ -28,14 +28,29 @@ export const UNIT_STATUS = {
 } as const
 export type UnitStatus = keyof typeof UNIT_STATUS
 
-// INACTIVE 之外的两个为部门拆分合并预留，MVP 不会出现
-export const DEPARTMENT_STATUS = {
-  ACTIVE: '在用',
-  INACTIVE: '停用',
-  DEPRECATED: '弃用',
+// 部门组织生命周期：筹备 → 正式履职 ⇄ 暂停履职 → 撤销；被替代留给部门拆并
+export const DEPARTMENT_LIFECYCLE = {
+  PREPARING: '筹备',
+  ACTIVE: '正式履职',
+  SUSPENDED: '暂停履职',
+  REVOKED: '撤销',
   SUPERSEDED: '被替代',
 } as const
-export type DepartmentStatus = keyof typeof DEPARTMENT_STATUS
+export type DepartmentLifecycle = keyof typeof DEPARTMENT_LIFECYCLE
+/** 从当前生命周期可以变到哪些（与后端 LIFECYCLE_NEXT 一致） */
+export const LIFECYCLE_NEXT: Record<DepartmentLifecycle, DepartmentLifecycle[]> = {
+  PREPARING: ['ACTIVE', 'REVOKED'],
+  ACTIVE: ['SUSPENDED', 'REVOKED'],
+  SUSPENDED: ['ACTIVE', 'REVOKED'],
+  REVOKED: [],
+  SUPERSEDED: [],
+}
+
+export const ESTABLISHMENT_FORM = {
+  STANDING: '常设部门',
+  TEMPORARY: '经批准的临时部门',
+} as const
+export type EstablishmentForm = keyof typeof ESTABLISHMENT_FORM
 
 export const CHANGE_STATUS = {
   draft: '草稿',
@@ -77,7 +92,20 @@ export const FIELD_LABELS: Record<string, string> = {
   status: '单元状态',
   scope_note: '范围说明',
   department_status: '部门状态',
-  affected_units: '仍挂在该部门下的单元（只提示，不处置）',
+  department_lifecycle: '部门生命周期',
+  short_name: '简称',
+  description: '职责说明',
+  establishment_form: '设立形式',
+  temporary_until: '临时部门期限',
+  lifecycle: '组织生命周期',
+  admin_grade: '行政级别',
+  duties: '承担职责',
+  basis_note: '依据',
+  affiliation: '主体归属',
+  class_code: '分类代码',
+  class_name: '分类',
+  alias_kind: '别名类别',
+  value: '别名',
 }
 
 /** 选项表里的码值名称，按字段名索引：{ node_role: {HIGH_TECH: '高新院区'}, unit_type: {...} } */
@@ -104,7 +132,11 @@ export function formatValue(field: string, value: unknown, labels: OptionLabels 
   if (field === 'operating_status') return OPERATING_STATUS[value as OperatingStatus] ?? String(value)
   if (field === 'relation_type') return RELATION_TYPE[value as RelationType] ?? String(value)
   if (field === 'status') return UNIT_STATUS[value as UnitStatus] ?? String(value)
-  if (field === 'department_status') return DEPARTMENT_STATUS[value as DepartmentStatus] ?? String(value)
+  if (field === 'lifecycle' || field === 'department_lifecycle')
+    return DEPARTMENT_LIFECYCLE[value as DepartmentLifecycle] ?? String(value)
+  if (field === 'establishment_form') return ESTABLISHMENT_FORM[value as EstablishmentForm] ?? String(value)
+  if (field === 'alias_kind') return value === 'SEARCH_CODE' ? '检索码' : '别名'
+  if (Array.isArray(value)) return value.length ? value.join('、') : '—'
   if (labels[field]) return labels[field][value as string] ?? String(value)
   if (typeof value === 'boolean') return value ? '是' : '否'
   return String(value)

@@ -18,7 +18,8 @@ import {
   InstitutionCreateDialog,
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
-import { DepartmentCreateDialog, UnitCreateDialog } from '@/components/forms/unit-forms'
+import { DepartmentCreateDialog } from '@/components/forms/department-forms'
+import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'

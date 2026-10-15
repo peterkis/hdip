@@ -10,4 +10,8 @@ export type ListDepartmentsParams = {
  * 查看日期 YYYY-MM-DD，默认今天
  */
 as_of?: string | null;
+/**
+ * 按管理编码、名称（含曾用名）、别名搜索
+ */
+q?: string | null;
 };

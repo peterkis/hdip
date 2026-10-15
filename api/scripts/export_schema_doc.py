@@ -41,7 +41,17 @@ TABLES: list[tuple[str, list[tuple[str, str]]]] = [
     (
         "部门与服务单元",
         [
-            ("department", "部门（当前无版本表；见 README 第 6 节的深化计划）"),
+            ("department", "部门身份（id、管理编码）；属性在 department_version"),
+            (
+                "department_version",
+                "部门属性版本：名称、生命周期、设立形式、行政级别、承担职责、依据",
+            ),
+            ("department_alias", "部门别名与检索码"),
+            ("department_classification", "部门分类赋值（单选方案同一时点一个）"),
+            ("department_institution", "部门主体归属"),
+            ("classification_scheme", "分类方案（配置，维护人直接维护）"),
+            ("classification_code", "分类代码（配置，代码值不可改、只停用）"),
+            ("org_view", "组织视图：行政视图启用，运营、病案占位"),
             ("service_unit", "服务单元身份（单元类型属于身份，不可修订）"),
             ("service_unit_version", "服务单元版本：部门 × 院区 × 运营主体 × 期间"),
             ("service_unit_lineage", "拆分 / 合并的前身 → 后继，只追加"),

@@ -17,7 +17,7 @@ export interface ServiceUnitVersionOut {
   department_id: number;
   department_code: string;
   department_name: string;
-  department_status: string;
+  department_lifecycle: string;
   campus_id: number;
   campus_code: string;
   campus_name: string;

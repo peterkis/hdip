@@ -157,24 +157,122 @@ class OperatorRelationClose(_Item):
 
 
 # ------------------------------------------------------------------ 部门
-# 仅引用，无版本，确认即生效
 DepartmentStatus = Literal["ACTIVE", "INACTIVE"]
+EstablishmentForm = Literal["STANDING", "TEMPORARY"]
+# 新建只能从筹备或正式履职开始；被替代只由将来的部门拆并产生
+InitialLifecycle = Literal["PREPARING", "ACTIVE"]
+TargetLifecycle = Literal["ACTIVE", "SUSPENDED", "REVOKED"]
+Duty = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
+SchemeCode = Annotated[str, StringConstraints(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")]
+
+
+def _check_temporary(form: str | None, until: date | None, form_set: bool = True) -> None:
+    if form_set and (form == "TEMPORARY") != (until is not None):
+        raise ValueError("经批准的临时部门必须填期限；常设部门不填期限")
 
 
 class DepartmentCreate(_Item):
     kind: Literal["department.create"]
     code: Code
     name: Name
+    # 生效日；旧申请里没有这一项，空表示确认当天
+    valid_from: date | None = None
+    short_name: Text | None = None
+    description: Text | None = None
+    establishment_form: EstablishmentForm = "STANDING"
+    temporary_until: date | None = None
+    lifecycle: InitialLifecycle = "ACTIVE"
+    admin_grade: Text | None = None
+    duties: list[Duty] = Field(default_factory=list)
+    basis_note: Text | None = None
+    # 主体归属（主归属）；空表示暂不填
+    institution_code: Code | None = None
+
+    @model_validator(mode="after")
+    def _temporary(self):
+        _check_temporary(self.establishment_form, self.temporary_until)
+        return self
+
+
+class DepartmentPatch(_Patch):
+    """只写要改的字段；写 null 表示清空。名称、设立形式不能清空。"""
+
+    name: Name | None = None
+    short_name: Text | None = None
+    description: Text | None = None
+    establishment_form: EstablishmentForm | None = None
+    temporary_until: date | None = None
+    admin_grade: Text | None = None
+    duties: list[Duty] | None = None
+    basis_note: Text | None = None
+
+    @model_validator(mode="after")
+    def _not_null(self):
+        for f in ("name", "establishment_form", "duties"):
+            if f in self.model_fields_set and getattr(self, f) is None:
+                raise ValueError(f"{f} 不能清空")
+        return self
+
+
+class DepartmentRevise(_Item):
+    kind: Literal["department.revise"]
+    code: Code
+    effective_date: date
+    changes: DepartmentPatch
+
+
+class DepartmentChangeLifecycle(_Item):
+    """组织生命周期：筹备 → 正式履职 ⇄ 暂停履职 → 撤销。"""
+
+    kind: Literal["department.change_lifecycle"]
+    code: Code
+    effective_date: date
+    lifecycle: TargetLifecycle
+
+
+class DepartmentClassify(_Item):
+    """给部门在某分类方案下赋值：结束当前赋值，自生效日起用新代码；class_code 为空表示只结束。"""
+
+    kind: Literal["department.classify"]
+    code: Code
+    scheme_code: SchemeCode = "DEPT_MAIN_CLASS"
+    class_code: SchemeCode | None
+    effective_date: date
+
+
+class DepartmentAffiliate(_Item):
+    """主体归属：结束当前主归属，自生效日起归属新主体。"""
+
+    kind: Literal["department.affiliate"]
+    code: Code
+    institution_code: Code
+    effective_date: date
+
+
+class DepartmentAliasAdd(_Item):
+    kind: Literal["department.alias_add"]
+    code: Code
+    alias_kind: Literal["ALIAS", "SEARCH_CODE"] = "ALIAS"
+    value: Name
+    valid_from: date | None = None
+
+
+class DepartmentAliasClose(_Item):
+    kind: Literal["department.alias_close"]
+    alias_id: int
+    valid_to: date
 
 
 class DepartmentRename(_Item):
+    """已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。"""
+
     kind: Literal["department.rename"]
     code: Code
     name: Name
 
 
 class DepartmentChangeStatus(_Item):
-    """停用 / 恢复。停用后不能被新建或改挂的单元选用，已有单元保留引用。"""
+    """已停用的旧变更类型（改用 department.change_lifecycle）。保留以便读取历史申请。"""
 
     kind: Literal["department.change_status"]
     code: Code
@@ -320,6 +418,12 @@ ChangeItem = Annotated[
     | OperatorRelationCreate
     | OperatorRelationClose
     | DepartmentCreate
+    | DepartmentRevise
+    | DepartmentChangeLifecycle
+    | DepartmentClassify
+    | DepartmentAffiliate
+    | DepartmentAliasAdd
+    | DepartmentAliasClose
     | DepartmentRename
     | DepartmentChangeStatus
     | ServiceUnitCreate
@@ -344,8 +448,14 @@ KIND_LABELS: dict[str, str] = {
     "operator_relation.create": "建立运营关系",
     "operator_relation.close": "关闭运营关系",
     "department.create": "新建部门",
-    "department.rename": "部门改名",
-    "department.change_status": "停用/恢复部门",
+    "department.revise": "修订部门属性",
+    "department.change_lifecycle": "变更部门生命周期",
+    "department.classify": "调整部门分类",
+    "department.affiliate": "调整部门主体归属",
+    "department.alias_add": "添加部门别名",
+    "department.alias_close": "停用部门别名",
+    "department.rename": "部门改名（旧）",
+    "department.change_status": "停用/恢复部门（旧）",
     "service_unit.create": "新建服务单元",
     "service_unit.revise": "修订服务单元",
     "service_unit.rebind": "重新绑定服务单元",

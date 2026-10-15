@@ -12,10 +12,12 @@ from hdip_api.core.errors import ERROR_RESPONSES
 from hdip_api.schemas.read import (
     CampusDetail,
     CampusRow,
+    ClassificationSchemeOut,
     DepartmentDetail,
     DepartmentRow,
     InstitutionDetail,
     InstitutionRow,
+    OrgViewOut,
     RelationOut,
     ServiceUnitDetail,
     ServiceUnitRow,
@@ -71,9 +73,16 @@ def list_relations(
 
 
 @router.get("/departments", response_model=list[DepartmentRow], operation_id="listDepartments")
-def list_departments(session: SessionDep, as_of: AsOf = None):
-    """全部部门（含停用），附查看日期当天挂在其下的单元数。"""
-    return queries.list_departments(session, _day(session, as_of))
+def list_departments(
+    session: SessionDep,
+    as_of: AsOf = None,
+    q: Annotated[str | None, Query(description="按管理编码、名称（含曾用名）、别名搜索")] = None,
+):
+    """全部部门（含尚未设立的计划部门），附查看日期当天的版本、主分类、主归属与已生效单元数。
+
+    部门数口径：只计查看日期当天组织生命周期为“正式履职”（ACTIVE）且已生效的部门。
+    """
+    return queries.list_departments(session, _day(session, as_of), q)
 
 
 @router.get(
@@ -113,3 +122,19 @@ def list_service_units(
 )
 def get_service_unit(session: SessionDep, unit_id: int, as_of: AsOf = None):
     return queries.get_service_unit(session, unit_id, _day(session, as_of))
+
+
+@router.get(
+    "/classification-schemes",
+    response_model=list[ClassificationSchemeOut],
+    operation_id="listClassificationSchemes",
+)
+def list_classification_schemes(session: SessionDep):
+    """分类方案与代码（含已停用的代码，以 is_active 标出）。"""
+    return queries.list_classification_schemes(session)
+
+
+@router.get("/org-views", response_model=list[OrgViewOut], operation_id="listOrgViews")
+def list_org_views(session: SessionDep):
+    """组织视图：行政视图启用；运营、病案视图占位（status = PLANNED）。"""
+    return queries.list_org_views(session)

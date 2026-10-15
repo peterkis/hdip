@@ -4,6 +4,8 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DepartmentCreateEstablishmentForm } from './departmentCreateEstablishmentForm';
+import type { DepartmentCreateLifecycle } from './departmentCreateLifecycle';
 
 export interface DepartmentCreate {
   kind: 'department.create';
@@ -14,4 +16,18 @@ export interface DepartmentCreate {
      * @maxLength 200
      */
   name: string;
+  valid_from?: string | null;
+  short_name?: string | null;
+  description?: string | null;
+  establishment_form?: DepartmentCreateEstablishmentForm;
+  temporary_until?: string | null;
+  lifecycle?: DepartmentCreateLifecycle;
+  admin_grade?: string | null;
+  /**
+     * @items.minLength 1
+     * @items.maxLength 40
+     */
+  duties?: string[];
+  basis_note?: string | null;
+  institution_code?: string | null;
 }

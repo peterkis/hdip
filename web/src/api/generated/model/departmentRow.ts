@@ -4,11 +4,16 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ClassRef } from './classRef';
+import type { DepartmentVersionOut } from './departmentVersionOut';
 
 export interface DepartmentRow {
   id: number;
   code: string;
-  name: string;
-  status: string;
+  version: DepartmentVersionOut;
+  not_yet_effective: boolean;
+  has_later_versions: boolean;
+  main_class: ClassRef | null;
+  institution_name: string | null;
   unit_count: number;
 }

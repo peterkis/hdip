@@ -1,11 +1,9 @@
 import { Badge } from '@/components/ui/badge'
 import {
   CHANGE_STATUS,
-  DEPARTMENT_STATUS,
   OPERATING_STATUS,
   UNIT_STATUS,
   type ChangeStatus,
-  type DepartmentStatus,
   type OperatingStatus,
   type UnitStatus,
 } from '@/lib/format'
@@ -31,13 +29,5 @@ export function ChangeStatusBadge({ status }: { status: string }) {
 export function UnitStatusBadge({ status }: { status: string }) {
   return (
     <Badge variant={status === 'ACTIVE' ? 'default' : 'secondary'}>{UNIT_STATUS[status as UnitStatus] ?? status}</Badge>
-  )
-}
-
-export function DepartmentStatusBadge({ status }: { status: string }) {
-  return (
-    <Badge variant={status === 'ACTIVE' ? 'outline' : 'destructive'}>
-      {DEPARTMENT_STATUS[status as DepartmentStatus] ?? status}
-    </Badge>
   )
 }

@@ -39,7 +39,8 @@ erDiagram
 | 配置 | `app_user`、`option_item`、`approval_rule` | 用户与角色、选项码值、确认规则。只由迁移维护，不经变更申请 |
 | 申请 | `change_request` | 唯一写入入口 |
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
-| 部门 | `department` | 当前无版本（第 6 节将补齐） |
+| 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
+| 字典 | `classification_scheme`、`classification_code`、`org_view` | 配置：分类方案与代码（维护人可直接维护）、组织视图 |
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系 |
 
 ## 2. 设计约定
@@ -69,7 +70,8 @@ erDiagram
    - 若列出了 `valid_to`，这些列只能在“`valid_to` 从空变为某日”的那一次 UPDATE 里修改，之后整行不可再改。
    - 未列任何列 = 整行不可更新（身份表、演变关系）。
    - 运营关系另外放开 `closed_change_id`、`closed_at`、`closed_by`，它们必须与结束日同一次写入。
-   - 例外：`department` 放开 `name`、`status`、`last_change_id`、`updated_at`（MVP 无版本表的过渡安排，第 6 节将收回）。
+   - 部门的赋值、归属、别名放开 `closed_change_id`，同样只能随结束日写入一次。
+   - **配置字典例外**：`classification_scheme`、`classification_code` 放开名称、说明、排序、启用和维护记录列，供维护人直接维护；代码值与单选属性不可改。（迁移 0006 起，`department` 身份行整行不可更新，原先的过渡例外已收回。）
 3. **变更申请终态**：`hdip_guard_change_request` 禁止修改已确认、已退回、已撤销的申请。
 
 ### 2.4 数据库强制与应用校验
@@ -103,7 +105,7 @@ stateDiagram-v2
 - **跨对象校验在全部变更项应用后进行**（`_check_units`）。服务单元的每个新版本，以及被停用院区、被关闭运营关系影响到的单元版本，都要满足：
   - 院区在整个期间存在且非停用。
   - 运营主体与院区有覆盖整个期间的“运营”关系，可以由多段首尾相接。
-  - 选用部门时，部门须在用。
+  - 所属部门在单元整个期间内须为“正式履职”（D1 起按部门版本期间校验）。被改为非正式履职的部门、被停用的院区、被关闭的运营关系，其影响到的单元版本也在此重新校验。
 
   所以“停用院区 + 改挂单元”可以放在同一张申请里，不论先后。
 - 确认权限：`approval_rule`（对象类型 × 动作 → 确认角色、是否允许提交人自确认）。改规则不改代码。
@@ -113,7 +115,7 @@ stateDiagram-v2
 | 主体 | `institution.create`、`institution.revise` | `institution`、`institution_version` |
 | 院区 | `campus.create`、`campus.revise`、`campus.change_status` | `campus`、`campus_version` |
 | 运营关系 | `operator_relation.create`、`operator_relation.close` | `operator_relation` |
-| 部门 | `department.create`、`department.rename`、`department.change_status` | `department` |
+| 部门 | `department.create`、`.revise`、`.change_lifecycle`、`.classify`、`.affiliate`、`.alias_add`、`.alias_close`（旧的 `.rename`、`.change_status` 只保留读取，不能再应用） | `department`、`department_version`、`department_classification`、`department_institution`、`department_alias` |
 | 服务单元 | `service_unit.create`、`.revise`、`.rebind`、`.change_department`、`.change_status`、`.retire` | `service_unit`、`service_unit_version` |
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
 
@@ -121,7 +123,8 @@ stateDiagram-v2
 
 - 所有查询都带“查看日期”，默认今天。某对象在该日的状态 = 期间覆盖该日的那一版。
 - 列表默认也列出“尚未生效的计划对象”，并标 `not_yet_effective`。服务单元列表用 `include_future=false` 只看当天已生效的，这就是“某日在运营的单元”，含暂停。
-- 名称显示：主体、院区取当日版本的名称。部门目前没有版本，显示当前名称（第 6 节解决）。
+- 名称显示：主体、院区、部门都取当日版本的名称（部门自 D1 起有版本）。
+- 部门数口径：查看日期当天已设立且组织生命周期为“正式履职”的部门。
 - 只读导出：`GET /api/export/{dataset}.csv?as_of=`，共六类数据，逻辑在 `services/export.py`。列名和列顺序是对外契约，新增列只能加在末尾。
 
 ## 5. 迁移史
@@ -133,6 +136,7 @@ stateDiagram-v2
 | 0003 | 收紧历史保护：关闭信息只能随结束日写入一次 |
 | 0004 | 部门、服务单元及其版本；`hdip_guard_update` 改为通过 jsonb 读取 `valid_to`，以兼容没有这一列的表 |
 | 0005 | 服务单元演变关系；单元类型中文名；拆分 / 合并的确认规则 |
+| 0006 | 部门深化 D1：部门属性版本（回填现有部门为第 1 版）、别名、分类方案与代码（配置）、分类赋值、主体归属、组织视图；`department` 只留身份 |
 
 ### 新增一类对象或变更的检查单
 
@@ -142,7 +146,7 @@ stateDiagram-v2
 4. 写测试：剧本测试 `test_scriptN.py`；每条新约束在 `test_rules*.py` 里要有反例。
 5. `make migrate && make db-doc`，同步本文与 CLAUDE.md。
 
-## 6. 规划中：部门深化（尚未实施）
+## 6. 部门深化（D1 已实施，D2、D3 规划中）
 
 需求与决定见 [部门主数据深化-实施计划](../部门主数据深化-实施计划.md)。
 
@@ -163,7 +167,7 @@ erDiagram
     department ||--o{ external_mapping : "外部代码"
 ```
 
-### 6.1 D1 部门核心
+### 6.1 D1 部门核心（已实施，迁移 0006）
 
 **`department`（身份，改造）**
 - 保留 `id`、`code`（院内管理编码）、`created_change_id`、`created_at`。

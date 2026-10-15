@@ -6,6 +6,7 @@ import { useListCampuses, useListDepartments, useListInstitutions } from '@/api/
 import { SelectField, type Option } from '@/components/forms/fields'
 import { useDraftItems } from '@/components/forms/item-dialog'
 import { useApp } from '@/lib/app-context'
+import { DEPARTMENT_LIFECYCLE } from '@/lib/format'
 
 const NEW = '（本申请新建）'
 
@@ -24,13 +25,19 @@ function withExclude(options: Option[], exclude?: string) {
   return exclude ? options.filter((o) => o.value !== exclude) : options
 }
 
-/** 所属部门：只列在用部门（停用部门不能被新建或改挂的单元选用） */
+/** 所属部门：不列撤销、被替代的部门；非正式履职的部门标出生命周期 */
 export function DepartmentSelect(p: RefProps) {
   const { asOf } = useApp()
   const draft = useDraftItems()
   const { data = [] } = useListDepartments({ as_of: asOf })
   const options: Option[] = [
-    ...data.filter((d) => d.status === 'ACTIVE').map((d) => ({ value: d.code, label: d.name })),
+    // 撤销、被替代的部门不能被选用；筹备、暂停的可以选，单元期间是否成立由后端按生命周期期间校验
+    ...data
+      .filter((d) => !['REVOKED', 'SUPERSEDED'].includes(d.version.lifecycle))
+      .map((d) => ({
+        value: d.code,
+        label: d.version.lifecycle === 'ACTIVE' ? d.version.name : `${d.version.name}（${DEPARTMENT_LIFECYCLE[d.version.lifecycle]}）`,
+      })),
     ...draft.flatMap((i) => (i.kind === 'department.create' ? [{ value: i.code, label: `${i.name}${NEW}` }] : [])),
   ]
   return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder="请选择部门" />

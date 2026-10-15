@@ -13,6 +13,7 @@ import {
   IdentityCardIcon,
   Location01Icon,
   Stethoscope02Icon,
+  Tag01Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { Blocks } from 'lucide-react'
@@ -69,6 +70,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: '标准与数据集',
     icon: Database01Icon,
     items: [
+      { label: '分类方案', icon: Tag01Icon, to: '/dictionary/classification' },
       { label: '标准数据集', icon: Database01Icon, planned: 'standard-datasets' },
       { label: '数据元', icon: Blocks, planned: 'data-elements' },
       { label: '数据目录', icon: FolderLibraryIcon, planned: 'data-catalog' },

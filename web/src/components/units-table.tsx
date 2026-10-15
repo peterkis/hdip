@@ -49,9 +49,9 @@ export function UnitsTable({ rows, hide = [] }: { rows: ServiceUnitRow[]; hide?:
                 <Link className="hover:underline" to={`/departments/${r.version.department_id}`}>
                   {r.version.department_name}
                 </Link>
-                {r.version.department_status !== 'ACTIVE' && (
+                {r.version.department_lifecycle !== 'ACTIVE' && (
                   <Badge variant="destructive" className="ml-2">
-                    所属部门已停用
+                    所属部门非正式履职
                   </Badge>
                 )}
               </TableCell>

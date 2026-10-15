@@ -162,20 +162,126 @@ class OperatorRelation(Base):
     closed_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
 
 
-class Department(Base):
-    """部门引用：无版本表，名称与状态的改动记录在变更申请里。"""
+class Department(_Identity, Base):
+    """部门身份：id、管理编码 code、创建申请。名称与属性在 DepartmentVersion。"""
 
     __tablename__ = "department"
+    __mapper_args__ = {"eager_defaults": True}
+
+
+class DepartmentVersion(_Version, Base):
+    __tablename__ = "department_version"
+    __mapper_args__ = {"eager_defaults": True}
+
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    name: Mapped[str] = mapped_column(Text)
+    short_name: Mapped[str | None] = mapped_column(Text)
+    description: Mapped[str | None] = mapped_column(Text)
+    establishment_form: Mapped[str] = mapped_column(Text)
+    temporary_until: Mapped[date | None]
+    lifecycle: Mapped[str] = mapped_column(Text)
+    admin_grade: Mapped[str | None] = mapped_column(Text)
+    duties: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    basis_note: Mapped[str | None] = mapped_column(Text)
+
+    CONTENT = (
+        "name",
+        "short_name",
+        "description",
+        "establishment_form",
+        "temporary_until",
+        "lifecycle",
+        "admin_grade",
+        "duties",
+        "basis_note",
+    )
+
+
+class _Period:
+    """带期间、经变更申请写入的关系 / 赋值行的公共列。"""
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    valid_from: Mapped[date]
+    valid_to: Mapped[date | None]
+    change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+    closed_change_id: Mapped[int | None] = mapped_column(ForeignKey("change_request.id"))
+
+
+class DepartmentAlias(_Period, Base):
+    __tablename__ = "department_alias"
+    __mapper_args__ = {"eager_defaults": True}
+
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    kind: Mapped[str] = mapped_column(Text)
+    value: Mapped[str] = mapped_column(Text)
+
+
+class ClassificationScheme(Base):
+    """分类方案（配置）：维护人可直接维护，不经变更申请。"""
+
+    __tablename__ = "classification_scheme"
     __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     code: Mapped[str] = mapped_column(Text)
     name: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(Text)
-    created_change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
-    created_at: Mapped[datetime] = mapped_column(server_default=NOW)
-    last_change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    version: Mapped[str] = mapped_column(Text)
+    purpose: Mapped[str | None] = mapped_column(Text)
+    is_exclusive: Mapped[bool]
+    is_active: Mapped[bool]
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
     updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
+class ClassificationCode(Base):
+    """分类代码（配置）：代码值不可改，不删除只停用。"""
+
+    __tablename__ = "classification_code"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scheme_id: Mapped[int] = mapped_column(ForeignKey("classification_scheme.id"))
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    criterion: Mapped[str | None] = mapped_column(Text)
+    caution: Mapped[str | None] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer)
+    is_active: Mapped[bool]
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
+class DepartmentClassification(_Period, Base):
+    __tablename__ = "department_classification"
+    __mapper_args__ = {"eager_defaults": True}
+
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    scheme_id: Mapped[int] = mapped_column(BigInteger)
+    is_exclusive: Mapped[bool]
+    code: Mapped[str] = mapped_column(Text)
+
+
+class DepartmentInstitution(_Period, Base):
+    __tablename__ = "department_institution"
+    __mapper_args__ = {"eager_defaults": True}
+
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    institution_id: Mapped[int] = mapped_column(ForeignKey("institution.id"))
+    is_primary: Mapped[bool]
+
+
+class OrgView(Base):
+    __tablename__ = "org_view"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    purpose: Mapped[str | None] = mapped_column(Text)
+    single_parent: Mapped[bool]
+    status: Mapped[str] = mapped_column(Text)
+    sort_order: Mapped[int] = mapped_column(Integer)
 
 
 class ServiceUnit(_Identity, Base):

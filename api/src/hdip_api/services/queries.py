@@ -8,15 +8,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from hdip_api.core.errors import BusinessError, NotFound
+from hdip_api.core.permissions import CHANGE_CREATE, has_permission
 from hdip_api.models import (
     AppUser,
     Campus,
     CampusVersion,
     ChangeRequest,
+    ClassificationCode,
+    ClassificationScheme,
     Department,
+    DepartmentAlias,
+    DepartmentClassification,
+    DepartmentInstitution,
+    DepartmentVersion,
     Institution,
     InstitutionVersion,
     OperatorRelation,
+    OrgView,
     ServiceUnit,
     ServiceUnitLineage,
     ServiceUnitVersion,
@@ -28,13 +36,21 @@ from hdip_api.schemas.read import (
     CampusVersionOut,
     ChangeRequestOut,
     ChangeRequestSummary,
+    ClassificationCodeOut,
+    ClassificationSchemeOut,
+    ClassRef,
+    DepartmentAffiliationOut,
+    DepartmentAliasOut,
+    DepartmentClassificationOut,
     DepartmentDetail,
     DepartmentRow,
+    DepartmentVersionOut,
     InstitutionDetail,
     InstitutionRow,
     InstitutionVersionOut,
     ItemOutcome,
     LineageOut,
+    OrgViewOut,
     Permissions,
     PrimaryOperator,
     RelationOut,
@@ -241,6 +257,7 @@ class _UnitNames:
         self.as_of = as_of
         self.users = _users(s)
         self.departments = {d.id: d for d in s.scalars(select(Department))}
+        self.dept_v = _versions_by(s, DepartmentVersion, "department_id")
         self.campus_codes = {c.id: c.code for c in s.scalars(select(Campus))}
         self.inst_codes = {i.id: i.code for i in s.scalars(select(Institution))}
         self.campus_v = _versions_by(s, CampusVersion, "campus_id")
@@ -248,13 +265,15 @@ class _UnitNames:
 
     def version_out(self, v: ServiceUnitVersion) -> ServiceUnitVersionOut:
         d = self.departments[v.department_id]
+        dv, _, _ = _pick(self.dept_v[d.id], self.as_of)
+        dv = dv or max(self.dept_v[d.id], key=lambda x: x.version_no)
         return ServiceUnitVersionOut.model_validate(
             {
                 **_cols(v),
                 "recorded_by": self.users[v.recorded_by],
                 "department_code": d.code,
-                "department_name": d.name,
-                "department_status": d.status,
+                "department_name": dv.name,
+                "department_lifecycle": dv.lifecycle,
                 "campus_code": self.campus_codes[v.campus_id],
                 "campus_name": _name_on(self.campus_v[v.campus_id], self.as_of),
                 "institution_code": self.inst_codes[v.institution_id],
@@ -365,46 +384,205 @@ def list_lineage(
 
 
 # ------------------------------------------------------------------ 部门
-def list_departments(s: Session, as_of: date) -> list[DepartmentRow]:
+MAIN_SCHEME = "DEPT_MAIN_CLASS"
+
+
+class _ClassNames:
+    """分类方案与代码的名称（配置，量小，取全量）。"""
+
+    def __init__(self, s: Session) -> None:
+        self.schemes = {x.id: x for x in s.scalars(select(ClassificationScheme))}
+        self.codes = {(c.scheme_id, c.code): c.name for c in s.scalars(select(ClassificationCode))}
+
+    def ref(self, scheme_id: int, code: str) -> ClassRef:
+        sc = self.schemes[scheme_id]
+        return ClassRef(
+            scheme_code=sc.code, scheme_name=sc.name, code=code, name=self.codes[(scheme_id, code)]
+        )
+
+
+def _dept_version_out(v: DepartmentVersion, users) -> DepartmentVersionOut:
+    return DepartmentVersionOut.model_validate({**_cols(v), "recorded_by": users[v.recorded_by]})
+
+
+def _rows_on(rows: list, day: date):
+    return [r for r in rows if covers(r.valid_from, r.valid_to, day)]
+
+
+def list_departments(s: Session, as_of: date, q: str | None = None) -> list[DepartmentRow]:
+    """全部部门（含尚未设立的计划部门，以 not_yet_effective 标出）。
+
+    q：按管理编码、任一版本的名称（含曾用名）、别名模糊匹配。
+    """
+    users = _users(s)
+    versions = _versions_by(s, DepartmentVersion, "department_id")
+    names = _ClassNames(s)
+    main = next((x.id for x in names.schemes.values() if x.code == MAIN_SCHEME), None)
+    classes = _versions_by(s, DepartmentClassification, "department_id")
+    affiliations = _versions_by(s, DepartmentInstitution, "department_id")
+    aliases = _versions_by(s, DepartmentAlias, "department_id")
+    inst_v = _versions_by(s, InstitutionVersion, "institution_id")
     counts: dict[int, int] = defaultdict(int)
     for row in list_service_units(s, as_of, include_future=False):
         counts[row.version.department_id] += 1
-    return [
-        DepartmentRow(id=d.id, code=d.code, name=d.name, status=d.status, unit_count=counts[d.id])
-        for d in s.scalars(select(Department).order_by(Department.code))
-    ]
+    needle = (q or "").strip().lower()
+
+    out = []
+    for d in s.scalars(select(Department).order_by(Department.code)):
+        if needle and not (
+            needle in d.code.lower()
+            or any(needle in v.name.lower() for v in versions[d.id])
+            or any(needle in a.value.lower() for a in aliases[d.id])
+        ):
+            continue
+        v, future, later = _pick(versions[d.id], as_of)
+        if v is None:
+            continue
+        c = next((x for x in _rows_on(classes[d.id], as_of) if x.scheme_id == main), None)
+        a = next((x for x in _rows_on(affiliations[d.id], as_of) if x.is_primary), None)
+        out.append(
+            DepartmentRow(
+                id=d.id,
+                code=d.code,
+                version=_dept_version_out(v, users),
+                not_yet_effective=future,
+                has_later_versions=later,
+                main_class=names.ref(c.scheme_id, c.code) if c else None,
+                institution_name=_name_on(inst_v[a.institution_id], as_of) if a else None,
+                unit_count=counts[d.id],
+            )
+        )
+    return out
 
 
 def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDetail:
     d = s.get(Department, department_id)
     if d is None:
         raise NotFound("部门不存在")
-    units = list_service_units(s, as_of, department_id=d.id, include_future=False)
-    change_ids = [
-        cr.id
-        for cr in s.scalars(
-            select(ChangeRequest)
-            .where(ChangeRequest.status == "confirmed")
-            .order_by(ChangeRequest.id.desc())
-        )
-        if any(
-            i.get("kind", "").startswith("department.") and i.get("code") == d.code
-            for i in cr.items
-        )
-    ]
+    users = _users(s)
+    names = _ClassNames(s)
+    versions = sorted(
+        s.scalars(select(DepartmentVersion).where(DepartmentVersion.department_id == d.id)),
+        key=lambda v: -v.version_no,
+    )
+    classes = s.scalars(
+        select(DepartmentClassification)
+        .where(DepartmentClassification.department_id == d.id)
+        .order_by(DepartmentClassification.valid_from.desc())
+    ).all()
+    affiliations = s.scalars(
+        select(DepartmentInstitution)
+        .where(DepartmentInstitution.department_id == d.id)
+        .order_by(DepartmentInstitution.valid_from.desc())
+    ).all()
+    aliases = s.scalars(
+        select(DepartmentAlias)
+        .where(DepartmentAlias.department_id == d.id)
+        .order_by(DepartmentAlias.valid_from.desc())
+    ).all()
+    inst_codes = {i.id: i.code for i in s.scalars(select(Institution))}
+    inst_v = _versions_by(s, InstitutionVersion, "institution_id")
+
+    related = {d.created_change_id, *(v.change_id for v in versions)}
+    for rows in (classes, affiliations, aliases):
+        for r in rows:
+            related.add(r.change_id)
+            if r.closed_change_id:
+                related.add(r.closed_change_id)
+    change_ids = sorted(
+        (
+            cr_id
+            for cr_id in related
+            if s.scalar(select(ChangeRequest.status).where(ChangeRequest.id == cr_id))
+            == "confirmed"
+        ),
+        reverse=True,
+    )
     return DepartmentDetail(
         id=d.id,
         code=d.code,
-        name=d.name,
-        status=d.status,
-        unit_count=len(units),
         created_at=d.created_at,
         created_change_id=d.created_change_id,
-        updated_at=d.updated_at,
-        last_change_id=d.last_change_id,
-        units=units,
+        versions=[_dept_version_out(v, users) for v in versions],
+        classifications=[
+            DepartmentClassificationOut(
+                **names.ref(c.scheme_id, c.code).model_dump(),
+                id=c.id,
+                valid_from=c.valid_from,
+                valid_to=c.valid_to,
+                change_id=c.change_id,
+                closed_change_id=c.closed_change_id,
+            )
+            for c in classes
+        ],
+        affiliations=[
+            DepartmentAffiliationOut(
+                id=a.id,
+                institution_id=a.institution_id,
+                institution_code=inst_codes[a.institution_id],
+                institution_name=_name_on(inst_v[a.institution_id], as_of),
+                is_primary=a.is_primary,
+                valid_from=a.valid_from,
+                valid_to=a.valid_to,
+                change_id=a.change_id,
+            )
+            for a in affiliations
+        ],
+        aliases=[
+            DepartmentAliasOut(
+                id=a.id,
+                kind=a.kind,
+                value=a.value,
+                valid_from=a.valid_from,
+                valid_to=a.valid_to,
+                change_id=a.change_id,
+            )
+            for a in aliases
+        ],
+        units=list_service_units(s, as_of, department_id=d.id),
         change_ids=change_ids,
     )
+
+
+# ------------------------------------------------------------------ 分类字典与组织视图
+def list_classification_schemes(s: Session) -> list[ClassificationSchemeOut]:
+    users = _users(s)
+    codes: dict[int, list[ClassificationCode]] = defaultdict(list)
+    for c in s.scalars(select(ClassificationCode).order_by(ClassificationCode.sort_order)):
+        codes[c.scheme_id].append(c)
+    return [
+        ClassificationSchemeOut(
+            id=sc.id,
+            code=sc.code,
+            name=sc.name,
+            version=sc.version,
+            purpose=sc.purpose,
+            is_exclusive=sc.is_exclusive,
+            is_active=sc.is_active,
+            codes=[
+                ClassificationCodeOut(
+                    id=c.id,
+                    code=c.code,
+                    name=c.name,
+                    criterion=c.criterion,
+                    caution=c.caution,
+                    sort_order=c.sort_order,
+                    is_active=c.is_active,
+                    updated_at=c.updated_at,
+                    updated_by=users.get(c.updated_by) if c.updated_by else None,
+                )
+                for c in codes[sc.id]
+            ],
+        )
+        for sc in s.scalars(select(ClassificationScheme).order_by(ClassificationScheme.id))
+    ]
+
+
+def list_org_views(s: Session) -> list[OrgViewOut]:
+    return [
+        OrgViewOut(code=v.code, name=v.name, purpose=v.purpose, status=v.status)
+        for v in s.scalars(select(OrgView).order_by(OrgView.sort_order))
+    ]
 
 
 # ------------------------------------------------------------------ 变更申请
@@ -449,7 +627,7 @@ def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
             problems, problem_message = e.problems, e.message
 
     is_creator = cr.created_by == user.id
-    is_maintainer = "maintainer" in user.roles
+    is_maintainer = has_permission(user, CHANGE_CREATE)
     block = workflow.confirm_block_reason(s, cr, user)
 
     def ref(uid: int | None) -> UserRef | None:

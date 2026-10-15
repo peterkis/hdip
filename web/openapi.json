@@ -713,7 +713,7 @@
           "master"
         ],
         "summary": "List Departments",
-        "description": "全部部门（含停用），附查看日期当天挂在其下的单元数。",
+        "description": "全部部门（含尚未设立的计划部门），附查看日期当天的版本、主分类、主归属与已生效单元数。\n\n部门数口径：只计查看日期当天组织生命周期为“正式履职”（ACTIVE）且已生效的部门。",
         "operationId": "listDepartments",
         "parameters": [
           {
@@ -734,6 +734,24 @@
               "title": "As Of"
             },
             "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按管理编码、名称（含曾用名）、别名搜索",
+              "title": "Q"
+            },
+            "description": "按管理编码、名称（含曾用名）、别名搜索"
           },
           {
             "name": "x-hdip-user",
@@ -1140,6 +1158,174 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ServiceUnitDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/classification-schemes": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List Classification Schemes",
+        "description": "分类方案与代码（含已停用的代码，以 is_active 标出）。",
+        "operationId": "listClassificationSchemes",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassificationSchemeOut"
+                  },
+                  "title": "Response Listclassificationschemes"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/org-views": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List Org Views",
+        "description": "组织视图：行政视图启用；运营、病案视图占位（status = PLANNED）。",
+        "operationId": "listOrgViews",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OrgViewOut"
+                  },
+                  "title": "Response Listorgviews"
                 }
               }
             }
@@ -2015,6 +2201,205 @@
         }
       }
     },
+    "/api/dictionary/classification-schemes/{scheme_code}/codes": {
+      "post": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Create Code",
+        "description": "在方案里新增一个代码。",
+        "operationId": "createClassificationCode",
+        "parameters": [
+          {
+            "name": "scheme_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "title": "Scheme Code"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationCodeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationSchemeOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/classification-codes/{code_id}": {
+      "patch": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Update Code",
+        "description": "修改代码的名称、判断依据、防误判提示、排序，或停用 / 恢复。代码值本身不可改。",
+        "operationId": "updateClassificationCode",
+        "parameters": [
+          {
+            "name": "code_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Code Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationCodeWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationSchemeOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/export/{dataset}.csv": {
       "get": {
         "tags": [
@@ -2663,6 +3048,24 @@
                   "$ref": "#/components/schemas/DepartmentCreate"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentChangeLifecycle"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentClassify"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAffiliate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAliasAdd"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAliasClose"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -2699,9 +3102,15 @@
                   "campus.change_status": "#/components/schemas/CampusChangeStatus",
                   "campus.create": "#/components/schemas/CampusCreate",
                   "campus.revise": "#/components/schemas/CampusRevise",
+                  "department.affiliate": "#/components/schemas/DepartmentAffiliate",
+                  "department.alias_add": "#/components/schemas/DepartmentAliasAdd",
+                  "department.alias_close": "#/components/schemas/DepartmentAliasClose",
+                  "department.change_lifecycle": "#/components/schemas/DepartmentChangeLifecycle",
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
+                  "department.revise": "#/components/schemas/DepartmentRevise",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
@@ -3024,6 +3433,24 @@
                   "$ref": "#/components/schemas/DepartmentCreate"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentChangeLifecycle"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentClassify"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAffiliate"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAliasAdd"
+                },
+                {
+                  "$ref": "#/components/schemas/DepartmentAliasClose"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -3060,9 +3487,15 @@
                   "campus.change_status": "#/components/schemas/CampusChangeStatus",
                   "campus.create": "#/components/schemas/CampusCreate",
                   "campus.revise": "#/components/schemas/CampusRevise",
+                  "department.affiliate": "#/components/schemas/DepartmentAffiliate",
+                  "department.alias_add": "#/components/schemas/DepartmentAliasAdd",
+                  "department.alias_close": "#/components/schemas/DepartmentAliasClose",
+                  "department.change_lifecycle": "#/components/schemas/DepartmentChangeLifecycle",
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
+                  "department.revise": "#/components/schemas/DepartmentRevise",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
@@ -3099,6 +3532,528 @@
         ],
         "title": "ChangeRequestWrite"
       },
+      "ClassRef": {
+        "properties": {
+          "scheme_code": {
+            "type": "string",
+            "title": "Scheme Code"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheme_code",
+          "scheme_name",
+          "code",
+          "name"
+        ],
+        "title": "ClassRef"
+      },
+      "ClassificationCodeCreate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "criterion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criterion"
+          },
+          "caution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caution"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ClassificationCodeCreate"
+      },
+      "ClassificationCodeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "criterion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criterion"
+          },
+          "caution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caution"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "updated_by": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "criterion",
+          "caution",
+          "sort_order",
+          "is_active",
+          "updated_at",
+          "updated_by"
+        ],
+        "title": "ClassificationCodeOut"
+      },
+      "ClassificationCodeWrite": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "criterion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Criterion"
+          },
+          "caution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caution"
+          },
+          "sort_order": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sort Order"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "ClassificationCodeWrite",
+        "description": "维护分类字典（配置，不经变更申请）。代码值不可改，不删除只停用。"
+      },
+      "ClassificationSchemeOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "is_exclusive": {
+            "type": "boolean",
+            "title": "Is Exclusive"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/ClassificationCodeOut"
+            },
+            "type": "array",
+            "title": "Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "version",
+          "purpose",
+          "is_exclusive",
+          "is_active",
+          "codes"
+        ],
+        "title": "ClassificationSchemeOut"
+      },
+      "DepartmentAffiliate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.affiliate",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "institution_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Institution Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "institution_code",
+          "effective_date"
+        ],
+        "title": "DepartmentAffiliate",
+        "description": "主体归属：结束当前主归属，自生效日起归属新主体。"
+      },
+      "DepartmentAffiliationOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "type": "string",
+            "title": "Institution Code"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "is_primary": {
+            "type": "boolean",
+            "title": "Is Primary"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "institution_id",
+          "institution_code",
+          "institution_name",
+          "is_primary",
+          "valid_from",
+          "valid_to",
+          "change_id"
+        ],
+        "title": "DepartmentAffiliationOut"
+      },
+      "DepartmentAliasAdd": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.alias_add",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "alias_kind": {
+            "type": "string",
+            "enum": [
+              "ALIAS",
+              "SEARCH_CODE"
+            ],
+            "title": "Alias Kind",
+            "default": "ALIAS"
+          },
+          "value": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Value"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "value"
+        ],
+        "title": "DepartmentAliasAdd"
+      },
+      "DepartmentAliasClose": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.alias_close",
+            "title": "Kind"
+          },
+          "alias_id": {
+            "type": "integer",
+            "title": "Alias Id"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "alias_id",
+          "valid_to"
+        ],
+        "title": "DepartmentAliasClose"
+      },
+      "DepartmentAliasOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ALIAS",
+              "SEARCH_CODE"
+            ],
+            "title": "Kind"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "value",
+          "valid_from",
+          "valid_to",
+          "change_id"
+        ],
+        "title": "DepartmentAliasOut"
+      },
+      "DepartmentChangeLifecycle": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.change_lifecycle",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "SUSPENDED",
+              "REVOKED"
+            ],
+            "title": "Lifecycle"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "lifecycle"
+        ],
+        "title": "DepartmentChangeLifecycle",
+        "description": "组织生命周期：筹备 → 正式履职 ⇄ 暂停履职 → 撤销。"
+      },
       "DepartmentChangeStatus": {
         "properties": {
           "kind": {
@@ -3128,7 +4083,123 @@
           "status"
         ],
         "title": "DepartmentChangeStatus",
-        "description": "停用 / 恢复。停用后不能被新建或改挂的单元选用，已有单元保留引用。"
+        "description": "已停用的旧变更类型（改用 department.change_lifecycle）。保留以便读取历史申请。"
+      },
+      "DepartmentClassificationOut": {
+        "properties": {
+          "scheme_code": {
+            "type": "string",
+            "title": "Scheme Code"
+          },
+          "scheme_name": {
+            "type": "string",
+            "title": "Scheme Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scheme_code",
+          "scheme_name",
+          "code",
+          "name",
+          "id",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id"
+        ],
+        "title": "DepartmentClassificationOut"
+      },
+      "DepartmentClassify": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.classify",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "scheme_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Scheme Code",
+            "default": "DEPT_MAIN_CLASS"
+          },
+          "class_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "class_code",
+          "effective_date"
+        ],
+        "title": "DepartmentClassify",
+        "description": "给部门在某分类方案下赋值：结束当前赋值，自生效日起用新代码；class_code 为空表示只结束。"
       },
       "DepartmentCreate": {
         "properties": {
@@ -3147,6 +4218,117 @@
             "maxLength": 200,
             "minLength": 1,
             "title": "Name"
+          },
+          "valid_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid From"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "establishment_form": {
+            "type": "string",
+            "enum": [
+              "STANDING",
+              "TEMPORARY"
+            ],
+            "title": "Establishment Form",
+            "default": "STANDING"
+          },
+          "temporary_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Until"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "PREPARING",
+              "ACTIVE"
+            ],
+            "title": "Lifecycle",
+            "default": "ACTIVE"
+          },
+          "admin_grade": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Grade"
+          },
+          "duties": {
+            "items": {
+              "type": "string",
+              "maxLength": 40,
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Duties"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          },
+          "institution_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Code"
           }
         },
         "additionalProperties": false,
@@ -3168,18 +4350,6 @@
             "type": "string",
             "title": "Code"
           },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "status": {
-            "type": "string",
-            "title": "Status"
-          },
-          "unit_count": {
-            "type": "integer",
-            "title": "Unit Count"
-          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3189,14 +4359,33 @@
             "type": "integer",
             "title": "Created Change Id"
           },
-          "updated_at": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updated At"
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentVersionOut"
+            },
+            "type": "array",
+            "title": "Versions"
           },
-          "last_change_id": {
-            "type": "integer",
-            "title": "Last Change Id"
+          "classifications": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentClassificationOut"
+            },
+            "type": "array",
+            "title": "Classifications"
+          },
+          "affiliations": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentAffiliationOut"
+            },
+            "type": "array",
+            "title": "Affiliations"
+          },
+          "aliases": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentAliasOut"
+            },
+            "type": "array",
+            "title": "Aliases"
           },
           "units": {
             "items": {
@@ -3217,17 +4406,128 @@
         "required": [
           "id",
           "code",
-          "name",
-          "status",
-          "unit_count",
           "created_at",
           "created_change_id",
-          "updated_at",
-          "last_change_id",
+          "versions",
+          "classifications",
+          "affiliations",
+          "aliases",
           "units",
           "change_ids"
         ],
         "title": "DepartmentDetail"
+      },
+      "DepartmentPatch": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "establishment_form": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "STANDING",
+                  "TEMPORARY"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Establishment Form"
+          },
+          "temporary_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Until"
+          },
+          "admin_grade": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Grade"
+          },
+          "duties": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "maxLength": 40,
+                  "minLength": 1
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duties"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "DepartmentPatch",
+        "description": "只写要改的字段；写 null 表示清空。名称、设立形式不能清空。"
       },
       "DepartmentRename": {
         "properties": {
@@ -3255,7 +4555,39 @@
           "code",
           "name"
         ],
-        "title": "DepartmentRename"
+        "title": "DepartmentRename",
+        "description": "已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。"
+      },
+      "DepartmentRevise": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.revise",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "changes": {
+            "$ref": "#/components/schemas/DepartmentPatch"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "effective_date",
+          "changes"
+        ],
+        "title": "DepartmentRevise"
       },
       "DepartmentRow": {
         "properties": {
@@ -3267,13 +4599,37 @@
             "type": "string",
             "title": "Code"
           },
-          "name": {
-            "type": "string",
-            "title": "Name"
+          "version": {
+            "$ref": "#/components/schemas/DepartmentVersionOut"
           },
-          "status": {
-            "type": "string",
-            "title": "Status"
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          },
+          "has_later_versions": {
+            "type": "boolean",
+            "title": "Has Later Versions"
+          },
+          "main_class": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ClassRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "institution_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Institution Name"
           },
           "unit_count": {
             "type": "integer",
@@ -3284,11 +4640,156 @@
         "required": [
           "id",
           "code",
-          "name",
-          "status",
+          "version",
+          "not_yet_effective",
+          "has_later_versions",
+          "main_class",
+          "institution_name",
           "unit_count"
         ],
         "title": "DepartmentRow"
+      },
+      "DepartmentVersionOut": {
+        "properties": {
+          "version_no": {
+            "type": "integer",
+            "title": "Version No"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "recorded_by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "short_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Short Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "establishment_form": {
+            "type": "string",
+            "enum": [
+              "STANDING",
+              "TEMPORARY"
+            ],
+            "title": "Establishment Form"
+          },
+          "temporary_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Temporary Until"
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "PREPARING",
+              "ACTIVE",
+              "SUSPENDED",
+              "REVOKED",
+              "SUPERSEDED"
+            ],
+            "title": "Lifecycle"
+          },
+          "admin_grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Admin Grade"
+          },
+          "duties": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Duties"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_no",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "recorded_at",
+          "recorded_by",
+          "name",
+          "short_name",
+          "description",
+          "establishment_form",
+          "temporary_until",
+          "lifecycle",
+          "admin_grade",
+          "duties",
+          "basis_note"
+        ],
+        "title": "DepartmentVersionOut"
       },
       "HTTPValidationError": {
         "properties": {
@@ -4005,6 +5506,45 @@
           "sort_order"
         ],
         "title": "OptionOut"
+      },
+      "OrgViewOut": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "PLANNED"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "purpose",
+          "status"
+        ],
+        "title": "OrgViewOut"
       },
       "Permissions": {
         "properties": {
@@ -4805,9 +6345,9 @@
             "type": "string",
             "title": "Department Name"
           },
-          "department_status": {
+          "department_lifecycle": {
             "type": "string",
-            "title": "Department Status"
+            "title": "Department Lifecycle"
           },
           "campus_id": {
             "type": "integer",
@@ -4872,7 +6412,7 @@
           "department_id",
           "department_code",
           "department_name",
-          "department_status",
+          "department_lifecycle",
           "campus_id",
           "campus_code",
           "campus_name",
@@ -4940,6 +6480,13 @@
             },
             "type": "array",
             "title": "Roles"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Permissions"
           }
         },
         "type": "object",
@@ -4947,7 +6494,8 @@
           "id",
           "username",
           "display_name",
-          "roles"
+          "roles",
+          "permissions"
         ],
         "title": "UserOut"
       },

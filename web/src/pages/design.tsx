@@ -48,11 +48,11 @@ import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { CHANGE_STATUS, DEPARTMENT_STATUS, OPERATING_STATUS, UNIT_STATUS } from '@/lib/format'
+import { CHANGE_STATUS, DEPARTMENT_LIFECYCLE, OPERATING_STATUS, UNIT_STATUS } from '@/lib/format'
 import { setTheme, useTheme, type Accent } from '@/lib/theme'
 import {
   CHANGE_STATUS_TONE,
-  DEPARTMENT_STATUS_TONE,
+  DEPARTMENT_LIFECYCLE_TONE,
   LINEAGE_TONE,
   OPERATING_STATUS_TONE,
   UNIT_STATUS_TONE,
@@ -678,7 +678,7 @@ function ControlsSection() {
 const STATUS_GROUPS: { title: string; labels: Record<string, string>; tones: Record<string, Tone> }[] = [
   { title: '院区运营状态', labels: OPERATING_STATUS, tones: OPERATING_STATUS_TONE },
   { title: '服务单元状态', labels: { ...UNIT_STATUS, RETIRED: '已退出' }, tones: UNIT_STATUS_TONE },
-  { title: '部门状态', labels: DEPARTMENT_STATUS, tones: DEPARTMENT_STATUS_TONE },
+  { title: '部门生命周期', labels: DEPARTMENT_LIFECYCLE, tones: DEPARTMENT_LIFECYCLE_TONE },
   { title: '变更申请状态', labels: CHANGE_STATUS, tones: CHANGE_STATUS_TONE },
   { title: '演变关系', labels: { SPLIT: '拆分', MERGE: '合并' }, tones: LINEAGE_TONE },
 ]

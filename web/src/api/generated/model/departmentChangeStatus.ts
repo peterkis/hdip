@@ -7,7 +7,7 @@
 import type { DepartmentChangeStatusStatus } from './departmentChangeStatusStatus';
 
 /**
- * 停用 / 恢复。停用后不能被新建或改挂的单元选用，已有单元保留引用。
+ * 已停用的旧变更类型（改用 department.change_lifecycle）。保留以便读取历史申请。
  */
 export interface DepartmentChangeStatus {
   kind: 'department.change_status';

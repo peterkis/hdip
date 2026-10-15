@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from hdip_api.core.config import get_settings
 from hdip_api.core.errors import install_error_handlers
-from hdip_api.routes import changes, export, health, master, meta
+from hdip_api.routes import changes, dictionary, export, health, master, meta
 
 
 def create_app() -> FastAPI:
@@ -16,7 +16,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
     install_error_handlers(app)
-    for r in (health.router, meta.router, master.router, changes.router, export.router):
+    for r in (
+        health.router,
+        meta.router,
+        master.router,
+        changes.router,
+        dictionary.router,
+        export.router,
+    ):
         app.include_router(r, prefix="/api")
     return app
 

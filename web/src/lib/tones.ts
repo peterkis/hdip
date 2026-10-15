@@ -16,12 +16,23 @@ export const UNIT_STATUS_TONE: Record<string, Tone> = {
   RETIRED: 'gray',
 }
 
-/** 部门状态（弃用、被替代为预留） */
-export const DEPARTMENT_STATUS_TONE: Record<string, Tone> = {
+/** 部门组织生命周期（被替代为拆并预留） */
+export const DEPARTMENT_LIFECYCLE_TONE: Record<string, Tone> = {
+  PREPARING: 'gray',
   ACTIVE: 'green',
-  INACTIVE: 'red',
-  DEPRECATED: 'gray',
+  SUSPENDED: 'yellow',
+  REVOKED: 'red',
   SUPERSEDED: 'brown',
+}
+
+/** 部门管理主分类：分类是维度不是状态，用不同颜色便于区分，含义不分好坏 */
+export const MAIN_CLASS_TONE: Record<string, Tone> = {
+  CLINICAL: 'blue',
+  MEDTECH: 'purple',
+  SUPPORT: 'pink',
+  ADMIN: 'brown',
+  OPERATIONS: 'gray',
+  RESEARCH_EDU: 'orange',
 }
 
 /** 变更申请状态 */
