@@ -60,6 +60,18 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 审批模板版本、双时态读取、发布快照与投递、证照核验、批文/引文/依据机制、病区/护理单元/地点、人员与负责人、层级视图、价表、部门—院区服务关系、部门拆分合并（预留但不做）。MVP 不引入 Redis、Kafka、消息队列。
 
+## 文档索引
+
+| 想了解 | 看这里 |
+| --- | --- |
+| 业务对象、规则、验收剧本 | `docs/HDIP 轻量 MVP 设计：主体、院区、服务单元维护.md` |
+| **数据库设计**：约定、历史保护、写入与读取流程、迁移史、新增对象检查单、规划中的部门结构 | `docs/database/README.md` |
+| **表结构参考**：每张表的列、约束、索引、触发器、权限、配置种子（自动生成，勿手改） | `docs/database/schema-reference.md` |
+| 部门深化的需求、决定与阶段 | `docs/部门主数据深化-实施计划.md` |
+| UI 视觉规范与操作动线原则 | `docs/design/ui-tokens.md`（应用内 `/design`） |
+
+改了迁移就执行 `make migrate && make db-doc`，并同步 `docs/database/README.md` 里相应的说明。
+
 ## 技术栈与目录
 
 ```
@@ -71,6 +83,7 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
     services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出
     routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口
   scripts/export_openapi.py   导出 web/openapi.json
+  scripts/export_schema_doc.py  从数据库生成 docs/database/schema-reference.md（make db-doc）
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
 migrations/         Alembic 迁移（api/alembic.ini 指向这里），约束与索引手写 SQL
 db/local-setup.sh   本机 PostgreSQL 18 建 hdip_owner/hdip_app 与库（make db-init）
@@ -85,7 +98,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
   src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页
   src/lib/                    码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
-docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
+docs/               设计文档；docs/database/ 数据库设计；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
 ```
 
 - 数据库规则在数据库层强制（唯一、排他、外键、检查约束）；应用层校验只负责给出可读的中文错误信息，两者不一致以数据库为准。前端校验只做即时提示。
@@ -104,6 +117,7 @@ docs/               设计文档；docs/design/ 视觉规范；docs/refer/ 参�
 make db        # 启动本机 PostgreSQL 18（brew services）
 make db-init   # 首次：按 .env 建账号与 hdip 库（只动 hdip 相关对象）
 make migrate   # alembic upgrade head
+make db-doc    # 迁移后重新生成表结构参考 docs/database/schema-reference.md
 make api       # 后端 http://localhost:8000（/docs 查看接口）
 make web       # 前端 http://localhost:5173（/api 代理到后端）
 make gen       # 导出 OpenAPI 并生成前端类型与 hooks

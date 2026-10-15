@@ -1,4 +1,4 @@
-.PHONY: db db-init db-docker migrate api web gen test check
+.PHONY: db db-init db-docker migrate db-doc api web gen test check
 
 # 本机 Homebrew PostgreSQL 18
 db:
@@ -14,6 +14,10 @@ db-docker:
 
 migrate:
 	cd api && uv run alembic upgrade head
+
+# 从数据库生成表结构参考 docs/database/schema-reference.md（迁移后执行）
+db-doc:
+	cd api && uv run python scripts/export_schema_doc.py
 
 api:
 	cd api && uv run uvicorn hdip_api.main:app --reload --port 8000

@@ -1,0 +1,510 @@
+# 数据库表结构参考
+
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0005**。
+> 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
+
+## 目录
+
+- **配置与用户**：[`app_user`](#app_user)、[`option_item`](#option_item)、[`approval_rule`](#approval_rule)
+- **变更申请**：[`change_request`](#change_request)
+- **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
+- **部门与服务单元**：[`department`](#department)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
+- [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
+
+## 配置与用户
+
+### app_user
+
+开发期用户与角色（认证方案确定后只换来源，保留本表作本地映射）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `username` | text | 是 |  |  |
+| `display_name` | text | 是 |  |  |
+| `roles` | text[] | 是 | '{}'::text[] |  |
+| `is_active` | boolean | 是 | true |  |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `app_user_pkey`（主键）：`PRIMARY KEY (id)`
+- `app_user_username_uniq`（唯一）：`UNIQUE (username)`
+- `app_user_roles_check`（检查）：`CHECK ((roles <@ ARRAY['maintainer'::text, 'confirmer'::text, 'viewer'::text]))`
+
+### option_item
+
+选项（院区节点角色、服务单元类型等）的码值与中文名
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `category` | text | 是 |  |  |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `sort_order` | integer | 是 | 0 |  |
+| `is_active` | boolean | 是 | true |  |
+
+约束：
+
+- `option_item_pkey`（主键）：`PRIMARY KEY (id)`
+- `option_item_uniq`（唯一）：`UNIQUE (category, code)`
+
+### approval_rule
+
+确认规则：对象类型 × 动作 → 确认角色、是否允许自确认
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `object_type` | text | 是 |  |  |
+| `action` | text | 是 |  |  |
+| `confirmer_role` | text | 是 | 'confirmer'::text |  |
+| `allow_self_confirm` | boolean | 是 | true |  |
+
+约束：
+
+- `approval_rule_pkey`（主键）：`PRIMARY KEY (id)`
+- `approval_rule_uniq`（唯一）：`UNIQUE (object_type, action)`
+- `approval_rule_role_check`（检查）：`CHECK ((confirmer_role = ANY (ARRAY['maintainer'::text, 'confirmer'::text])))`
+
+## 变更申请
+
+### change_request
+
+唯一写入入口：一张申请含多个变更项，确认时在一个事务里全部应用
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `status` | text | 是 | 'draft'::text |  |
+| `note` | text |  |  |  |
+| `items` | jsonb | 是 | '[]'::jsonb |  |
+| `results` | jsonb |  |  |  |
+| `copied_from_id` | bigint |  |  | → `change_request` |
+| `created_by` | bigint | 是 |  | → `app_user` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `submitted_by` | bigint |  |  | → `app_user` |
+| `submitted_at` | timestamp without time zone |  |  |  |
+| `confirmed_by` | bigint |  |  | → `app_user` |
+| `confirmed_at` | timestamp without time zone |  |  |  |
+| `returned_by` | bigint |  |  | → `app_user` |
+| `returned_at` | timestamp without time zone |  |  |  |
+| `return_reason` | text |  |  |  |
+| `cancelled_by` | bigint |  |  | → `app_user` |
+| `cancelled_at` | timestamp without time zone |  |  |  |
+
+约束：
+
+- `change_request_pkey`（主键）：`PRIMARY KEY (id)`
+- `change_request_confirmed_check`（检查）：`CHECK (((status <> 'confirmed'::text) OR ((confirmed_by IS NOT NULL) AND (results IS NOT NULL))))`
+- `change_request_items_check`（检查）：`CHECK ((jsonb_typeof(items) = 'array'::text))`
+- `change_request_returned_check`（检查）：`CHECK (((status <> 'returned'::text) OR ((returned_by IS NOT NULL) AND (btrim(return_reason) <> ''::text))))`
+- `change_request_status_check`（检查）：`CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'confirmed'::text, 'returned'::text, 'cancelled'::text])))`
+- `change_request_submitted_check`（检查）：`CHECK (((status <> ALL (ARRAY['submitted'::text, 'confirmed'::text, 'returned'::text])) OR (submitted_by IS NOT NULL)))`
+
+索引：
+
+- `change_request_status_idx`：`CREATE INDEX change_request_status_idx ON public.change_request USING btree (status)`
+
+触发器：
+
+- `change_request_guard`：`CREATE TRIGGER change_request_guard BEFORE UPDATE ON public.change_request FOR EACH ROW EXECUTE FUNCTION hdip_guard_change_request()`
+
+## 主体与院区
+
+### institution
+
+主体身份（id、code 永久）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `institution_pkey`（主键）：`PRIMARY KEY (id)`
+- `institution_code_uniq`（唯一）：`UNIQUE (code)`
+- `institution_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
+
+触发器：
+
+- `institution_guard`：`CREATE TRIGGER institution_guard BEFORE UPDATE ON public.institution FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### institution_version
+
+主体属性版本
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `institution_id` | bigint | 是 |  | → `institution` |
+| `version_no` | integer | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `name` | text | 是 |  |  |
+| `nature` | text |  |  |  |
+| `unified_credit_code` | text |  |  |  |
+| `medical_reg_code` | text |  |  |  |
+| `license_no` | text |  |  |  |
+| `license_valid_from` | date |  |  |  |
+| `license_valid_to` | date |  |  |  |
+
+约束：
+
+- `institution_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `institution_version_no_uniq`（唯一）：`UNIQUE (institution_id, version_no)`
+- `institution_version_no_overlap`（排他）：`EXCLUDE USING gist (institution_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `institution_version_license_check`（检查）：`CHECK (((license_valid_to IS NULL) OR (license_valid_from IS NULL) OR (license_valid_to >= license_valid_from)))`
+- `institution_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `institution_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+
+触发器：
+
+- `institution_version_guard`：`CREATE TRIGGER institution_version_guard BEFORE UPDATE ON public.institution_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to')`
+
+### campus
+
+院区身份
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `campus_pkey`（主键）：`PRIMARY KEY (id)`
+- `campus_code_uniq`（唯一）：`UNIQUE (code)`
+- `campus_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
+
+触发器：
+
+- `campus_guard`：`CREATE TRIGGER campus_guard BEFORE UPDATE ON public.campus FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### campus_version
+
+院区属性版本（含运营状态）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `campus_id` | bigint | 是 |  | → `campus` |
+| `version_no` | integer | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `name` | text | 是 |  |  |
+| `node_role` | text |  |  |  |
+| `address` | text |  |  |  |
+| `admin_division_code` | text |  |  |  |
+| `phone` | text |  |  |  |
+| `actual_open_date` | date |  |  |  |
+| `operating_status` | text | 是 |  |  |
+
+约束：
+
+- `campus_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `campus_version_no_uniq`（唯一）：`UNIQUE (campus_id, version_no)`
+- `campus_version_no_overlap`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `campus_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `campus_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `campus_version_status_check`（检查）：`CHECK ((operating_status = ANY (ARRAY['PLANNING'::text, 'TRIAL_RUNNING'::text, 'RUNNING'::text, 'SUSPENDED'::text])))`
+
+触发器：
+
+- `campus_version_guard`：`CREATE TRIGGER campus_version_guard BEFORE UPDATE ON public.campus_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to')`
+
+### operator_relation
+
+主体—院区关系，每行自带期间，端点不可改
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `institution_id` | bigint | 是 |  | → `institution` |
+| `campus_id` | bigint | 是 |  | → `campus` |
+| `relation_type` | text | 是 |  |  |
+| `is_primary` | boolean | 是 | false |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+| `closed_at` | timestamp without time zone |  |  |  |
+| `closed_by` | bigint |  |  | → `app_user` |
+
+约束：
+
+- `operator_relation_pkey`（主键）：`PRIMARY KEY (id)`
+- `operator_relation_dup_excl`（排他）：`EXCLUDE USING gist (institution_id WITH =, campus_id WITH =, relation_type WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `operator_relation_primary_excl`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE (is_primary)`
+- `operator_relation_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `operator_relation_primary_operate_check`（检查）：`CHECK (((NOT is_primary) OR (relation_type = 'OPERATE'::text)))`
+- `operator_relation_type_check`（检查）：`CHECK ((relation_type = ANY (ARRAY['OPERATE'::text, 'REGISTER'::text, 'MANAGE'::text, 'CHARGE'::text])))`
+
+索引：
+
+- `operator_relation_institution_idx`：`CREATE INDEX operator_relation_institution_idx ON public.operator_relation USING btree (institution_id)`
+
+触发器：
+
+- `operator_relation_guard`：`CREATE TRIGGER operator_relation_guard BEFORE UPDATE ON public.operator_relation FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id', 'closed_at', 'closed_by')`
+
+## 部门与服务单元
+
+### department
+
+部门（当前无版本表；见 README 第 6 节的深化计划）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `status` | text | 是 | 'ACTIVE'::text |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `last_change_id` | bigint | 是 |  | → `change_request` |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `department_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_code_uniq`（唯一）：`UNIQUE (code)`
+- `department_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
+- `department_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `department_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'INACTIVE'::text, 'DEPRECATED'::text, 'SUPERSEDED'::text])))`
+
+触发器：
+
+- `department_guard`：`CREATE TRIGGER department_guard BEFORE UPDATE ON public.department FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'status', 'last_change_id', 'updated_at')`
+
+### service_unit
+
+服务单元身份（单元类型属于身份，不可修订）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `unit_type` | text | 是 |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `service_unit_pkey`（主键）：`PRIMARY KEY (id)`
+- `service_unit_code_uniq`（唯一）：`UNIQUE (code)`
+- `service_unit_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
+- `service_unit_type_check`（检查）：`CHECK ((unit_type = ANY (ARRAY['OPD'::text, 'IPD'::text, 'ED'::text, 'EXAM'::text, 'LAB'::text, 'PHARMACY'::text, 'OR'::text, 'OTHER'::text])))`
+
+触发器：
+
+- `service_unit_guard`：`CREATE TRIGGER service_unit_guard BEFORE UPDATE ON public.service_unit FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### service_unit_version
+
+服务单元版本：部门 × 院区 × 运营主体 × 期间
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `service_unit_id` | bigint | 是 |  | → `service_unit` |
+| `version_no` | integer | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `name` | text | 是 |  |  |
+| `department_id` | bigint | 是 |  | → `department` |
+| `campus_id` | bigint | 是 |  | → `campus` |
+| `institution_id` | bigint | 是 |  | → `institution` |
+| `status` | text | 是 | 'ACTIVE'::text |  |
+| `phone` | text |  |  |  |
+| `scope_note` | text |  |  |  |
+
+约束：
+
+- `service_unit_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `service_unit_version_no_uniq`（唯一）：`UNIQUE (service_unit_id, version_no)`
+- `service_unit_version_no_overlap`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `service_unit_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `service_unit_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `service_unit_version_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'SUSPENDED'::text])))`
+
+索引：
+
+- `service_unit_version_campus_idx`：`CREATE INDEX service_unit_version_campus_idx ON public.service_unit_version USING btree (campus_id)`
+- `service_unit_version_department_idx`：`CREATE INDEX service_unit_version_department_idx ON public.service_unit_version USING btree (department_id)`
+- `service_unit_version_institution_idx`：`CREATE INDEX service_unit_version_institution_idx ON public.service_unit_version USING btree (institution_id)`
+
+触发器：
+
+- `service_unit_version_guard`：`CREATE TRIGGER service_unit_version_guard BEFORE UPDATE ON public.service_unit_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to')`
+
+### service_unit_lineage
+
+拆分 / 合并的前身 → 后继，只追加
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `predecessor_id` | bigint | 是 |  | → `service_unit` |
+| `successor_id` | bigint | 是 |  | → `service_unit` |
+| `lineage_type` | text | 是 |  |  |
+| `effective_date` | date | 是 |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+
+约束：
+
+- `service_unit_lineage_pkey`（主键）：`PRIMARY KEY (id)`
+- `service_unit_lineage_pair_uniq`（唯一）：`UNIQUE (predecessor_id, successor_id)`
+- `service_unit_lineage_self_check`（检查）：`CHECK ((predecessor_id <> successor_id))`
+- `service_unit_lineage_type_check`（检查）：`CHECK ((lineage_type = ANY (ARRAY['SPLIT'::text, 'MERGE'::text])))`
+
+索引：
+
+- `service_unit_lineage_successor_idx`：`CREATE INDEX service_unit_lineage_successor_idx ON public.service_unit_lineage USING btree (successor_id)`
+
+触发器：
+
+- `service_unit_lineage_guard`：`CREATE TRIGGER service_unit_lineage_guard BEFORE UPDATE ON public.service_unit_lineage FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+## 触发器函数
+
+### hdip_guard_change_request
+
+```sql
+CREATE OR REPLACE FUNCTION public.hdip_guard_change_request()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF OLD.status IN ('confirmed', 'returned', 'cancelled') THEN
+    RAISE EXCEPTION '变更申请已结束，不可修改'
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+  END IF;
+  RETURN NEW;
+END
+$function$
+```
+
+### hdip_guard_update
+
+```sql
+CREATE OR REPLACE FUNCTION public.hdip_guard_update()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+DECLARE
+  mutable  text[] := coalesce(TG_ARGV, '{}'::text[]);
+  old_row  jsonb := to_jsonb(OLD);
+  new_row  jsonb := to_jsonb(NEW);
+BEGIN
+  IF (new_row - mutable) IS DISTINCT FROM (old_row - mutable) THEN
+    RAISE EXCEPTION '历史记录不可修改（%）', TG_TABLE_NAME
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+  END IF;
+  IF 'valid_to' = ANY (mutable) THEN
+    IF old_row ->> 'valid_to' IS NOT NULL
+       AND (new_row ->> 'valid_to') IS DISTINCT FROM (old_row ->> 'valid_to') THEN
+      RAISE EXCEPTION '已结束的期间不可修改（%）', TG_TABLE_NAME
+        USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+    END IF;
+    IF (new_row - 'valid_to') IS DISTINCT FROM (old_row - 'valid_to')
+       AND NOT (old_row ->> 'valid_to' IS NULL AND new_row ->> 'valid_to' IS NOT NULL) THEN
+      RAISE EXCEPTION '关闭信息只能在结束时写入一次（%）', TG_TABLE_NAME
+        USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$function$
+```
+
+## 应用账号权限
+
+应用以 `hdip_app` 连接；它没有 DELETE 权限，从权限上保证业务表无物理删除。
+
+| 表 | 权限 |
+| --- | --- |
+| `app_user` | INSERT、SELECT、UPDATE |
+| `approval_rule` | INSERT、SELECT、UPDATE |
+| `campus` | INSERT、SELECT、UPDATE |
+| `campus_version` | INSERT、SELECT、UPDATE |
+| `change_request` | INSERT、SELECT、UPDATE |
+| `department` | INSERT、SELECT、UPDATE |
+| `institution` | INSERT、SELECT、UPDATE |
+| `institution_version` | INSERT、SELECT、UPDATE |
+| `operator_relation` | INSERT、SELECT、UPDATE |
+| `option_item` | INSERT、SELECT、UPDATE |
+| `service_unit` | INSERT、SELECT、UPDATE |
+| `service_unit_lineage` | INSERT、SELECT、UPDATE |
+| `service_unit_version` | INSERT、SELECT、UPDATE |
+
+## 配置表种子
+
+### option_item
+
+| 类别 | 代码 | 名称 | 排序 | 启用 |
+| --- | --- | --- | --- | --- |
+| campus_node_role | `HEADQUARTERS` | 本院院区 | 10 | 是 |
+| campus_node_role | `HIGH_TECH` | 高新院区 | 20 | 是 |
+| campus_node_role | `CITY_CENTER` | 中心医院院区 | 30 | 是 |
+| service_unit_type | `OPD` | 门诊单元 | 10 | 是 |
+| service_unit_type | `IPD` | 住院单元 | 20 | 是 |
+| service_unit_type | `ED` | 急诊单元 | 30 | 是 |
+| service_unit_type | `EXAM` | 检查执行单元 | 40 | 是 |
+| service_unit_type | `LAB` | 检验执行单元 | 50 | 是 |
+| service_unit_type | `PHARMACY` | 药房 | 60 | 是 |
+| service_unit_type | `OR` | 手术服务单元 | 70 | 是 |
+| service_unit_type | `OTHER` | 其他 | 80 | 是 |
+
+### approval_rule
+
+| 对象类型 | 动作 | 确认角色 | 允许自确认 |
+| --- | --- | --- | --- |
+| campus | change_status | confirmer | 是 |
+| campus | create | confirmer | 是 |
+| campus | revise | confirmer | 是 |
+| department | change_status | confirmer | 是 |
+| department | create | confirmer | 是 |
+| department | rename | confirmer | 是 |
+| institution | create | confirmer | 是 |
+| institution | revise | confirmer | 是 |
+| operator_relation | close | confirmer | 是 |
+| operator_relation | create | confirmer | 是 |
+| service_unit | change_department | confirmer | 是 |
+| service_unit | change_status | confirmer | 是 |
+| service_unit | create | confirmer | 是 |
+| service_unit | merge | confirmer | 是 |
+| service_unit | rebind | confirmer | 是 |
+| service_unit | retire | confirmer | 是 |
+| service_unit | revise | confirmer | 是 |
+| service_unit | split | confirmer | 是 |
+
+### app_user
+
+| 用户名 | 显示名 | 角色 |
+| --- | --- | --- |
+| solo | 一人维护（维护+确认） | maintainer、confirmer |
+| maintainer | 维护人 | maintainer |
+| confirmer | 确认人 | confirmer |
+| viewer | 只读 | viewer |
+
