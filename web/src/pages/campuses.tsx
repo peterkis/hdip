@@ -9,6 +9,7 @@ import {
   CampusStatusDialog,
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
+import { Missing } from '@/components/kit/missing'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
@@ -105,11 +106,11 @@ export function CampusDetailPage() {
   const id = Number(useParams().id)
   const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetCampus(id, { as_of: asOf })
+  const { data, isError } = useGetCampus(id, { as_of: asOf })
   const { data: units = [] } = useListServiceUnits({ as_of: asOf, campus_id: id })
   const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | 'unit' | null>(null)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return null
+  if (!data) return isError || !Number.isInteger(id) ? <Missing what="院区" back={{ to: '/campuses', label: '返回院区列表' }} /> : null
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))

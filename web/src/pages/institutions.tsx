@@ -7,6 +7,7 @@ import {
   InstitutionReviseDialog,
   RelationCreateDialog,
 } from '@/components/forms/change-forms'
+import { Missing } from '@/components/kit/missing'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { RelationsTable } from '@/components/relations-table'
@@ -97,10 +98,10 @@ export function InstitutionDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetInstitution(id, { as_of: asOf })
+  const { data, isError } = useGetInstitution(id, { as_of: asOf })
   const [dialog, setDialog] = useState<'revise' | 'relation' | null>(null)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return null
+  if (!data) return isError || !Number.isInteger(id) ? <Missing what="主体" back={{ to: '/institutions', label: '返回主体列表' }} /> : null
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))

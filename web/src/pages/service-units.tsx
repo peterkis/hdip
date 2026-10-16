@@ -13,6 +13,7 @@ import {
 import { ExternalCodeLinks } from '@/components/external-code-links'
 import { UnitClassifyDialog } from '@/components/forms/code-forms'
 import { Tag } from '@/components/kit/tag'
+import { Missing } from '@/components/kit/missing'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -40,10 +41,10 @@ export function ServiceUnitDetailPage() {
   const id = Number(useParams().id)
   const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetServiceUnit(id, { as_of: asOf })
+  const { data, isError } = useGetServiceUnit(id, { as_of: asOf })
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return null
+  if (!data) return isError || !Number.isInteger(id) ? <Missing what="服务单元" back={{ to: '/service-units', label: '返回服务单元列表' }} /> : null
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))

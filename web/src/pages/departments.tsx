@@ -41,6 +41,7 @@ import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, Searc
 import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
+import { Missing } from '@/components/kit/missing'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
@@ -333,7 +334,7 @@ export function DepartmentDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetDepartment(id, { as_of: asOf })
+  const { data, isError } = useGetDepartment(id, { as_of: asOf })
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
@@ -341,7 +342,7 @@ export function DepartmentDetailPage() {
   const { data: views = [] } = useListOrgViews()
   const [tab, setTab] = useState<TabKey>('props')
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return null
+  if (!data) return isError || !Number.isInteger(id) ? <Missing what="部门" back={{ to: '/departments', label: '返回部门列表' }} /> : null
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))

@@ -20,6 +20,7 @@ import {
 } from '@/components/forms/change-forms'
 import { DepartmentCreateDialog } from '@/components/forms/department-forms'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
+import { Missing } from '@/components/kit/missing'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -110,12 +111,12 @@ export function ChangesPage() {
 // ------------------------------------------------------------------ 详情
 export function ChangeDetailPage() {
   const id = Number(useParams().id)
-  const { data: cr } = useGetChangeRequest(id)
+  const { data: cr, isError } = useGetChangeRequest(id)
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
   const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
-  useCrumb(`#${id}`)
+  useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
 
   const action = useMutation({
     mutationFn: (fn: () => Promise<ChangeRequestOut>) => fn(),
@@ -125,7 +126,7 @@ export function ChangeDetailPage() {
     },
   })
 
-  if (!cr) return null
+  if (!cr) return isError || !Number.isInteger(id) ? <Missing what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} /> : null
   const p = cr.permissions
   /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
   const run = (fn: () => Promise<ChangeRequestOut>, done?: string) =>
