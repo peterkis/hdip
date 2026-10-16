@@ -12,9 +12,9 @@
    部门与院区申请确认后再运行一次本脚本，才会生成服务单元与 HIS 字典申请（它引用这些部门）。
 
 脚本可重复运行：已有的配置跳过，已生成过的申请（按说明里的标记识别）不再生成。
-资料包要求不自动补值的字段（组织生效日、启停状态、企业微信原生 ID 等）不推断：开始日统一用
-Peter 指定的 2010-12-27；已有对象不能往前追溯，所以涉及它们的开始日取两者中较晚的一个
-（如本部院区与其运营关系自 2020-01-01 起，挂在本部院区的单元也就自 2020-01-01 起）。
+资料包要求不自动补值的字段（组织生效日、启停状态、企业微信原生 ID 等）不推断：开始日按
+Peter 指定——部门、服务单元及其关系 2020-01-01，筹建的中心院区 2027-12-27；已有对象不能
+追溯，所以涉及它们的开始日取较晚的一个。
 资料包里的脚本一概不运行，只读取 02_机器可读/ 下的 CSV。
 """
 
@@ -47,7 +47,8 @@ from hdip_api.schemas.items import ITEMS_ADAPTER
 from hdip_api.services import workflow
 
 RECORDED_ON = "2026-10-16"  # 资料包的记录日期
-START = date(2010, 12, 27)  # Peter 指定的统一开始日（真实日期以后补）
+START = date(2020, 1, 1)  # Peter 指定：部门、服务单元及其关系的开始日
+PLANNED_CAMPUS_START = date(2027, 12, 27)  # Peter 指定：筹建院区的开始日
 CAMPUS = "BY"  # 资料包的服务单元都属于本部院区
 # 资料包单元类型 → 既有单元类型码；没有对应的归为 OTHER，原类型名写进范围说明
 # （码值不新增、不另作解释）
@@ -252,7 +253,7 @@ def campus_items(starts: Starts) -> list[dict]:
         {
             "kind": "campus.create",
             "code": "ZX",
-            "valid_from": iso(START),
+            "valid_from": iso(PLANNED_CAMPUS_START),
             "operating_status": "PLANNING",
             "fields": {"name": "中心院区", "node_role": "CITY_CENTER"},
         },
@@ -262,7 +263,7 @@ def campus_items(starts: Starts) -> list[dict]:
             "campus_code": "ZX",
             "relation_type": "OPERATE",
             "is_primary": True,
-            "valid_from": iso(starts.institution(INSTITUTION)),
+            "valid_from": iso(max(PLANNED_CAMPUS_START, starts.institution(INSTITUTION))),
         },
     ]
 
@@ -290,7 +291,7 @@ def department_items(root: Path, starts: Starts) -> list[dict]:
                 "valid_from": iso(START),
                 "lifecycle": "ACTIVE",
                 "institution_code": INSTITUTION,
-                "basis_note": f"企业微信行政路径：{r['source_path']}（样例导入；开始日待补）",
+                "basis_note": f"企业微信行政路径：{r['source_path']}（样例导入）",
             }
         )
     for r in rows:
@@ -448,8 +449,7 @@ def main() -> None:
             TAG_CAMPUS,
             campus_items(starts),
             "三个直属院区：本部院区（原“本院院区”更名，运行）、高新院区（筹建，不变）、"
-            "中心院区（新增，筹建，由成都市第三人民医院主要运营）。开始日暂按 2010-12-27，"
-            "运营关系不能早于主体的开始日。",
+            "中心院区（新增，筹建，自 2027-12-27 起，由成都市第三人民医院主要运营）。",
         )
         s.commit()
         file_request(
@@ -458,7 +458,7 @@ def main() -> None:
             TAG_DEPT,
             department_items(root, starts),
             "资料包行政部门树（企业微信路径快照，候选基线）。心血管内科即已有的 XNK，不重复新建。"
-            "设立日暂按 2010-12-27，真实日期待补；部门管理主分类不自动填，由人工补齐。",
+            "开始日按 2020-01-01；部门管理主分类不自动填，由人工补齐。",
         )
         s.commit()
 

@@ -47,7 +47,7 @@ export function CodeLedgerPage() {
     setLimit(PAGE)
   }
 
-  const { data: systems = [] } = useListSourceSystems({ as_of: asOf })
+  const { data: systems = [], isSuccess: systemsLoaded } = useListSourceSystems({ as_of: asOf })
   const { data: page, isPending } = useListExternalCodes({
     as_of: asOf,
     limit,
@@ -98,7 +98,7 @@ export function CodeLedgerPage() {
         }
       />
 
-      {systems.length === 0 && (
+      {systemsLoaded && systems.length === 0 && (
         <Callout className="mb-4" title="还没有登记来源系统">
           先登记来源系统实例（如某 HIS 实例、病案系统）及其字典，再登记字典里的代码。来源系统与字典是配置，维护人直接维护；代码与解释是业务数据，经变更申请确认。
         </Callout>
