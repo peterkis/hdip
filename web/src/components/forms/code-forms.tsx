@@ -2,7 +2,7 @@
 // 原则：代码跟着它标识的对象走；来源只知道部门就映射部门，不推测单元；同一代码同一时点只有一个解释。
 import { useState } from 'react'
 import { useListClassificationSchemes, useListSourceSystems } from '@/api/generated/master/master'
-import type { AssignmentOut, ExternalCodeRow } from '@/api/generated/model'
+import type { AssignmentOut, ClassificationSchemeOut, DepartmentClassificationOut, ExternalCodeRow } from '@/api/generated/model'
 import { useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog, useDraftItems } from '@/components/forms/item-dialog'
@@ -211,25 +211,37 @@ export function AssignmentCloseDialog({
   )
 }
 
-// ------------------------------------------------------------------ 服务单元分类
-export function UnitClassifyDialog({ code, name, ...props }: DialogProps & { code: string; name: string }) {
+// ------------------------------------------------------------------ 分类（部门的外部分类方案、服务单元分类）
+// 部门管理主分类有专门的表单（department-forms.tsx），这里不列它。
+type ClassOwner = 'department' | 'unit'
+
+export function ClassifyDialog({ owner, code, name, ...props }: DialogProps & { owner: ClassOwner; code: string; name: string }) {
   const { data: schemes = [] } = useListClassificationSchemes()
-  const usable = schemes.filter((s) => s.is_active && s.meaning_for_unit)
+  const meaningOf = (s: ClassificationSchemeOut) => (owner === 'department' ? s.meaning_for_department : s.meaning_for_unit)
+  const usable = schemes.filter((s) => s.is_active && meaningOf(s) && s.code !== 'DEPT_MAIN_CLASS')
   const [schemeCode, setSchemeCode] = useState('')
   const [value, setValue] = useState('')
   const [day, setDay] = useEffectiveDate()
   const scheme = usable.find((s) => s.code === schemeCode)
+  const what = owner === 'department' ? '部门' : '服务单元'
   return (
     <ItemDialog
       {...props}
-      title={`设置服务单元分类：${name}`}
-      description="服务单元的分类与所属部门的分类相互独立，部门分类不会自动下发。多个对象归入同一类别，不表示它们是同一个对象。"
+      title={`设置${what}分类：${name}`}
+      description={
+        owner === 'department'
+          ? '按某个分类方案（如病案科室分类、诊疗科目）给部门赋值。部门分类不会自动下发给它的服务单元；多个对象归入同一类别，不表示它们是同一个对象。'
+          : '服务单元的分类与所属部门的分类相互独立，部门分类不会自动下发。多个对象归入同一类别，不表示它们是同一个对象。'
+      }
       build={() =>
         requireFields([
           ['scheme', !!schemeCode, '请选择分类方案'],
           ['class_code', !!value, '请选择分类'],
           ['effective_date', !!day, '请选择生效日期'],
-        ]) ?? { kind: 'service_unit.classify', code, scheme_code: schemeCode, class_code: value, effective_date: day }
+        ]) ??
+        (owner === 'department'
+          ? { kind: 'department.classify', code, scheme_code: schemeCode, class_code: value, effective_date: day }
+          : { kind: 'service_unit.classify', code, scheme_code: schemeCode, class_code: value, effective_date: day })
       }
     >
       <SelectField
@@ -242,8 +254,8 @@ export function UnitClassifyDialog({ code, name, ...props }: DialogProps & { cod
           setSchemeCode(v)
           setValue('')
         }}
-        options={usable.map((s) => ({ value: s.code, label: `${s.name}（${s.meaning_for_unit}）` }))}
-        hint={usable.length === 0 ? '没有适用于服务单元的分类方案；请在“分类方案”里写明方案用于服务单元时的含义' : undefined}
+        options={usable.map((s) => ({ value: s.code, label: `${s.name}（${meaningOf(s)}）` }))}
+        hint={usable.length === 0 ? `没有适用于${what}的分类方案；请在“分类方案”页写明方案用于${what}时的含义` : undefined}
       />
       {scheme && (
         <SelectField
@@ -254,10 +266,36 @@ export function UnitClassifyDialog({ code, name, ...props }: DialogProps & { cod
           value={value}
           onChange={setValue}
           options={scheme.codes.filter((c) => c.is_active).map((c) => ({ value: c.code, label: `${c.code} ${c.name}` }))}
-          hint={scheme.is_exclusive ? '单选方案：同一时点只有一个，调整 = 旧分类止于生效日前一天' : '可多选方案：可同时有多个'}
+          hint={scheme.is_exclusive ? '单选方案：同一时点只有一个，调整 = 旧分类止于生效日前一天' : '可多选方案：可同时有多个；不再适用的用“结束”'}
         />
       )}
       <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
+    </ItemDialog>
+  )
+}
+
+export function ClassificationCloseDialog({
+  owner,
+  classification: c,
+  ...props
+}: DialogProps & { owner: ClassOwner; classification: DepartmentClassificationOut }) {
+  const [day, setDay] = useEffectiveDate()
+  return (
+    <ItemDialog
+      {...props}
+      title={`结束分类：${c.scheme_name} · ${c.code} ${c.name}`}
+      description={`自 ${c.valid_from} 起。最后有效日当天仍有效；按之前的日期回溯仍能看到这条分类。`}
+      build={() =>
+        requireFields([
+          ['valid_to', !!day, '请选择最后有效日'],
+          ['valid_to', day >= c.valid_from, `最后有效日不能早于开始日 ${c.valid_from}`],
+        ]) ??
+        (owner === 'department'
+          ? { kind: 'department.classification_close', classification_id: c.id, valid_to: day }
+          : { kind: 'service_unit.classification_close', classification_id: c.id, valid_to: day })
+      }
+    >
+      <TextField label="最后有效日" name="valid_to" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
 }

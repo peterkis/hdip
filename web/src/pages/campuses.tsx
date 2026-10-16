@@ -209,6 +209,7 @@ export function CampusDetailPage() {
           open
           onOpenChange={close}
           code={data.code}
+          name={latest.name}
           current={latest.operating_status as OperatingStatus}
         />
       )}

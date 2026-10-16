@@ -81,3 +81,39 @@ def test_script16_scheme_meaning_limits_owner(api):
         r = api.submit(cr["id"])
         assert r.status_code == 422
         assert "不适用于服务单元" in r.json()["message"]
+
+
+def test_script16_end_one_classification_in_multi_select_scheme(api):
+    """可多选方案：结束其中一条分类，回溯旧日期仍能看到它。"""
+    _scheme(api, code="TEST_MULTI", is_exclusive=False)
+    api.apply(*world(), dept_create())
+    api.apply(
+        classify("XNK", "17", "2025-01-01", scheme="TEST_MULTI"),
+        classify("XNK", "18", "2025-01-01", scheme="TEST_MULTI"),
+    )
+    xnk = next(r for r in api.get("/api/departments").json() if r["code"] == "XNK")
+    detail = api.get(f"/api/departments/{xnk['id']}").json()
+    c18 = next(c for c in detail["classifications"] if c["code"] == "18")
+    api.apply(
+        {
+            "kind": "department.classification_close",
+            "classification_id": c18["id"],
+            "valid_to": "2025-12-31",
+        }
+    )
+
+    def codes(day):
+        csv = api.get("/api/export/classifications.csv", params={"as_of": day}).text
+        return sorted(line.split(",")[5] for line in csv.splitlines() if "TEST_MULTI" in line)
+
+    assert codes("2025-06-01") == ["17", "18"]
+    assert codes("2026-06-01") == ["17"]
+    cr = api.draft(
+        {
+            "kind": "department.classification_close",
+            "classification_id": c18["id"],
+            "valid_to": "2026-12-31",
+        }
+    )
+    r = api.submit(cr["id"])
+    assert r.status_code == 422 and "已于" in r.json()["message"]

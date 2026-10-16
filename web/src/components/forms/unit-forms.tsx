@@ -5,7 +5,7 @@ import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/gen
 import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
-import { CampusSelect, DepartmentSelect, InstitutionSelect } from '@/components/forms/ref-selects'
+import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
 import { UNIT_STATUS, type UnitStatus } from '@/lib/format'
 
@@ -253,6 +253,235 @@ export function UnitRetireDialog({ code, current, ...props }: UnitDialogProps) {
       }
     >
       <TextField label="最后有效日" name="valid_to" type="date" required value={validTo} onChange={setValidTo} />
+    </ItemDialog>
+  )
+}
+
+// ------------------------------------------------------------------ 拆分与合并
+// 只填一个生效日 D：前身最后有效日 = D 前一日，后继自 D 起。后继是新身份、新代码，
+// 不继承前身的版本历史，也不自动迁移引用；部门、院区、运营主体可与前身不同。
+interface Successor {
+  name: string
+  unit_type: string
+  dept: string
+  campus: string
+  inst: string
+  code: string
+}
+
+function successorFrom(current: ServiceUnitVersionOut, unitType: string, name = ''): Successor {
+  return {
+    name,
+    unit_type: unitType,
+    dept: current.department_code,
+    campus: current.campus_code,
+    inst: current.institution_code,
+    code: '',
+  }
+}
+
+function successorChecks(s: Successor, key: string, label: string): [string, boolean, string][] {
+  return [
+    [`${key}.name`, !!s.name.trim(), `请填写${label}名称`],
+    [`${key}.unit_type`, !!s.unit_type, `请选择${label}类型`],
+    [`${key}.dept`, !!s.dept, `请选择${label}所属部门`],
+    [`${key}.campus`, !!s.campus, `请选择${label}所属院区`],
+    [`${key}.inst`, !!s.inst, `请选择${label}运营主体`],
+    [`${key}.code`, CODE_RE.test(s.code.trim()), `请填写${label}代码（字母、数字、点、下划线、短横线）`],
+  ]
+}
+
+function successorItem(s: Successor) {
+  return {
+    code: s.code.trim(),
+    unit_type: s.unit_type as ServiceUnitCreateUnitType,
+    fields: { name: s.name.trim(), department_code: s.dept, campus_code: s.campus, institution_code: s.inst },
+  }
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00`)
+  d.setDate(d.getDate() - 1)
+  return d.toLocaleDateString('sv-SE')
+}
+
+function SuccessorFields({
+  value: s,
+  onChange,
+  fieldKey,
+  title,
+  onRemove,
+}: {
+  value: Successor
+  onChange: (s: Successor) => void
+  fieldKey: string
+  title: string
+  onRemove?: () => void
+}) {
+  const { unitTypeOptions } = useApp()
+  const set = (patch: Partial<Successor>) => onChange({ ...s, ...patch })
+  return (
+    <fieldset className="border-line-subtle grid gap-3 rounded-md border p-3">
+      <legend className="text-fg-strong flex w-full items-center px-1 text-xs font-semibold">
+        {title}
+        {onRemove && (
+          <button type="button" className="text-fg-muted hover:text-fg ml-auto text-caption font-normal hover:underline" onClick={onRemove}>
+            移除
+          </button>
+        )}
+      </legend>
+      <div className="grid grid-cols-[2fr_1fr] gap-3">
+        <TextField label="名称" name={`${fieldKey}.name`} required value={s.name} onChange={(name) => set({ name })} />
+        <SelectField
+          label="单元类型"
+          name={`${fieldKey}.unit_type`}
+          required
+          value={s.unit_type}
+          onChange={(unit_type) => set({ unit_type })}
+          options={unitTypeOptions.map((o) => ({ value: o.code, label: o.name }))}
+        />
+      </div>
+      <DepartmentSelect label="所属部门" name={`${fieldKey}.dept`} required value={s.dept} onChange={(dept) => set({ dept })} />
+      <div className="grid grid-cols-2 gap-3">
+        <CampusSelect label="所属院区" name={`${fieldKey}.campus`} required value={s.campus} onChange={(campus) => set({ campus })} />
+        <InstitutionSelect
+          label="所属运营主体"
+          name={`${fieldKey}.inst`}
+          required
+          value={s.inst}
+          onChange={(inst) => set({ inst })}
+          campusCode={s.campus}
+        />
+      </div>
+      <TextField
+        label="单元代码"
+        name={`${fieldKey}.code`}
+        required
+        value={s.code}
+        onChange={(code) => set({ code })}
+        hint="新身份、新代码；不能沿用前身代码"
+      />
+    </fieldset>
+  )
+}
+
+export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialogProps & { unitType: string }) {
+  const [day, setDay] = useEffectiveDate()
+  const [succ, setSucc] = useState<Successor[]>([successorFrom(current, unitType), successorFrom(current, unitType)])
+  const update = (i: number) => (s: Successor) => setSucc(succ.map((x, j) => (j === i ? s : x)))
+  return (
+    <ItemDialog
+      {...props}
+      title={`拆分服务单元：${current.name}`}
+      description="把一个单元拆成至少两个。前身在生效日前一天退出，后继自生效日起；后继是新身份、新代码，不继承前身的历史，引用也不自动迁移。"
+      build={() => {
+        const missing = requireFields([
+          ['effective_date', !!day, '请选择生效日期'],
+          ['effective_date', !day || day > current.valid_from, `生效日须晚于当前版本的开始日 ${current.valid_from}`],
+          ...succ.flatMap((s, i) => successorChecks(s, `s${i}`, `后继 ${i + 1} 的`)),
+          ...succ.map((s, i): [string, boolean, string] => [`s${i}.code`, s.code.trim() !== code, '后继须用新代码，不能沿用前身代码']),
+          ...succ.map((s, i): [string, boolean, string] => [
+            `s${i}.code`,
+            succ.findIndex((x) => x.code.trim() === s.code.trim()) === i,
+            '后继单元代码不能重复',
+          ]),
+        ])
+        return missing ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map(successorItem) }
+      }}
+    >
+      <TextField
+        label="生效日期"
+        name="effective_date"
+        type="date"
+        required
+        value={day}
+        onChange={setDay}
+        hint={day ? `${current.name} 的最后有效日为 ${dayBefore(day)}，后继自 ${day} 起` : undefined}
+      />
+      {succ.map((s, i) => (
+        <SuccessorFields
+          key={i}
+          value={s}
+          onChange={update(i)}
+          fieldKey={`s${i}`}
+          title={`后继单元 ${i + 1}`}
+          onRemove={succ.length > 2 ? () => setSucc(succ.filter((_, j) => j !== i)) : undefined}
+        />
+      ))}
+      <button
+        type="button"
+        className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline"
+        onClick={() => setSucc([...succ, successorFrom(current, unitType)])}
+      >
+        + 再加一个后继单元
+      </button>
+    </ItemDialog>
+  )
+}
+
+export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialogProps & { unitType: string }) {
+  const [day, setDay] = useEffectiveDate()
+  const [others, setOthers] = useState<string[]>([''])
+  const [succ, setSucc] = useState<Successor>(successorFrom(current, unitType, current.name))
+  const chosen = [code, ...others.filter(Boolean)]
+  return (
+    <ItemDialog
+      {...props}
+      title={`合并服务单元：${current.name}`}
+      description="把至少两个单元合并成一个新单元。全部前身在生效日前一天退出，后继自生效日起；后继是新身份、新代码，不继承前身的历史。"
+      build={() => {
+        const missing = requireFields([
+          ['effective_date', !!day, '请选择生效日期'],
+          ...others.map((o, i): [string, boolean, string] => [`p${i}`, !!o, '请选择要一并合并的单元']),
+          ...successorChecks(succ, 'succ', '后继单元'),
+          ['succ.code', !chosen.includes(succ.code.trim()), '后继须用新代码，不能沿用前身代码'],
+        ])
+        return missing ?? { kind: 'service_unit.merge', codes: chosen, effective_date: day, successor: successorItem(succ) }
+      }}
+    >
+      <TextField
+        label="生效日期"
+        name="effective_date"
+        type="date"
+        required
+        value={day}
+        onChange={setDay}
+        hint={day ? `前身的最后有效日为 ${dayBefore(day)}，后继自 ${day} 起` : undefined}
+      />
+      <p className="text-xs">
+        前身：<span className="text-fg-strong">{current.name}</span>（{code}），以及：
+      </p>
+      {others.map((o, i) => (
+        <div key={i} className="grid grid-cols-[1fr_auto] items-end gap-2">
+          <UnitSelect
+            label={`前身单元 ${i + 2}`}
+            name={`p${i}`}
+            required
+            value={o}
+            onChange={(v) => setOthers(others.map((x, j) => (j === i ? v : x)))}
+            exclude={chosen.filter((c) => c !== o)}
+            day={day ? dayBefore(day) : undefined}
+            hint={day ? `列出 ${dayBefore(day)}（生效日前一天）仍有效的单元` : '先选生效日期，再选要一并合并的单元'}
+          />
+          {others.length > 1 && (
+            <button
+              type="button"
+              className="text-fg-muted hover:text-fg pb-2 text-caption hover:underline"
+              onClick={() => setOthers(others.filter((_, j) => j !== i))}
+            >
+              移除
+            </button>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline"
+        onClick={() => setOthers([...others, ''])}
+      >
+        + 再选一个前身单元
+      </button>
+      <SuccessorFields value={succ} onChange={setSucc} fieldKey="succ" title="合并后的单元" />
     </ItemDialog>
   )
 }

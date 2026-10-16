@@ -22,7 +22,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
+import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
 import {
   DepartmentAffiliateDialog,
   DepartmentAliasCloseDialog,
@@ -47,6 +47,7 @@ import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ExternalCodeLinks } from '@/components/external-code-links'
+import { ClassificationCloseDialog, ClassifyDialog } from '@/components/forms/code-forms'
 import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
@@ -327,7 +328,7 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
   'basis_note',
 ]
 
-type Dialog = 'revise' | 'lifecycle' | 'classify' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation'
+type Dialog = 'revise' | 'lifecycle' | 'classify' | 'otherClass' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation'
 type TabKey = 'props' | 'class' | 'org' | 'units' | 'history' | 'codes'
 
 export function DepartmentDetailPage() {
@@ -338,7 +339,7 @@ export function DepartmentDetailPage() {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
-  const { data: allDepts = [] } = useListDepartments({ as_of: asOf })
+  const [closingClass, setClosingClass] = useState<DepartmentClassificationOut | null>(null)
   const { data: views = [] } = useListOrgViews()
   const [tab, setTab] = useState<TabKey>('props')
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
@@ -547,6 +548,34 @@ export function DepartmentDetailPage() {
               />
               <p className="text-fg-muted text-caption">同一时点只有一个主分类；承担的多项职责放在“承担职责”。成本分类另设，允许与管理主分类有依据地不同。</p>
             </Section>
+            <Section title="其他分类" action={edit('设置分类', 'otherClass')}>
+              <PeriodTable
+                head={['分类方案', '期间', '来源申请', '']}
+                rows={data.classifications
+                  .filter((c) => c.scheme_code !== MAIN_SCHEME)
+                  .map((c) => ({
+                    key: c.id,
+                    current: c.valid_from <= asOf && (c.valid_to === null || c.valid_to >= asOf),
+                    cells: [
+                      <span>
+                        <span className="text-fg-secondary">{c.scheme_name}：</span>
+                        <Tag tone="blue">
+                          {c.code} {c.name}
+                        </Tag>
+                      </span>,
+                      `${c.valid_from} → ${c.valid_to ?? '长期'}`,
+                      <ChangeLink id={c.change_id} />,
+                      isMaintainer && !terminal && c.valid_to === null ? (
+                        <Button size="xs" variant="ghost" onClick={() => setClosingClass(c)}>
+                          结束
+                        </Button>
+                      ) : null,
+                    ],
+                  }))}
+                empty="没有其他分类"
+              />
+              <p className="text-fg-muted text-caption">如病案科室分类、诊疗科目。部门分类不会自动下发给它的服务单元。</p>
+            </Section>
             <Section title="主体归属" action={edit(affiliation ? '调整' : '设置', 'affiliate')}>
               <PeriodTable
                 head={['主体', '期间', '来源申请']}
@@ -684,6 +713,10 @@ export function DepartmentDetailPage() {
       {dialog === 'classify' && (
         <DepartmentClassifyDialog open onOpenChange={close} code={data.code} name={latest.name} currentCode={mainClass?.code} />
       )}
+      {dialog === 'otherClass' && <ClassifyDialog open onOpenChange={close} owner="department" code={data.code} name={latest.name} />}
+      {closingClass && (
+        <ClassificationCloseDialog open onOpenChange={(o) => !o && setClosingClass(null)} owner="department" classification={closingClass} />
+      )}
       {dialog === 'affiliate' && <DepartmentAffiliateDialog open onOpenChange={close} code={data.code} name={latest.name} />}
       {dialog === 'alias' && <DepartmentAliasDialog open onOpenChange={close} code={data.code} name={latest.name} />}
       {dialog === 'unit' && <UnitCreateDialog open onOpenChange={close} departmentCode={data.code} />}
@@ -695,7 +728,6 @@ export function DepartmentDetailPage() {
           code={data.code}
           name={latest.name}
           currentParent={data.path.length > 1 ? data.path[data.path.length - 2] : null}
-          exclude={[data.code, ...descendants(allDepts, data.id)]}
         />
       )}
       {dialog === 'relation' && <DepartmentRelationDialog open onOpenChange={close} code={data.code} name={latest.name} />}
@@ -707,18 +739,6 @@ export function DepartmentDetailPage() {
 }
 
 // ------------------------------------------------------------------ 小件
-/** 某部门在查看日期的全部下级代码（调整上级时不能选，否则成环） */
-function descendants(rows: DepartmentRow[], id: number): string[] {
-  const out: string[] = []
-  const walk = (pid: number) =>
-    rows.filter((r) => r.parent?.id === pid).forEach((r) => {
-      out.push(r.code)
-      walk(r.id)
-    })
-  walk(id)
-  return out
-}
-
 function RelationsTable({
   deptId,
   relations,

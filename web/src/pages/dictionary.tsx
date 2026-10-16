@@ -3,10 +3,15 @@
 import { Add01Icon, Tag01Icon } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
-import { useCreateClassificationCode, useUpdateClassificationCode } from '@/api/generated/dictionary/dictionary'
+import {
+  useCreateClassificationCode,
+  useCreateClassificationScheme,
+  useUpdateClassificationCode,
+  useUpdateClassificationScheme,
+} from '@/api/generated/dictionary/dictionary'
 import { useListClassificationSchemes } from '@/api/generated/master/master'
 import type { ClassificationCodeOut, ClassificationSchemeOut } from '@/api/generated/model'
-import { FormErrorsContext, requireFields, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
+import { FormErrorsContext, requireFields, SelectField, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
@@ -27,9 +32,20 @@ export function DictionaryPage() {
   const { data: schemes = [] } = useListClassificationSchemes()
   const { me } = useMe()
   const canEdit = me?.permissions.includes('dictionary.maintain') ?? false
+  const [creating, setCreating] = useState(false)
   return (
     <div className="max-w-(--hd-page-max-width)">
-      <PageHeader icon={Tag01Icon} title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
+      {creating && <SchemeDialog scheme={null} onClose={() => setCreating(false)} />}
+      <PageHeader
+        actions={
+          canEdit && (
+            <Button onClick={() => setCreating(true)}>
+              <Icon icon={Add01Icon} inline="start" />
+              登记分类方案
+            </Button>
+          )
+        }
+        icon={Tag01Icon} title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
       <Callout className="mb-6" title="这是配置字典，保存即生效">
         有“维护分类字典”权限（维护人）即可直接修改，不需确认；每次修改记下维护人与时间。代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请；部门分类不会自动下发给服务单元。
       </Callout>
@@ -44,6 +60,7 @@ export function DictionaryPage() {
 
 function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; canEdit: boolean }) {
   const [editing, setEditing] = useState<ClassificationCodeOut | 'new' | null>(null)
+  const [editingScheme, setEditingScheme] = useState(false)
   const [expanded, setExpanded] = useState(scheme.codes.length <= FOLD)
   const update = useUpdate()
   const shown = expanded ? scheme.codes : scheme.codes.slice(0, FOLD)
@@ -60,10 +77,15 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
           </p>
         </div>
         {canEdit && (
-          <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
-            <Icon icon={Add01Icon} inline="start" />
-            新增代码
-          </Button>
+          <span className="flex gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setEditingScheme(true)}>
+              编辑方案
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
+              <Icon icon={Add01Icon} inline="start" />
+              新增代码
+            </Button>
+          </span>
         )}
       </div>
       <DbTable
@@ -118,6 +140,7 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
           展开全部 {scheme.codes.length} 项
         </Button>
       )}
+      {editingScheme && <SchemeDialog scheme={scheme} onClose={() => setEditingScheme(false)} />}
       {editing && (
         <CodeDialog scheme={scheme} code={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
       )}
@@ -205,6 +228,113 @@ function CodeDialog({ scheme, code, onClose }: { scheme: ClassificationSchemeOut
               取消
             </Button>
             <Button type="submit" disabled={update.isPending || create.isPending}>
+              保存
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** 登记或编辑分类方案（配置，保存即生效）。代码与单选 / 多选新建后不可改。 */
+function SchemeDialog({ scheme, onClose }: { scheme: ClassificationSchemeOut | null; onClose: () => void }) {
+  const qc = useQueryClient()
+  const opts = { mutation: { onSuccess: () => qc.invalidateQueries(), onError: (e: Error) => notify.error(e.message) } }
+  const create = useCreateClassificationScheme(opts)
+  const update = useUpdateClassificationScheme(opts)
+  const [f, setF] = useState({
+    code: scheme?.code ?? '',
+    name: scheme?.name ?? '',
+    version: scheme?.version ?? '',
+    purpose: scheme?.purpose ?? '',
+    exclusive: scheme ? (scheme.is_exclusive ? 'yes' : 'no') : 'no',
+    for_department: scheme?.meaning_for_department ?? '',
+    for_unit: scheme?.meaning_for_unit ?? '',
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const focus = useFocusFirstInvalid()
+  const bind = (k: keyof typeof f) => ({ value: f[k], onChange: (v: string) => setF({ ...f, [k]: v }) })
+
+  function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    const bad = requireFields([
+      ['name', !!f.name.trim(), '请填写名称'],
+      ['code', !!scheme || /^[A-Z][A-Z0-9_]{0,63}$/.test(f.code.trim()), '代码只能用大写字母、数字、下划线，且以字母开头'],
+      ['version', !!scheme || !!f.version.trim(), '请填写版本（如 HQMS2020、2024 版）'],
+      ['for_department', !!(f.for_department.trim() || f.for_unit.trim()), '至少写明用于部门或服务单元时的含义'],
+    ])
+    if (bad) {
+      setErrors(bad.fieldErrors)
+      focus.focusFirst()
+      return
+    }
+    const done = () => {
+      notify.success(scheme ? `已保存“${f.name.trim()}”` : `已登记“${f.name.trim()}”`)
+      onClose()
+    }
+    const common = {
+      name: f.name.trim(),
+      purpose: f.purpose,
+      meaning_for_department: f.for_department,
+      meaning_for_unit: f.for_unit,
+    }
+    if (scheme) update.mutate({ schemeCode: scheme.code, data: common }, { onSuccess: done })
+    else
+      create.mutate(
+        { data: { ...common, code: f.code.trim(), version: f.version.trim(), is_exclusive: f.exclusive === 'yes' } },
+        { onSuccess: done },
+      )
+  }
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <form ref={focus.ref} onSubmit={onSubmit} noValidate className="grid gap-4">
+          <DialogHeader>
+            <DialogTitle>{scheme ? `编辑方案：${scheme.name}` : '登记分类方案'}</DialogTitle>
+            <DialogDescription>
+              保存即生效，不需确认。外部分类体系（如病案科室分类）的代码以正式代码表为准，不臆造。写明这个方案用在部门、服务单元上各表示什么；留空表示不适用。
+            </DialogDescription>
+          </DialogHeader>
+          <FormErrorsContext.Provider
+            value={{
+              errors,
+              clear: (n) =>
+                setErrors((prev) => {
+                  const next = { ...prev }
+                  delete next[n]
+                  return next
+                }),
+            }}
+          >
+            <div className="grid gap-3">
+              <TextField label="名称" name="name" required {...bind('name')} />
+              <div className="grid grid-cols-2 gap-3">
+                <TextField label="方案代码" name="code" required disabled={!!scheme} hint="大写字母、数字、下划线；不可改" {...bind('code')} />
+                <TextField label="版本" name="version" required disabled={!!scheme} {...bind('version')} />
+              </div>
+              <SelectField
+                label="同一时点"
+                required
+                disabled={!!scheme}
+                value={f.exclusive}
+                onChange={(v) => setF({ ...f, exclusive: v })}
+                options={[
+                  { value: 'no', label: '可有多个（多选）' },
+                  { value: 'yes', label: '只有一个（单选）' },
+                ]}
+              />
+              <TextField label="用于部门时表示" name="for_department" hint="如“专业定位”“病案统计科别参考”；留空 = 不用于部门" {...bind('for_department')} />
+              <TextField label="用于服务单元时表示" name="for_unit" hint="如“服务专业”“住院单元病案统计科别”；留空 = 不用于服务单元" {...bind('for_unit')} />
+              <TextField label="用途与边界" hint="如“不代表执业许可”“不能直接作为当前上报字典”" {...bind('purpose')} />
+            </div>
+          </FormErrorsContext.Provider>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              取消
+            </Button>
+            <Button type="submit" disabled={create.isPending || update.isPending}>
               保存
             </Button>
           </DialogFooter>

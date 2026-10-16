@@ -485,6 +485,22 @@ class ServiceUnitClassify(_Item):
     effective_date: date
 
 
+class DepartmentClassificationClose(_Item):
+    """结束部门的一条分类赋值：valid_to 为最后有效日（当天仍有效）。"""
+
+    kind: Literal["department.classification_close"]
+    classification_id: int
+    valid_to: date
+
+
+class ServiceUnitClassificationClose(_Item):
+    """结束服务单元的一条分类赋值：valid_to 为最后有效日（当天仍有效）。"""
+
+    kind: Literal["service_unit.classification_close"]
+    classification_id: int
+    valid_to: date
+
+
 class _CodeRef(_Item):
     """源记录用“来源系统 + 字典 + 代码”引用，同一张申请里可引用前面刚登记的记录。"""
 
@@ -570,6 +586,8 @@ ChangeItem = Annotated[
     | ServiceUnitSplit
     | ServiceUnitMerge
     | ServiceUnitClassify
+    | DepartmentClassificationClose
+    | ServiceUnitClassificationClose
     | ExternalCodeRegister
     | ExternalCodeAssign
     | ExternalCodeAssignmentClose,
@@ -607,6 +625,8 @@ KIND_LABELS: dict[str, str] = {
     "service_unit.split": "拆分服务单元",
     "service_unit.merge": "合并服务单元",
     "service_unit.classify": "调整服务单元分类",
+    "department.classification_close": "结束部门分类",
+    "service_unit.classification_close": "结束服务单元分类",
     "external_code.register": "登记外部代码",
     "external_code.assign": "解释外部代码",
     "external_code.assignment_close": "结束外部代码解释",

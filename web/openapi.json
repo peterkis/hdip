@@ -4201,6 +4201,12 @@
                   "$ref": "#/components/schemas/ServiceUnitClassify"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentClassificationClose"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitClassificationClose"
+                },
+                {
                   "$ref": "#/components/schemas/ExternalCodeRegister"
                 },
                 {
@@ -4221,6 +4227,7 @@
                   "department.alias_close": "#/components/schemas/DepartmentAliasClose",
                   "department.change_lifecycle": "#/components/schemas/DepartmentChangeLifecycle",
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.classification_close": "#/components/schemas/DepartmentClassificationClose",
                   "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
                   "department.relation_close": "#/components/schemas/DepartmentRelationClose",
@@ -4237,6 +4244,7 @@
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.classification_close": "#/components/schemas/ServiceUnitClassificationClose",
                   "service_unit.classify": "#/components/schemas/ServiceUnitClassify",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
                   "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
@@ -4614,6 +4622,12 @@
                   "$ref": "#/components/schemas/ServiceUnitClassify"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentClassificationClose"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitClassificationClose"
+                },
+                {
                   "$ref": "#/components/schemas/ExternalCodeRegister"
                 },
                 {
@@ -4634,6 +4648,7 @@
                   "department.alias_close": "#/components/schemas/DepartmentAliasClose",
                   "department.change_lifecycle": "#/components/schemas/DepartmentChangeLifecycle",
                   "department.change_status": "#/components/schemas/DepartmentChangeStatus",
+                  "department.classification_close": "#/components/schemas/DepartmentClassificationClose",
                   "department.classify": "#/components/schemas/DepartmentClassify",
                   "department.create": "#/components/schemas/DepartmentCreate",
                   "department.relation_close": "#/components/schemas/DepartmentRelationClose",
@@ -4650,6 +4665,7 @@
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.classification_close": "#/components/schemas/ServiceUnitClassificationClose",
                   "service_unit.classify": "#/components/schemas/ServiceUnitClassify",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
                   "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
@@ -5380,6 +5396,33 @@
         ],
         "title": "DepartmentChangeStatus",
         "description": "已停用的旧变更类型（改用 department.change_lifecycle）。保留以便读取历史申请。"
+      },
+      "DepartmentClassificationClose": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.classification_close",
+            "title": "Kind"
+          },
+          "classification_id": {
+            "type": "integer",
+            "title": "Classification Id"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "classification_id",
+          "valid_to"
+        ],
+        "title": "DepartmentClassificationClose",
+        "description": "结束部门的一条分类赋值：valid_to 为最后有效日（当天仍有效）。"
       },
       "DepartmentClassificationOut": {
         "properties": {
@@ -8212,6 +8255,33 @@
         ],
         "title": "ServiceUnitChangeStatus",
         "description": "暂停 / 恢复。"
+      },
+      "ServiceUnitClassificationClose": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.classification_close",
+            "title": "Kind"
+          },
+          "classification_id": {
+            "type": "integer",
+            "title": "Classification Id"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "classification_id",
+          "valid_to"
+        ],
+        "title": "ServiceUnitClassificationClose",
+        "description": "结束服务单元的一条分类赋值：valid_to 为最后有效日（当天仍有效）。"
       },
       "ServiceUnitClassify": {
         "properties": {

@@ -1,8 +1,8 @@
 // 部门的变更表单（D1）。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应），保存到草稿后经提交、确认生效。
 // 按操作动线原则：名称在前、代码在后；引用主体按名称选择；只给能选的（生命周期只列合法的下一步）。
 import { useState } from 'react'
-import { useListClassificationSchemes } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentVersionOut } from '@/api/generated/model'
+import { useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
+import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
 import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
@@ -343,9 +343,13 @@ export function DepartmentParentDialog({
   currentParent,
   exclude,
   ...props
-}: DialogProps & { code: string; name: string; currentParent?: { code: string; name: string } | null; exclude: string[] }) {
+}: DialogProps & { code: string; name: string; currentParent?: { code: string; name: string } | null; exclude?: string[] }) {
   const [parent, setParent] = useState(currentParent?.code ?? '')
   const [day, setDay] = useEffectiveDate()
+  // 不能选的 = 本部门 + 它在生效日的全部下级（否则成环）；按生效日而不是查看日期计算
+  const { data: onDay = [] } = useListDepartments({ as_of: day || undefined })
+  const self = onDay.find((d) => d.code === code)
+  const blocked = [code, ...(exclude ?? []), ...(self ? subordinates(onDay, self.id) : [])]
   return (
     <ItemDialog
       {...props}
@@ -369,13 +373,27 @@ export function DepartmentParentDialog({
         name="parent"
         value={parent}
         onChange={setParent}
-        exclude={exclude}
+        exclude={blocked}
         placeholder="无上级（一级部门）"
-        hint="不列出本部门及其下级；选“无上级”即为一级部门"
+        hint={`不列出本部门及其在 ${day || '生效日'} 的下级；选“无上级”即为一级部门`}
       />
       <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )
+}
+
+function subordinates(rows: DepartmentRow[], id: number): string[] {
+  const out: string[] = []
+  const walk = (pid: number) => {
+    for (const r of rows) {
+      if (r.parent?.id === pid) {
+        out.push(r.code)
+        walk(r.id)
+      }
+    }
+  }
+  walk(id)
+  return out
 }
 
 // ------------------------------------------------------------------ 管理关系（D2）

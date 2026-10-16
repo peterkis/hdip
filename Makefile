@@ -1,4 +1,4 @@
-.PHONY: db db-init db-docker migrate db-doc api web gen test check
+.PHONY: db db-init db-docker migrate db-doc api web gen test check walk-db api-walk web-walk
 
 # 本机 Homebrew PostgreSQL 18
 db:
@@ -24,6 +24,16 @@ api:
 
 web:
 	cd web && npm run dev
+
+# 剧本走查：独立的 <库名>_walk 库，不在开发库里留下走查记录（api/scripts/walk_db.py）
+walk-db:
+	cd api && uv run python scripts/walk_db.py
+
+api-walk:
+	cd api && HDIP_DATABASE_URL="$$(uv run python scripts/walk_db.py --url)" uv run uvicorn hdip_api.main:app --reload --port 8001
+
+web-walk:
+	cd web && HDIP_API_URL=http://localhost:8001 npm run dev -- --port 5174
 
 gen:
 	cd api && uv run python scripts/export_openapi.py

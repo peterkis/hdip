@@ -10,6 +10,7 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    proxy: { '/api': 'http://localhost:8000' },
+    // 剧本走查时（make web-walk）指向走查库的后端
+    proxy: { '/api': process.env.HDIP_API_URL ?? 'http://localhost:8000' },
   },
 })

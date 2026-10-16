@@ -309,11 +309,13 @@ function SourceSystemsDialog({ systems, onClose }: { systems: SourceSystemOut[];
   const [errors, setErrors] = useState<Record<string, string>>({})
   const focus = useFocusFirstInvalid()
   const bind = (k: keyof typeof f) => ({ value: f[k], onChange: (v: string) => setF({ ...f, [k]: v }) })
+  // 只有一个来源系统时直接选中它（含刚在本窗口登记的第一个）
+  const system = f.system || (systems.length === 1 ? String(systems[0].id) : '')
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     const bad = requireFields([
-      ['system', mode === 'system' || !!f.system, '请选择来源系统'],
+      ['system', mode === 'system' || !!system, '请选择来源系统'],
       ['code', /^[A-Z][A-Z0-9_]{0,63}$/.test(f.code.trim()), '代码只能用大写字母、数字、下划线，且以字母开头'],
       ['name', !!f.name.trim(), '请填写名称'],
     ])
@@ -328,7 +330,7 @@ function SourceSystemsDialog({ systems, onClose }: { systems: SourceSystemOut[];
     }
     const body = { code: f.code.trim(), name: f.name.trim(), note: f.note }
     if (mode === 'system') createSystem.mutate({ data: { ...body, kind: f.kind } }, { onSuccess: done })
-    else createNs.mutate({ systemId: Number(f.system), data: body }, { onSuccess: done })
+    else createNs.mutate({ systemId: Number(system), data: body }, { onSuccess: done })
   }
 
   return (
@@ -391,7 +393,8 @@ function SourceSystemsDialog({ systems, onClose }: { systems: SourceSystemOut[];
                 label="来源系统"
                 name="system"
                 required
-                value={f.system}
+                placeholder="请选择来源系统"
+                value={system}
                 onChange={(v) => setF({ ...f, system: v })}
                 options={systems.map((s) => ({ value: String(s.id), label: s.name }))}
               />

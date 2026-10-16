@@ -267,16 +267,17 @@ export function CampusReviseDialog({
 
 export function CampusStatusDialog({
   code,
+  name,
   current,
   ...props
-}: DialogProps & { code: string; current: OperatingStatus }) {
+}: DialogProps & { code: string; name: string; current: OperatingStatus }) {
   const next = statusOptions(OPERATING_STATUS_ORDER.indexOf(current) + 1)
   const [status, setStatus] = useState<string>(next[0]?.value ?? '')
   const [day, setDay] = useEffectiveDate()
   return (
     <ItemDialog
       {...props}
-      title={`变更运营状态 ${code}`}
+      title={`变更运营状态：${name}`}
       description={`当前为“${OPERATING_STATUS[current]}”。状态只能按 筹建 → 试运行 → 运行 → 停用 推进，停用后不可恢复。`}
       build={() => {
         if (next.length === 0) return '院区已停用，不能再变更运营状态'

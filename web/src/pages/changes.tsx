@@ -351,7 +351,57 @@ function NoteCard({ cr, onSave }: { cr: ChangeRequestOut; onSave: (note: string 
   )
 }
 
+/** 拆分 / 合并：前身与后继各列一行，确认人一眼看清“谁变成了谁” */
+function EvolveDiff({ outcome }: { outcome: ItemOutcome }) {
+  const { optionLabels } = useApp()
+  const before = (outcome.before ?? {}) as { predecessors?: Record<string, unknown>[] }
+  const after = (outcome.after ?? {}) as { effective_date?: string; successors?: Record<string, unknown>[] }
+  const day = String(after.effective_date)
+  const rows = [
+    ...(before.predecessors ?? []).map((u) => ({ role: '前身', u })),
+    ...(after.successors ?? []).map((u) => ({ role: '后继', u })),
+  ]
+  return (
+    <div className="grid gap-2">
+      <p className="text-xs">
+        前身最后有效日 {dayBefore(day)}，次日起退出；后继自 {day} 起，是新身份、新代码，不继承前身历史。
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-16"></TableHead>
+            <TableHead>单元</TableHead>
+            <TableHead>类型</TableHead>
+            <TableHead>所属部门</TableHead>
+            <TableHead>院区</TableHead>
+            <TableHead>运营主体</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ role, u }, i) => (
+            <TableRow key={i} className={cn(role === '后继' && 'font-medium')}>
+              <TableCell className="text-muted-foreground">{role}</TableCell>
+              <TableCell>
+                {String(u.name)} <span className="text-muted-foreground font-mono text-caption">{String(u.code ?? '')}</span>
+              </TableCell>
+              <TableCell>{formatValue('unit_type', u.unit_type, optionLabels)}</TableCell>
+              <TableCell>{formatValue('department', u.department)}</TableCell>
+              <TableCell>{formatValue('campus', u.campus)}</TableCell>
+              <TableCell>{formatValue('institution', u.institution)}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 function OutcomeDiff({ outcome }: { outcome: ItemOutcome }) {
+  if (outcome.after && typeof outcome.after === 'object' && 'successors' in outcome.after) return <EvolveDiff outcome={outcome} />
+  return <PlainDiff outcome={outcome} />
+}
+
+function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
   const { optionLabels } = useApp()
   const [showAll, setShowAll] = useState(false)
   const before = outcome.before as Record<string, unknown> | null

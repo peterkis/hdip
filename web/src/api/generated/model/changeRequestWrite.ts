@@ -12,6 +12,7 @@ import type { DepartmentAliasAdd } from './departmentAliasAdd';
 import type { DepartmentAliasClose } from './departmentAliasClose';
 import type { DepartmentChangeLifecycle } from './departmentChangeLifecycle';
 import type { DepartmentChangeStatus } from './departmentChangeStatus';
+import type { DepartmentClassificationClose } from './departmentClassificationClose';
 import type { DepartmentClassify } from './departmentClassify';
 import type { DepartmentCreate } from './departmentCreate';
 import type { DepartmentRelationClose } from './departmentRelationClose';
@@ -28,6 +29,7 @@ import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
 import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
 import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
+import type { ServiceUnitClassificationClose } from './serviceUnitClassificationClose';
 import type { ServiceUnitClassify } from './serviceUnitClassify';
 import type { ServiceUnitCreate } from './serviceUnitCreate';
 import type { ServiceUnitMerge } from './serviceUnitMerge';
@@ -37,6 +39,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
   note?: string | null;
 }

@@ -54,6 +54,7 @@ from hdip_api.schemas.items import (
     DepartmentAliasClose,
     DepartmentChangeLifecycle,
     DepartmentChangeStatus,
+    DepartmentClassificationClose,
     DepartmentClassify,
     DepartmentCreate,
     DepartmentRelationClose,
@@ -70,6 +71,7 @@ from hdip_api.schemas.items import (
     OperatorRelationCreate,
     ServiceUnitChangeDepartment,
     ServiceUnitChangeStatus,
+    ServiceUnitClassificationClose,
     ServiceUnitClassify,
     ServiceUnitCreate,
     ServiceUnitFields,
@@ -1087,6 +1089,7 @@ def unit_snapshot(s: Session, v: ServiceUnitVersion) -> dict[str, Any]:
         "version_no": v.version_no,
         "valid_from": _json(v.valid_from),
         "valid_to": _json(v.valid_to),
+        "code": unit.code,
         "unit_type": unit.unit_type,
         "name": v.name,
         "department": f"{dept.code} {dept_v.name}",
@@ -1330,6 +1333,37 @@ def _unit_classify(ctx: Ctx, item: ServiceUnitClassify) -> dict:
         "target": f"服务单元 {unit.code} {latest.name} · {scheme.name}",
         "before": before,
         "after": after,
+    }
+
+
+def _classification_close(
+    ctx: Ctx, item: DepartmentClassificationClose | ServiceUnitClassificationClose
+) -> dict:
+    s = ctx.session
+    is_dept = item.kind == "department.classification_close"
+    model = DepartmentClassification if is_dept else ServiceUnitClassification
+    c = s.get(model, item.classification_id, with_for_update=True)
+    if c is None:
+        raise ItemError(f"分类赋值 #{item.classification_id} 不存在", "classification_id")
+    if c.valid_to is not None:
+        raise ItemError(f"该分类已于 {c.valid_to.isoformat()} 结束", "classification_id")
+    if item.valid_to < c.valid_from:
+        raise ItemError(f"最后有效日不能早于开始日 {c.valid_from.isoformat()}", "valid_to")
+    before = classification_snapshot(s, c)
+    c.valid_to = item.valid_to
+    c.closed_change_id = ctx.change_id
+    s.flush()
+    scheme = s.get(ClassificationScheme, c.scheme_id)
+    if is_dept:
+        owner = f"部门 {_dept_label(s, s.get(Department, c.department_id))}"
+    else:
+        unit = s.get(ServiceUnit, c.service_unit_id)
+        latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+        owner = f"服务单元 {unit.code} {latest.name}"
+    return {
+        "target": f"{owner} · {scheme.name}",
+        "before": before,
+        "after": classification_snapshot(s, c),
     }
 
 
@@ -1659,6 +1693,8 @@ HANDLERS = {
     "service_unit.split": _unit_split,
     "service_unit.merge": _unit_merge,
     "service_unit.classify": _unit_classify,
+    "department.classification_close": _classification_close,
+    "service_unit.classification_close": _classification_close,
     "external_code.register": _external_code_register,
     "external_code.assign": _external_code_assign,
     "external_code.assignment_close": _external_code_assignment_close,

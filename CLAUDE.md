@@ -8,7 +8,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，8 条剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–4、8 在浏览器里走通。第 ③ 步（拆分、合并、按日期查询、导出）**尚无页面**。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`、`make api-walk`、`make web-walk`）。拆分、合并表单在服务单元详情页。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
 - 业务尚不明确、随时可能调整：优先小而可改的实现，不做提前抽象。
@@ -56,7 +56,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元。院区、关系类依赖在一张申请**全部变更项应用后**统一校验（`apply.py` 的 `_check_units`），所以“停用院区 + 改挂单元”可放在同一张申请里，不论先后。
 - 服务单元永久退出 = 最新版本写上 `valid_to`（最后有效日，当天仍有效），之后不再有版本；“已退出”由此推出，不另存状态。版本状态只有 `ACTIVE`（在用）/`SUSPENDED`（暂停）。
 - 行政隶属与管理关系（D2，迁移 0007）：`department.set_parent`（视图内换上级，空 = 一级部门）、`department.relation_create/.relation_close`（专业管理 / 协作 / 院区管理）。成环在申请全部应用后检查（`apply.py` 的 `_check_org`）；撤销部门自动结束它自己的上级边与关系，仍有下级则阻止。只能写入 ACTIVE 视图。
-- 部门变更项：`department.create/.revise/.change_lifecycle/.classify/.affiliate/.alias_add/.alias_close`；旧的 `.rename/.change_status` 只保留读取。分类字典（`classification_scheme/_code`）是配置，经 `/api/dictionary/*` 由有 `dictionary.maintain` 权限的人直接维护。
+- 部门变更项：`department.create/.revise/.change_lifecycle/.classify/.classification_close/.affiliate/.alias_add/.alias_close`；旧的 `.rename/.change_status` 只保留读取。分类字典（`classification_scheme/_code`）是配置，经 `/api/dictionary/*` 由有 `dictionary.maintain` 权限的人直接维护。
 - 拆分/合并（`service_unit.split` / `service_unit.merge`）：只填一个生效日 D，前身最后有效日 = D-1，后继自 D 起；后继新身份新代码、不继承前身版本历史、不自动迁移引用，可与前身不同部门/院区/运营主体。`service_unit_lineage` 一对前身—后继一行，只追加。
 - “某日在运营的单元”= 当天有有效版本，含暂停；`GET /api/service-units?include_future=false`。
 - 只读导出：`GET /api/export/{dataset}.csv?as_of=`（数据集见 `services/export.py`）。列名与列顺序是对外契约，新增列只加在末尾。
@@ -80,6 +80,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 | **表结构参考**：每张表的列、约束、索引、触发器、权限、配置种子（自动生成，勿手改） | `docs/database/schema-reference.md` |
 | 部门深化的需求、决定与阶段 | `docs/部门主数据深化-实施计划.md` |
 | UI 视觉规范与操作动线原则 | `docs/design/ui-tokens.md`（应用内 `/design`） |
+| 剧本走查结果与发现的问题 | `docs/剧本走查记录.md` |
 
 改了迁移就执行 `make migrate && make db-doc`，并同步 `docs/database/README.md` 里相应的说明。
 

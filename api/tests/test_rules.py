@@ -315,3 +315,27 @@ def test_status_error_message_is_chinese(api):
     r = api.submit(cr["id"])
     assert r.status_code == 409
     assert "已撤销" in r.json()["message"]
+
+
+def test_draft_items_round_trip_keeps_only_written_fields(api):
+    """草稿取回后原样回传（如再加一项），修订项里没写的字段不能变成“清空”。"""
+    from factories import dept_create
+
+    api.apply(dept_create())
+    revise = {
+        "kind": "department.revise",
+        "code": "XNK",
+        "effective_date": "2026-03-01",
+        "changes": {"name": "心血管内科（新）"},
+    }
+    cr = api.draft(revise)
+    assert cr["items"][0]["changes"] == {"name": "心血管内科（新）"}
+    alias = {
+        "kind": "department.alias_add",
+        "code": "XNK",
+        "value": "心内科",
+        "valid_from": "2026-03-01",
+    }
+    r = api.put(f"/api/change-requests/{cr['id']}", {"items": [*cr["items"], alias], "note": None})
+    assert r.status_code == 200, r.text
+    assert api.submit(cr["id"]).status_code == 200

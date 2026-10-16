@@ -43,7 +43,10 @@ export function DepartmentSelect(p: RefProps) {
       })),
     ...draft.flatMap((i) => (i.kind === 'department.create' ? [{ value: i.code, label: `${i.name}${NEW}` }] : [])),
   ]
-  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder={p.placeholder ?? '请选择部门'} />
+  const shown = withExclude(options, p.exclude)
+  const hint =
+    shown.length === 0 ? '没有可选的部门。要改挂到新部门：先新建部门保存到草稿，再在这里把“加入变更申请”选为那张草稿' : p.hint
+  return <SelectField {...p} hint={hint} options={shown} placeholder={p.placeholder ?? '请选择部门'} />
 }
 
 /** 所属院区：不列已停用的院区 */
@@ -103,11 +106,12 @@ export function InstitutionSelect({ campusCode, ...p }: RefProps & { campusCode?
   )
 }
 
-/** 服务单元：查看日期当天有效或计划中的单元，名称后附院区，便于区分同名单元 */
-export function UnitSelect(p: RefProps) {
+/** 服务单元：查看日期当天有效或计划中的单元（给了 day 则为该日有效的），名称后附院区，便于区分同名单元 */
+export function UnitSelect({ day, ...p }: RefProps & { day?: string }) {
   const { asOf } = useApp()
   const draft = useDraftItems()
-  const { data = [] } = useListServiceUnits({ as_of: asOf })
+  // day：按某个业务日期列出当天有效的单元（如合并时前身须在生效日前一天仍有效）；默认查看日期
+  const { data = [] } = useListServiceUnits(day ? { as_of: day, include_future: false } : { as_of: asOf })
   const options: Option[] = [
     ...data.map((u) => ({ value: u.code, label: `${u.version.name}（${u.version.campus_name}）` })),
     ...draft.flatMap((i) => (i.kind === 'service_unit.create' ? [{ value: i.code, label: `${i.fields.name}${NEW}` }] : [])),
