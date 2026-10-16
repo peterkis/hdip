@@ -1373,6 +1373,395 @@
         }
       }
     },
+    "/api/source-systems": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List Source Systems",
+        "description": "来源系统实例与其字典，附每本字典的代码数与查看日期当天的待裁决数。",
+        "operationId": "listSourceSystems",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SourceSystemOut"
+                  },
+                  "title": "Response Listsourcesystems"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/external-codes": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "List External Codes",
+        "description": "编码映射台账。某日没有任何解释覆盖的源记录，当天即待裁决。",
+        "operationId": "listExternalCodes",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "namespace_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Namespace Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "mapped",
+                    "unmodeled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期当天：待裁决 / 已映射 / 对象未建模",
+              "title": "Status"
+            },
+            "description": "查看日期当天：待裁决 / 已映射 / 对象未建模"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按代码或源名称搜索",
+              "title": "Q"
+            },
+            "description": "按代码或源名称搜索"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalCodePage"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/external-codes/{code_id}": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "Get External Code",
+        "operationId": "getExternalCode",
+        "parameters": [
+          {
+            "name": "code_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Code Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExternalCodeDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/change-requests": {
       "get": {
         "tags": [
@@ -2400,6 +2789,581 @@
         }
       }
     },
+    "/api/dictionary/classification-schemes": {
+      "post": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Create Scheme",
+        "description": "登记一个分类方案（如外部分类体系）。用在部门 / 服务单元上的含义为空表示不适用。",
+        "operationId": "createClassificationScheme",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationSchemeCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationSchemeOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/classification-schemes/{scheme_code}": {
+      "patch": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Update Scheme",
+        "description": "修改方案名称、用途、用于部门 / 单元时的含义，或停用 / 恢复。代码与单选属性不可改。",
+        "operationId": "updateClassificationScheme",
+        "parameters": [
+          {
+            "name": "scheme_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+              "title": "Scheme Code"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClassificationSchemeWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClassificationSchemeOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/source-systems": {
+      "post": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Create Source System",
+        "description": "登记一个来源系统实例。同一厂商的多个实例（如各院区账套）分别登记。",
+        "operationId": "createSourceSystem",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceSystemWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSystemOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/source-systems/{system_id}": {
+      "patch": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Update Source System",
+        "operationId": "updateSourceSystem",
+        "parameters": [
+          {
+            "name": "system_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "System Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceSystemWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSystemOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/source-systems/{system_id}/namespaces": {
+      "post": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Create Namespace",
+        "description": "在来源系统里登记一本字典。字典不限定只能映射到某一种对象，混装字典逐条判断。",
+        "operationId": "createCodeNamespace",
+        "parameters": [
+          {
+            "name": "system_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "System Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamespaceWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSystemOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/dictionary/code-namespaces/{namespace_id}": {
+      "patch": {
+        "tags": [
+          "dictionary"
+        ],
+        "summary": "Update Namespace",
+        "operationId": "updateCodeNamespace",
+        "parameters": [
+          {
+            "name": "namespace_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Namespace Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NamespaceWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSystemOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/export/{dataset}.csv": {
       "get": {
         "tags": [
@@ -2422,7 +3386,9 @@
                 "operator-relations",
                 "service-unit-lineage",
                 "department-hierarchy",
-                "department-relations"
+                "department-relations",
+                "external-codes",
+                "classifications"
               ],
               "type": "string",
               "title": "Dataset"
@@ -2521,6 +3487,131 @@
   },
   "components": {
     "schemas": {
+      "AssignmentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "target_type": {
+            "type": "string",
+            "title": "Target Type"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "service_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnitRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unmodeled_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmodeled Type"
+          },
+          "campus_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Code"
+          },
+          "campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Name"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "evidence_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Note"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "target_type",
+          "department",
+          "service_unit",
+          "unmodeled_type",
+          "campus_code",
+          "campus_name",
+          "valid_from",
+          "valid_to",
+          "evidence_note",
+          "change_id",
+          "closed_change_id"
+        ],
+        "title": "AssignmentOut",
+        "description": "一条解释，从源记录一侧看。"
+      },
       "CampusChangeStatus": {
         "properties": {
           "kind": {
@@ -3105,6 +4196,18 @@
                 },
                 {
                   "$ref": "#/components/schemas/ServiceUnitMerge"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitClassify"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeRegister"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeAssign"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeAssignmentClose"
                 }
               ],
               "discriminator": {
@@ -3125,12 +4228,16 @@
                   "department.rename": "#/components/schemas/DepartmentRename",
                   "department.revise": "#/components/schemas/DepartmentRevise",
                   "department.set_parent": "#/components/schemas/DepartmentSetParent",
+                  "external_code.assign": "#/components/schemas/ExternalCodeAssign",
+                  "external_code.assignment_close": "#/components/schemas/ExternalCodeAssignmentClose",
+                  "external_code.register": "#/components/schemas/ExternalCodeRegister",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.classify": "#/components/schemas/ServiceUnitClassify",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
                   "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
                   "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
@@ -3502,6 +4609,18 @@
                 },
                 {
                   "$ref": "#/components/schemas/ServiceUnitMerge"
+                },
+                {
+                  "$ref": "#/components/schemas/ServiceUnitClassify"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeRegister"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeAssign"
+                },
+                {
+                  "$ref": "#/components/schemas/ExternalCodeAssignmentClose"
                 }
               ],
               "discriminator": {
@@ -3522,12 +4641,16 @@
                   "department.rename": "#/components/schemas/DepartmentRename",
                   "department.revise": "#/components/schemas/DepartmentRevise",
                   "department.set_parent": "#/components/schemas/DepartmentSetParent",
+                  "external_code.assign": "#/components/schemas/ExternalCodeAssign",
+                  "external_code.assignment_close": "#/components/schemas/ExternalCodeAssignmentClose",
+                  "external_code.register": "#/components/schemas/ExternalCodeRegister",
                   "institution.create": "#/components/schemas/InstitutionCreate",
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
+                  "service_unit.classify": "#/components/schemas/ServiceUnitClassify",
                   "service_unit.create": "#/components/schemas/ServiceUnitCreate",
                   "service_unit.merge": "#/components/schemas/ServiceUnitMerge",
                   "service_unit.rebind": "#/components/schemas/ServiceUnitRebind",
@@ -3767,6 +4890,68 @@
         "title": "ClassificationCodeWrite",
         "description": "维护分类字典（配置，不经变更申请）。代码值不可改，不删除只停用。"
       },
+      "ClassificationSchemeCreate": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "is_exclusive": {
+            "type": "boolean",
+            "title": "Is Exclusive",
+            "default": false
+          },
+          "meaning_for_department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Department"
+          },
+          "meaning_for_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "version"
+        ],
+        "title": "ClassificationSchemeCreate",
+        "description": "登记分类方案（配置）。外部分类方案的代码以正式代码表为准，不臆造。"
+      },
       "ClassificationSchemeOut": {
         "properties": {
           "id": {
@@ -3804,6 +4989,28 @@
             "type": "boolean",
             "title": "Is Active"
           },
+          "meaning_for_department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Department"
+          },
+          "meaning_for_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Unit"
+          },
           "codes": {
             "items": {
               "$ref": "#/components/schemas/ClassificationCodeOut"
@@ -3821,9 +5028,72 @@
           "purpose",
           "is_exclusive",
           "is_active",
+          "meaning_for_department",
+          "meaning_for_unit",
           "codes"
         ],
         "title": "ClassificationSchemeOut"
+      },
+      "ClassificationSchemeWrite": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Purpose"
+          },
+          "meaning_for_department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Department"
+          },
+          "meaning_for_unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meaning For Unit"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "ClassificationSchemeWrite"
       },
       "DepartmentAffiliate": {
         "properties": {
@@ -4202,7 +5472,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[A-Z][A-Z0-9_]{0,63}$"
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
               },
               {
                 "type": "null"
@@ -4458,6 +5728,20 @@
             },
             "type": "array",
             "title": "Change Ids"
+          },
+          "external_codes": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalCodeLink"
+            },
+            "type": "array",
+            "title": "External Codes"
+          },
+          "unit_external_codes": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalCodeLink"
+            },
+            "type": "array",
+            "title": "Unit External Codes"
           }
         },
         "type": "object",
@@ -4476,7 +5760,9 @@
           "parents",
           "children",
           "relations",
-          "change_ids"
+          "change_ids",
+          "external_codes",
+          "unit_external_codes"
         ],
         "title": "DepartmentDetail"
       },
@@ -5214,6 +6500,556 @@
         ],
         "title": "DeptRef"
       },
+      "ExternalCodeAssign": {
+        "properties": {
+          "system_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "System Code"
+          },
+          "namespace_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Namespace Code"
+          },
+          "external_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "External Code"
+          },
+          "kind": {
+            "type": "string",
+            "const": "external_code.assign",
+            "title": "Kind"
+          },
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "department",
+              "service_unit",
+              "unmodeled"
+            ],
+            "title": "Target Type"
+          },
+          "department_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Code"
+          },
+          "service_unit_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Unit Code"
+          },
+          "unmodeled_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "NURSING_UNIT",
+                  "WARD",
+                  "LOCATION",
+                  "STAT_GROUP",
+                  "COMPOSITE",
+                  "OTHER"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmodeled Type"
+          },
+          "campus_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Code"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "evidence_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "system_code",
+          "namespace_code",
+          "external_code",
+          "kind",
+          "target_type",
+          "valid_from"
+        ],
+        "title": "ExternalCodeAssign",
+        "description": "一条源记录自 valid_from 起的解释：指向部门、服务单元，或标“对象未建模”。\n\ncampus_code 是条件：同一字典同一代码在不同院区指向不同对象时才填。"
+      },
+      "ExternalCodeAssignmentClose": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "external_code.assignment_close",
+            "title": "Kind"
+          },
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "valid_to": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "assignment_id",
+          "valid_to"
+        ],
+        "title": "ExternalCodeAssignmentClose",
+        "description": "结束一条解释：valid_to 为最后有效日。"
+      },
+      "ExternalCodeDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "system_code": {
+            "type": "string",
+            "title": "System Code"
+          },
+          "system_name": {
+            "type": "string",
+            "title": "System Name"
+          },
+          "namespace_code": {
+            "type": "string",
+            "title": "Namespace Code"
+          },
+          "namespace_name": {
+            "type": "string",
+            "title": "Namespace Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "semantic_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Note"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "current": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentOut"
+            },
+            "type": "array",
+            "title": "Current"
+          },
+          "assignment_count": {
+            "type": "integer",
+            "title": "Assignment Count"
+          },
+          "created_change_id": {
+            "type": "integer",
+            "title": "Created Change Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentOut"
+            },
+            "type": "array",
+            "title": "Assignments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "system_code",
+          "system_name",
+          "namespace_code",
+          "namespace_name",
+          "code",
+          "source_name",
+          "semantic_note",
+          "status",
+          "current",
+          "assignment_count",
+          "created_change_id",
+          "recorded_at",
+          "assignments"
+        ],
+        "title": "ExternalCodeDetail"
+      },
+      "ExternalCodeLink": {
+        "properties": {
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "external_code_id": {
+            "type": "integer",
+            "title": "External Code Id"
+          },
+          "system_code": {
+            "type": "string",
+            "title": "System Code"
+          },
+          "system_name": {
+            "type": "string",
+            "title": "System Name"
+          },
+          "namespace_code": {
+            "type": "string",
+            "title": "Namespace Code"
+          },
+          "namespace_name": {
+            "type": "string",
+            "title": "Namespace Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "campus_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Code"
+          },
+          "campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Name"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "evidence_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Note"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "via_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UnitRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "assignment_id",
+          "external_code_id",
+          "system_code",
+          "system_name",
+          "namespace_code",
+          "namespace_name",
+          "code",
+          "source_name",
+          "campus_code",
+          "campus_name",
+          "valid_from",
+          "valid_to",
+          "evidence_note",
+          "change_id"
+        ],
+        "title": "ExternalCodeLink",
+        "description": "一条解释，从对象一侧看：哪本字典的哪个代码指向它。"
+      },
+      "ExternalCodePage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalCodeRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "counts",
+          "rows"
+        ],
+        "title": "ExternalCodePage"
+      },
+      "ExternalCodeRegister": {
+        "properties": {
+          "system_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "System Code"
+          },
+          "namespace_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Namespace Code"
+          },
+          "external_code": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "External Code"
+          },
+          "kind": {
+            "type": "string",
+            "const": "external_code.register",
+            "title": "Kind"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "semantic_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "system_code",
+          "namespace_code",
+          "external_code",
+          "kind"
+        ],
+        "title": "ExternalCodeRegister",
+        "description": "登记一条源记录。只登记、不解释时，该记录在任何日期都是待裁决。"
+      },
+      "ExternalCodeRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "system_code": {
+            "type": "string",
+            "title": "System Code"
+          },
+          "system_name": {
+            "type": "string",
+            "title": "System Name"
+          },
+          "namespace_code": {
+            "type": "string",
+            "title": "Namespace Code"
+          },
+          "namespace_name": {
+            "type": "string",
+            "title": "Namespace Name"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "semantic_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Note"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "current": {
+            "items": {
+              "$ref": "#/components/schemas/AssignmentOut"
+            },
+            "type": "array",
+            "title": "Current"
+          },
+          "assignment_count": {
+            "type": "integer",
+            "title": "Assignment Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "system_code",
+          "system_name",
+          "namespace_code",
+          "namespace_name",
+          "code",
+          "source_name",
+          "semantic_note",
+          "status",
+          "current",
+          "assignment_count"
+        ],
+        "title": "ExternalCodeRow"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -5815,6 +7651,107 @@
         "title": "LineageOut",
         "description": "一条演变关系：另一端单元的身份、代码与名称（前身取其最后一版名称，后继取第一版）。"
       },
+      "NamespaceOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "code_count": {
+            "type": "integer",
+            "title": "Code Count"
+          },
+          "pending_count": {
+            "type": "integer",
+            "title": "Pending Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "note",
+          "is_active",
+          "code_count",
+          "pending_count"
+        ],
+        "title": "NamespaceOut"
+      },
+      "NamespaceWrite": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "NamespaceWrite",
+        "description": "维护字典（配置）。code 新建后不可改。"
+      },
       "OperatorRelationClose": {
         "properties": {
           "kind": {
@@ -6276,6 +8213,53 @@
         "title": "ServiceUnitChangeStatus",
         "description": "暂停 / 恢复。"
       },
+      "ServiceUnitClassify": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "service_unit.classify",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "scheme_code": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Scheme Code"
+          },
+          "class_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Class Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "scheme_code",
+          "class_code",
+          "effective_date"
+        ],
+        "title": "ServiceUnitClassify",
+        "description": "给服务单元在某分类方案下赋值；与部门分类相互独立，部门分类不下发给单元。"
+      },
       "ServiceUnitCreate": {
         "properties": {
           "kind": {
@@ -6377,6 +8361,20 @@
             },
             "type": "array",
             "title": "Successors"
+          },
+          "classifications": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentClassificationOut"
+            },
+            "type": "array",
+            "title": "Classifications"
+          },
+          "external_codes": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalCodeLink"
+            },
+            "type": "array",
+            "title": "External Codes"
           }
         },
         "type": "object",
@@ -6389,7 +8387,9 @@
           "retired_after",
           "versions",
           "predecessors",
-          "successors"
+          "successors",
+          "classifications",
+          "external_codes"
         ],
         "title": "ServiceUnitDetail"
       },
@@ -6848,6 +8848,121 @@
         ],
         "title": "ServiceUnitVersionOut"
       },
+      "SourceSystemOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "namespaces": {
+            "items": {
+              "$ref": "#/components/schemas/NamespaceOut"
+            },
+            "type": "array",
+            "title": "Namespaces"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "kind",
+          "note",
+          "is_active",
+          "namespaces"
+        ],
+        "title": "SourceSystemOut"
+      },
+      "SourceSystemWrite": {
+        "properties": {
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "title": "SourceSystemWrite",
+        "description": "维护来源系统实例（配置）。code 新建后不可改。"
+      },
       "SuccessorUnit": {
         "properties": {
           "code": {
@@ -6882,6 +8997,29 @@
         ],
         "title": "SuccessorUnit",
         "description": "拆分/合并产生的后继单元：新身份、新代码，部门、院区、运营主体可与前身不同。"
+      },
+      "UnitRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name"
+        ],
+        "title": "UnitRef"
       },
       "UserOut": {
         "properties": {

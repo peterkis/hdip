@@ -768,7 +768,7 @@ function BlocksSection() {
 const SAMPLE_UNITS = [
   { code: 'XNK-GX-OPD', name: '心内科高新门诊', type: '门诊单元', dept: '心血管内科', campus: '高新院区', status: 'ACTIVE', period: '2026-10-14 ~ 长期' },
   { code: 'XNK-GX-IPD', name: '心内科高新病房', type: '住院单元', dept: '心血管内科', campus: '高新院区', status: 'SUSPENDED', period: '2026-12-01 ~ 长期' },
-  { code: 'XNK-BY-OPD', name: '心血管内科门诊', type: '门诊单元', dept: '心血管内科', campus: '本院院区', status: 'RETIRED', period: '2020-01-01 ~ 2026-12-31' },
+  { code: 'XNK-BY-OPD', name: '心血管内科门诊', type: '门诊单元', dept: '心血管内科', campus: '本部院区', status: 'RETIRED', period: '2020-01-01 ~ 2026-12-31' },
 ]
 
 function TableSection() {

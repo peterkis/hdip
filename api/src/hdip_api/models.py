@@ -231,6 +231,8 @@ class ClassificationScheme(Base):
     purpose: Mapped[str | None] = mapped_column(Text)
     is_exclusive: Mapped[bool]
     is_active: Mapped[bool]
+    meaning_for_department: Mapped[str | None] = mapped_column(Text)
+    meaning_for_unit: Mapped[str | None] = mapped_column(Text)
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
     updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
 
@@ -353,3 +355,76 @@ class ServiceUnitLineage(Base):
     change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
     recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
     recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+
+
+class ServiceUnitClassification(_Period, Base):
+    __tablename__ = "service_unit_classification"
+    __mapper_args__ = {"eager_defaults": True}
+
+    service_unit_id: Mapped[int] = mapped_column(ForeignKey("service_unit.id"))
+    scheme_id: Mapped[int] = mapped_column(BigInteger)
+    is_exclusive: Mapped[bool]
+    code: Mapped[str] = mapped_column(Text)
+
+
+class SourceSystem(Base):
+    """来源系统实例（配置）。"""
+
+    __tablename__ = "source_system"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool]
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
+class CodeNamespace(Base):
+    """来源系统里的一本字典（配置）。"""
+
+    __tablename__ = "code_namespace"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source_system_id: Mapped[int] = mapped_column(ForeignKey("source_system.id"))
+    code: Mapped[str] = mapped_column(Text)
+    name: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool]
+    updated_by: Mapped[int | None] = mapped_column(ForeignKey("app_user.id"))
+    updated_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
+class ExternalCode(Base):
+    """台账里的一条源记录：身份行不可更新。"""
+
+    __tablename__ = "external_code"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    namespace_id: Mapped[int] = mapped_column(ForeignKey("code_namespace.id"))
+    code: Mapped[str] = mapped_column(Text)
+    source_name: Mapped[str | None] = mapped_column(Text)
+    semantic_note: Mapped[str | None] = mapped_column(Text)
+    created_change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+
+
+class ExternalCodeAssignment(_Period, Base):
+    """一条源记录在某段期间的解释：部门、服务单元或对象未建模，可带院区条件。"""
+
+    __tablename__ = "external_code_assignment"
+    __mapper_args__ = {"eager_defaults": True}
+
+    external_code_id: Mapped[int] = mapped_column(ForeignKey("external_code.id"))
+    target_type: Mapped[str] = mapped_column(Text)
+    department_id: Mapped[int | None] = mapped_column(ForeignKey("department.id"))
+    service_unit_id: Mapped[int | None] = mapped_column(ForeignKey("service_unit.id"))
+    unmodeled_type: Mapped[str | None] = mapped_column(Text)
+    campus_id: Mapped[int | None] = mapped_column(ForeignKey("campus.id"))
+    evidence_note: Mapped[str | None] = mapped_column(Text)

@@ -178,6 +178,10 @@ class ServiceUnitDetail(BaseModel):
     """本单元由哪些单元拆分或合并而来。"""
     successors: list[LineageOut]
     """本单元拆分或合并成了哪些单元。"""
+    classifications: list["DepartmentClassificationOut"]
+    """服务单元自己的分类（不含所属部门的分类），新到旧。"""
+    external_codes: list["ExternalCodeLink"]
+    """解释指向本单元的外部代码（含已结束的），新到旧。"""
 
 
 class DepartmentVersionOut(VersionMeta):
@@ -304,6 +308,10 @@ class DepartmentDetail(BaseModel):
     """本部门参与的专业管理、协作、院区管理关系（含已结束的），新到旧。"""
     change_ids: list[int]
     """改动过该部门的已确认申请。"""
+    external_codes: list["ExternalCodeLink"]
+    """解释指向本部门的外部代码（含已结束的），新到旧。"""
+    unit_external_codes: list["ExternalCodeLink"]
+    """查看日期当天经本部门的服务单元得到的代码：只读，不是本部门的身份标识。"""
 
 
 class ClassificationCodeOut(BaseModel):
@@ -326,6 +334,10 @@ class ClassificationSchemeOut(BaseModel):
     purpose: str | None
     is_exclusive: bool
     is_active: bool
+    meaning_for_department: str | None
+    """用在部门上时表示什么；为空表示不适用于部门。"""
+    meaning_for_unit: str | None
+    """用在服务单元上时表示什么；为空表示不适用于服务单元。"""
     codes: list[ClassificationCodeOut]
 
 
@@ -420,3 +432,142 @@ class ChangeRequestOut(BaseModel):
     cancelled_by: UserRef | None
     cancelled_at: datetime | None
     permissions: Permissions
+
+
+class ClassificationSchemeCreate(BaseModel):
+    """登记分类方案（配置）。外部分类方案的代码以正式代码表为准，不臆造。"""
+
+    code: str
+    name: str
+    version: str
+    purpose: str | None = None
+    is_exclusive: bool = False
+    meaning_for_department: str | None = None
+    meaning_for_unit: str | None = None
+
+
+class ClassificationSchemeWrite(BaseModel):
+    name: str | None = None
+    purpose: str | None = None
+    meaning_for_department: str | None = None
+    meaning_for_unit: str | None = None
+    is_active: bool | None = None
+
+
+# ------------------------------------------------------------------ 外部标识（D3）
+class UnitRef(BaseModel):
+    id: int
+    code: str
+    name: str
+
+
+class ExternalCodeLink(BaseModel):
+    """一条解释，从对象一侧看：哪本字典的哪个代码指向它。"""
+
+    assignment_id: int
+    external_code_id: int
+    system_code: str
+    system_name: str
+    namespace_code: str
+    namespace_name: str
+    code: str
+    source_name: str | None
+    campus_code: str | None
+    campus_name: str | None
+    valid_from: date
+    valid_to: date | None
+    evidence_note: str | None
+    change_id: int
+    via_unit: UnitRef | None = None
+    """经哪个服务单元得到（只在部门页的“关联单元编码”里出现）。"""
+
+
+class AssignmentOut(BaseModel):
+    """一条解释，从源记录一侧看。"""
+
+    id: int
+    target_type: str
+    department: DeptRef | None
+    service_unit: UnitRef | None
+    unmodeled_type: str | None
+    campus_code: str | None
+    campus_name: str | None
+    valid_from: date
+    valid_to: date | None
+    evidence_note: str | None
+    change_id: int
+    closed_change_id: int | None
+
+
+class ExternalCodeRow(BaseModel):
+    id: int
+    system_code: str
+    system_name: str
+    namespace_code: str
+    namespace_name: str
+    code: str
+    source_name: str | None
+    semantic_note: str | None
+    status: str
+    """查看日期当天：pending 待裁决 / mapped 已映射 / unmodeled 对象未建模。"""
+    current: list[AssignmentOut]
+    """查看日期当天有效的解释（按院区条件可有多条）。"""
+    assignment_count: int
+
+
+class ExternalCodePage(BaseModel):
+    total: int
+    counts: dict[str, int]
+    """当前筛选（不含状态）下各状态的数量：pending / mapped / unmodeled。"""
+    rows: list[ExternalCodeRow]
+
+
+class ExternalCodeDetail(ExternalCodeRow):
+    created_change_id: int
+    recorded_at: datetime
+    assignments: list[AssignmentOut]
+    """全部解释（含已结束），新到旧。"""
+
+
+class NamespaceOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    note: str | None
+    is_active: bool
+    code_count: int
+    pending_count: int
+    """查看日期当天的待裁决数。"""
+
+
+class SourceSystemOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    kind: str
+    note: str | None
+    is_active: bool
+    namespaces: list[NamespaceOut]
+
+
+class SourceSystemWrite(BaseModel):
+    """维护来源系统实例（配置）。code 新建后不可改。"""
+
+    code: str | None = None
+    name: str | None = None
+    kind: str | None = None
+    note: str | None = None
+    is_active: bool | None = None
+
+
+class NamespaceWrite(BaseModel):
+    """维护字典（配置）。code 新建后不可改。"""
+
+    code: str | None = None
+    name: str | None = None
+    note: str | None = None
+    is_active: bool | None = None
+
+
+ServiceUnitDetail.model_rebuild()
+DepartmentDetail.model_rebuild()

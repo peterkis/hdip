@@ -45,6 +45,7 @@ import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ExternalCodeLinks } from '@/components/external-code-links'
 import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
@@ -326,7 +327,7 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
 ]
 
 type Dialog = 'revise' | 'lifecycle' | 'classify' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation'
-type TabKey = 'props' | 'class' | 'org' | 'units' | 'history'
+type TabKey = 'props' | 'class' | 'org' | 'units' | 'history' | 'codes'
 
 export function DepartmentDetailPage() {
   const id = Number(useParams().id)
@@ -469,6 +470,7 @@ export function DepartmentDetailPage() {
           <TabsTrigger value="class">分类与归属</TabsTrigger>
           <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
           <TabsTrigger value="units">服务单元（{data.units.length}）</TabsTrigger>
+          <TabsTrigger value="codes">外部编码（{data.external_codes.length}）</TabsTrigger>
           <TabsTrigger value="history">版本与事件</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -633,6 +635,28 @@ export function DepartmentDetailPage() {
             <UnitsTable rows={data.units} hide={['department']} />
             <p className="text-fg-muted text-caption">部门在新院区开展服务 = 新建或重新绑定服务单元，部门身份不变。</p>
           </Section>
+        )}
+
+        {tab === 'codes' && (
+          <>
+            <Section
+              title="本部门的外部代码"
+              action={
+                <Link to="/standards/code-mapping" className="text-fg-muted hover:text-fg text-caption hover:underline">
+                  到编码映射台账维护
+                </Link>
+              }
+            >
+              <ExternalCodeLinks rows={data.external_codes} asOf={asOf} empty="没有外部代码的解释指向本部门" />
+              <p className="text-fg-muted text-caption">
+                这些代码标识的就是本部门。行政隶属、主分类调整都不改动身份映射；编辑统一在编码映射台账进行。
+              </p>
+            </Section>
+            <Section title={`关联单元编码（${asOf}，经服务单元得到）`}>
+              <ExternalCodeLinks rows={data.unit_external_codes} asOf={asOf} empty="本部门的服务单元当天没有外部代码" showUnit />
+              <p className="text-fg-muted text-caption">只读：这些代码标识的是服务单元，不是本部门的身份标识；按部门汇总时沿单元的所属部门得出。</p>
+            </Section>
+          </>
         )}
 
         {tab === 'history' && (

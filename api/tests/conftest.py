@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
+    "external_code_assignment, external_code, service_unit_classification, "
     "service_unit_lineage, service_unit_version, service_unit, "
     "department_hierarchy, department_relation, "
     "department_alias, department_classification, department_institution, department_version, "
@@ -56,6 +57,16 @@ def clean(owner_engine):
         c.execute(text("UPDATE approval_rule SET allow_self_confirm = true"))
         # 字典测试新增的代码（配置表不在 TRUNCATE 之列）
         c.execute(text("DELETE FROM classification_code WHERE code LIKE 'TEST\\_%'"))
+        # 测试登记的外部分类方案、来源系统与字典（配置，测试库里整表清空）
+        c.execute(
+            text(
+                "DELETE FROM classification_code WHERE scheme_id IN "
+                "(SELECT id FROM classification_scheme WHERE code LIKE 'TEST\\_%')"
+            )
+        )
+        c.execute(text("DELETE FROM classification_scheme WHERE code LIKE 'TEST\\_%'"))
+        c.execute(text("DELETE FROM code_namespace"))
+        c.execute(text("DELETE FROM source_system"))
     yield
 
 
@@ -83,6 +94,9 @@ class Api:
 
     def post(self, url, json=None, **kw):
         return self.client.post(url, json=json, headers=self._h(), **kw)
+
+    def patch(self, url, json=None, **kw):
+        return self.client.patch(url, json=json, headers=self._h(), **kw)
 
     def put(self, url, json=None, **kw):
         return self.client.put(url, json=json, headers=self._h(), **kw)

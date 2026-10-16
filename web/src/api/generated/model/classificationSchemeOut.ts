@@ -14,5 +14,7 @@ export interface ClassificationSchemeOut {
   purpose: string | null;
   is_exclusive: boolean;
   is_active: boolean;
+  meaning_for_department: string | null;
+  meaning_for_unit: string | null;
   codes: ClassificationCodeOut[];
 }

@@ -64,6 +64,39 @@ export const ESTABLISHMENT_FORM = {
 } as const
 export type EstablishmentForm = keyof typeof ESTABLISHMENT_FORM
 
+/** 外部代码的解释指向“对象未建模”时的对象类别（设计 D3） */
+export const UNMODELED_TYPE = {
+  NURSING_UNIT: '护理单元',
+  WARD: '病区',
+  LOCATION: '地点',
+  STAT_GROUP: '统计分组',
+  COMPOSITE: '旧系统复合记录',
+  OTHER: '其他',
+} as const
+export type UnmodeledType = keyof typeof UNMODELED_TYPE
+
+/** 外部代码在查看日期的状态：没有任何解释即待裁决 */
+export const CODE_STATUS = {
+  pending: '待裁决',
+  mapped: '已映射',
+  unmodeled: '对象未建模',
+} as const
+export type CodeStatus = keyof typeof CODE_STATUS
+
+export const TARGET_TYPE = {
+  department: '部门',
+  service_unit: '服务单元',
+  unmodeled: '对象未建模',
+} as const
+export type TargetType = keyof typeof TARGET_TYPE
+
+export const SOURCE_KIND = {
+  HIS: 'HIS',
+  MEDICAL_RECORD: '病案系统',
+  INTEROP: '互联互通',
+  OTHER: '其他',
+} as const
+
 export const CHANGE_STATUS = {
   draft: '草稿',
   submitted: '已提交',
@@ -124,6 +157,11 @@ export const FIELD_LABELS: Record<string, string> = {
   to_department: '对象部门',
   scope: '事项 / 范围',
   ended_links: '同时结束',
+  source_name: '源名称',
+  semantic_note: '含义说明',
+  assignment_id: '解释编号',
+  target: '指向',
+  evidence_note: '判定说明',
 }
 
 /** 选项表里的码值名称，按字段名索引：{ node_role: {HIGH_TECH: '高新院区'}, unit_type: {...} } */

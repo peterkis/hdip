@@ -1,7 +1,7 @@
 // 表单小件：带标签的输入、日期、下拉。值统一用字符串，空串表示未填。
 // 校验：表单 build() 返回 FieldErrors 时，对应字段（按 name 对应）同时标红、说明写在字段下方，
 // 焦点落到第一个出错字段；用户一改动，该字段的标记即消除（见 item-dialog.tsx）。
-import { createContext, useContext, useId, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
@@ -171,4 +171,14 @@ export function diffPatch<T extends Record<string, unknown>>(current: object, fo
     if (form[key] !== before) patch[key] = form[key]
   }
   return patch
+}
+
+/** 保存未通过时把焦点放到第一个标红的字段：在表单上挂 ref，校验失败后调用 focusFirst()。 */
+export function useFocusFirstInvalid() {
+  const ref = useRef<HTMLFormElement>(null)
+  const [tick, setTick] = useState(0)
+  useEffect(() => {
+    if (tick) ref.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
+  }, [tick])
+  return { ref, focusFirst: () => setTick((t) => t + 1) }
 }

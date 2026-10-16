@@ -85,10 +85,10 @@ def unit_item(kind, code, effective_date, **kw):
 
 
 def world():
-    """本院 + 高新两个院区，都由成都市第三人民医院主要运营。"""
+    """本部 + 高新两个院区，都由成都市第三人民医院主要运营。"""
     return [
         inst_create(),
-        campus_create(code="BY", name="本院院区", valid_from="2020-01-01", status="RUNNING"),
+        campus_create(code="BY", name="本部院区", valid_from="2020-01-01", status="RUNNING"),
         relation_create(campus="BY", valid_from="2020-01-01"),
         campus_create(code="GX", name="高新院区", valid_from="2026-10-01"),
         relation_create(campus="GX", valid_from="2026-10-01"),
@@ -150,4 +150,80 @@ def dept_relation(kind, frm, scope, day="2026-01-01", to=None, campus=None, vali
         "scope": scope,
         "valid_from": day,
         "valid_to": valid_to,
+    }
+
+
+# ------------------------------------------------------------------ 外部标识与分类关联（D3）
+def setup_ledger(api, system="HIS", namespace="DEPT", name="科室字典"):
+    """登记来源系统与字典（配置，维护人直接维护）。"""
+    r = api.as_("maintainer").post(
+        "/api/dictionary/source-systems",
+        {"code": system, "name": f"{system} 本院实例", "kind": "HIS"},
+    )
+    assert r.status_code == 200, r.text
+    r = api.as_("maintainer").post(
+        f"/api/dictionary/source-systems/{r.json()['id']}/namespaces",
+        {"code": namespace, "name": name},
+    )
+    assert r.status_code == 200, r.text
+    return next(n for n in r.json()["namespaces"] if n["code"] == namespace)
+
+
+def ext_register(code, source_name=None, system="HIS", namespace="DEPT", **kw):
+    return {
+        "kind": "external_code.register",
+        "system_code": system,
+        "namespace_code": namespace,
+        "external_code": code,
+        "source_name": source_name,
+        **kw,
+    }
+
+
+def ext_assign(code, valid_from="2026-01-01", system="HIS", namespace="DEPT", **kw):
+    """kw: department_code= / service_unit_code= / unmodeled_type=，以及 campus_code、valid_to。"""
+    target_type = (
+        "department"
+        if "department_code" in kw
+        else "service_unit"
+        if "service_unit_code" in kw
+        else "unmodeled"
+    )
+    return {
+        "kind": "external_code.assign",
+        "system_code": system,
+        "namespace_code": namespace,
+        "external_code": code,
+        "target_type": target_type,
+        "valid_from": valid_from,
+        **kw,
+    }
+
+
+def ext_close(assignment_id, valid_to):
+    return {
+        "kind": "external_code.assignment_close",
+        "assignment_id": assignment_id,
+        "valid_to": valid_to,
+    }
+
+
+def unit_classify(code, scheme, class_code, day):
+    return unit_item("classify", code, day, scheme_code=scheme, class_code=class_code)
+
+
+def ledger(api, as_of=None, **params):
+    """台账行：代码 → (状态, [解释指向的对象代码或未建模类型])。"""
+    if as_of:
+        params["as_of"] = as_of
+    page = api.get("/api/external-codes", params=params).json()
+    return {
+        r["code"]: (
+            r["status"],
+            [
+                (a["department"] or a["service_unit"] or {}).get("code") or a["unmodeled_type"]
+                for a in r["current"]
+            ],
+        )
+        for r in page["rows"]
     }

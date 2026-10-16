@@ -10,6 +10,9 @@ import {
   UnitReviseDialog,
   UnitStatusDialog,
 } from '@/components/forms/unit-forms'
+import { ExternalCodeLinks } from '@/components/external-code-links'
+import { UnitClassifyDialog } from '@/components/forms/code-forms'
+import { Tag } from '@/components/kit/tag'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -31,7 +34,7 @@ const UNIT_FIELDS: (keyof ServiceUnitVersionOut)[] = [
   'scope_note',
 ]
 
-type UnitDialog = 'revise' | 'rebind' | 'department' | 'status' | 'retire'
+type UnitDialog = 'revise' | 'rebind' | 'department' | 'status' | 'retire' | 'classify'
 
 export function ServiceUnitDetailPage() {
   const id = Number(useParams().id)
@@ -153,6 +156,52 @@ export function ServiceUnitDetailPage() {
           </CardContent>
         </Card>
         <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>分类</CardTitle>
+            {isMaintainer && !retired && (
+              <Button size="sm" variant="outline" onClick={() => setDialog('classify')}>
+                设置分类
+              </Button>
+            )}
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {data.classifications.length === 0 ? (
+              <p className="text-fg-disabled text-xs">没有分类。所属部门的分类不会自动下发给单元。</p>
+            ) : (
+              <ul className="grid gap-1 text-xs">
+                {data.classifications.map((c) => {
+                  const current = c.valid_from <= asOf && (c.valid_to === null || c.valid_to >= asOf)
+                  return (
+                    <li key={c.id} className={current ? '' : 'text-fg-muted'}>
+                      <span className="text-fg-secondary">{c.scheme_name}：</span>
+                      <Tag tone={current ? 'blue' : 'gray'}>
+                        {c.code} {c.name}
+                      </Tag>
+                      <span className="ml-2">
+                        {c.valid_from} → {c.valid_to ?? '长期'}
+                      </span>
+                      <Link to={`/changes/${c.change_id}`} className="text-fg-secondary ml-2 hover:underline">
+                        #{c.change_id}
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>外部编码</CardTitle>
+            <Link to="/standards/code-mapping" className="text-fg-muted hover:text-fg text-caption hover:underline">
+              到编码映射台账维护
+            </Link>
+          </CardHeader>
+          <CardContent>
+            <ExternalCodeLinks rows={data.external_codes} asOf={asOf} empty="没有外部代码的解释指向本单元" />
+          </CardContent>
+        </Card>
+        <Card>
           <CardHeader>
             <CardTitle>版本时间线</CardTitle>
           </CardHeader>
@@ -169,6 +218,7 @@ export function ServiceUnitDetailPage() {
       {dialog === 'department' && <UnitChangeDepartmentDialog {...dialogProps} />}
       {dialog === 'status' && <UnitStatusDialog {...dialogProps} />}
       {dialog === 'retire' && <UnitRetireDialog {...dialogProps} />}
+      {dialog === 'classify' && <UnitClassifyDialog open onOpenChange={close} code={data.code} name={latest.name} />}
     </>
   )
 }

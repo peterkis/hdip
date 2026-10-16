@@ -11,6 +11,7 @@ import {
   GridViewIcon,
   Hospital01Icon,
   IdentityCardIcon,
+  Link04Icon,
   Location01Icon,
   Stethoscope02Icon,
   Tag01Icon,
@@ -71,6 +72,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Database01Icon,
     items: [
       { label: '分类方案', icon: Tag01Icon, to: '/dictionary/classification' },
+      { label: '编码映射台账', icon: Link04Icon, to: '/standards/code-mapping' },
       { label: '标准数据集', icon: Database01Icon, planned: 'standard-datasets' },
       { label: '数据元', icon: Blocks, planned: 'data-elements' },
       { label: '数据目录', icon: FolderLibraryIcon, planned: 'data-catalog' },

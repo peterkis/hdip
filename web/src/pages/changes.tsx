@@ -446,6 +446,8 @@ function describeItem(item: ChangeRequestOut['items'][number]): string {
   if ('code' in item) return item.code
   if (item.kind === 'operator_relation.create') return `${item.institution_code} → ${item.campus_code}`
   if (item.kind === 'operator_relation.close') return `运营关系 #${item.relation_id}`
+  if ('external_code' in item) return `${item.system_code}/${item.namespace_code} ${item.external_code}`
+  if (item.kind === 'external_code.assignment_close') return `解释 #${item.assignment_id}`
   return ''
 }
 

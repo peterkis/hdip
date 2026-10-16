@@ -17,8 +17,13 @@ import type {
 import type {
   ClassificationCodeCreate,
   ClassificationCodeWrite,
+  ClassificationSchemeCreate,
   ClassificationSchemeOut,
-  Problem
+  ClassificationSchemeWrite,
+  NamespaceWrite,
+  Problem,
+  SourceSystemOut,
+  SourceSystemWrite
 } from '../model';
 
 import { hdipFetch } from '../../fetcher';
@@ -205,4 +210,534 @@ export const useUpdateClassificationCode = <TError = Problem,
         TContext
       > => {
       return useMutation(getUpdateClassificationCodeMutationOptions(options), queryClient);
+    }
+    export const getCreateClassificationSchemeUrl = () => {
+
+
+
+
+  return `/api/dictionary/classification-schemes`
+}
+
+/**
+ * 登记一个分类方案（如外部分类体系）。用在部门 / 服务单元上的含义为空表示不适用。
+ * @summary Create Scheme
+ */
+export const createClassificationScheme = async (classificationSchemeCreate: ClassificationSchemeCreate, options?: Parameters<typeof hdipFetch>[1]): Promise<ClassificationSchemeOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<ClassificationSchemeOut>(getCreateClassificationSchemeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(classificationSchemeCreate)
+  }
+);}
+
+
+
+
+
+export const getCreateClassificationSchemeMutationKey = () => ['createClassificationScheme'] as const;
+
+export const getCreateClassificationSchemeMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClassificationScheme>>, TError,CreateClassificationSchemeMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClassificationScheme>>, TError,CreateClassificationSchemeMutationVariables, TContext> => {
+
+const mutationKey = getCreateClassificationSchemeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClassificationScheme>>, CreateClassificationSchemeMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClassificationScheme(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClassificationSchemeMutationResult = NonNullable<Awaited<ReturnType<typeof createClassificationScheme>>>
+    export type CreateClassificationSchemeMutationBody = ClassificationSchemeCreate
+    export type CreateClassificationSchemeMutationError = Problem
+    export type CreateClassificationSchemeMutationVariables = {data: ClassificationSchemeCreate}
+
+    /**
+ * @summary Create Scheme
+ */
+export const useCreateClassificationScheme = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClassificationScheme>>, TError,CreateClassificationSchemeMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createClassificationScheme>>,
+        TError,
+        CreateClassificationSchemeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateClassificationSchemeMutationOptions(options), queryClient);
+    }
+    export const getUpdateClassificationSchemeUrl = (schemeCode: string,) => {
+
+
+
+
+  return `/api/dictionary/classification-schemes/${schemeCode}`
+}
+
+/**
+ * 修改方案名称、用途、用于部门 / 单元时的含义，或停用 / 恢复。代码与单选属性不可改。
+ * @summary Update Scheme
+ */
+export const updateClassificationScheme = async (schemeCode: string,
+    classificationSchemeWrite: ClassificationSchemeWrite, options?: Parameters<typeof hdipFetch>[1]): Promise<ClassificationSchemeOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<ClassificationSchemeOut>(getUpdateClassificationSchemeUrl(schemeCode),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(classificationSchemeWrite)
+  }
+);}
+
+
+
+
+
+export const getUpdateClassificationSchemeMutationKey = () => ['updateClassificationScheme'] as const;
+
+export const getUpdateClassificationSchemeMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClassificationScheme>>, TError,UpdateClassificationSchemeMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateClassificationScheme>>, TError,UpdateClassificationSchemeMutationVariables, TContext> => {
+
+const mutationKey = getUpdateClassificationSchemeMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateClassificationScheme>>, UpdateClassificationSchemeMutationVariables> = (props) => {
+          const {schemeCode,data} = props ?? {};
+
+          return  updateClassificationScheme(schemeCode,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateClassificationSchemeMutationResult = NonNullable<Awaited<ReturnType<typeof updateClassificationScheme>>>
+    export type UpdateClassificationSchemeMutationBody = ClassificationSchemeWrite
+    export type UpdateClassificationSchemeMutationError = Problem
+    export type UpdateClassificationSchemeMutationVariables = {schemeCode: string;data: ClassificationSchemeWrite}
+
+    /**
+ * @summary Update Scheme
+ */
+export const useUpdateClassificationScheme = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateClassificationScheme>>, TError,UpdateClassificationSchemeMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateClassificationScheme>>,
+        TError,
+        UpdateClassificationSchemeMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateClassificationSchemeMutationOptions(options), queryClient);
+    }
+    export const getCreateSourceSystemUrl = () => {
+
+
+
+
+  return `/api/dictionary/source-systems`
+}
+
+/**
+ * 登记一个来源系统实例。同一厂商的多个实例（如各院区账套）分别登记。
+ * @summary Create Source System
+ */
+export const createSourceSystem = async (sourceSystemWrite: SourceSystemWrite, options?: Parameters<typeof hdipFetch>[1]): Promise<SourceSystemOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<SourceSystemOut>(getCreateSourceSystemUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sourceSystemWrite)
+  }
+);}
+
+
+
+
+
+export const getCreateSourceSystemMutationKey = () => ['createSourceSystem'] as const;
+
+export const getCreateSourceSystemMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceSystem>>, TError,CreateSourceSystemMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSourceSystem>>, TError,CreateSourceSystemMutationVariables, TContext> => {
+
+const mutationKey = getCreateSourceSystemMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSourceSystem>>, CreateSourceSystemMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSourceSystem(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSourceSystemMutationResult = NonNullable<Awaited<ReturnType<typeof createSourceSystem>>>
+    export type CreateSourceSystemMutationBody = SourceSystemWrite
+    export type CreateSourceSystemMutationError = Problem
+    export type CreateSourceSystemMutationVariables = {data: SourceSystemWrite}
+
+    /**
+ * @summary Create Source System
+ */
+export const useCreateSourceSystem = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSourceSystem>>, TError,CreateSourceSystemMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createSourceSystem>>,
+        TError,
+        CreateSourceSystemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateSourceSystemMutationOptions(options), queryClient);
+    }
+    export const getUpdateSourceSystemUrl = (systemId: number,) => {
+
+
+
+
+  return `/api/dictionary/source-systems/${systemId}`
+}
+
+/**
+ * @summary Update Source System
+ */
+export const updateSourceSystem = async (systemId: number,
+    sourceSystemWrite: SourceSystemWrite, options?: Parameters<typeof hdipFetch>[1]): Promise<SourceSystemOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<SourceSystemOut>(getUpdateSourceSystemUrl(systemId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(sourceSystemWrite)
+  }
+);}
+
+
+
+
+
+export const getUpdateSourceSystemMutationKey = () => ['updateSourceSystem'] as const;
+
+export const getUpdateSourceSystemMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSourceSystem>>, TError,UpdateSourceSystemMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSourceSystem>>, TError,UpdateSourceSystemMutationVariables, TContext> => {
+
+const mutationKey = getUpdateSourceSystemMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSourceSystem>>, UpdateSourceSystemMutationVariables> = (props) => {
+          const {systemId,data} = props ?? {};
+
+          return  updateSourceSystem(systemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSourceSystemMutationResult = NonNullable<Awaited<ReturnType<typeof updateSourceSystem>>>
+    export type UpdateSourceSystemMutationBody = SourceSystemWrite
+    export type UpdateSourceSystemMutationError = Problem
+    export type UpdateSourceSystemMutationVariables = {systemId: number;data: SourceSystemWrite}
+
+    /**
+ * @summary Update Source System
+ */
+export const useUpdateSourceSystem = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSourceSystem>>, TError,UpdateSourceSystemMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSourceSystem>>,
+        TError,
+        UpdateSourceSystemMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateSourceSystemMutationOptions(options), queryClient);
+    }
+    export const getCreateCodeNamespaceUrl = (systemId: number,) => {
+
+
+
+
+  return `/api/dictionary/source-systems/${systemId}/namespaces`
+}
+
+/**
+ * 在来源系统里登记一本字典。字典不限定只能映射到某一种对象，混装字典逐条判断。
+ * @summary Create Namespace
+ */
+export const createCodeNamespace = async (systemId: number,
+    namespaceWrite: NamespaceWrite, options?: Parameters<typeof hdipFetch>[1]): Promise<SourceSystemOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<SourceSystemOut>(getCreateCodeNamespaceUrl(systemId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(namespaceWrite)
+  }
+);}
+
+
+
+
+
+export const getCreateCodeNamespaceMutationKey = () => ['createCodeNamespace'] as const;
+
+export const getCreateCodeNamespaceMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCodeNamespace>>, TError,CreateCodeNamespaceMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCodeNamespace>>, TError,CreateCodeNamespaceMutationVariables, TContext> => {
+
+const mutationKey = getCreateCodeNamespaceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCodeNamespace>>, CreateCodeNamespaceMutationVariables> = (props) => {
+          const {systemId,data} = props ?? {};
+
+          return  createCodeNamespace(systemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCodeNamespaceMutationResult = NonNullable<Awaited<ReturnType<typeof createCodeNamespace>>>
+    export type CreateCodeNamespaceMutationBody = NamespaceWrite
+    export type CreateCodeNamespaceMutationError = Problem
+    export type CreateCodeNamespaceMutationVariables = {systemId: number;data: NamespaceWrite}
+
+    /**
+ * @summary Create Namespace
+ */
+export const useCreateCodeNamespace = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCodeNamespace>>, TError,CreateCodeNamespaceMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createCodeNamespace>>,
+        TError,
+        CreateCodeNamespaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateCodeNamespaceMutationOptions(options), queryClient);
+    }
+    export const getUpdateCodeNamespaceUrl = (namespaceId: number,) => {
+
+
+
+
+  return `/api/dictionary/code-namespaces/${namespaceId}`
+}
+
+/**
+ * @summary Update Namespace
+ */
+export const updateCodeNamespace = async (namespaceId: number,
+    namespaceWrite: NamespaceWrite, options?: Parameters<typeof hdipFetch>[1]): Promise<SourceSystemOut> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return hdipFetch<SourceSystemOut>(getUpdateCodeNamespaceUrl(namespaceId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(namespaceWrite)
+  }
+);}
+
+
+
+
+
+export const getUpdateCodeNamespaceMutationKey = () => ['updateCodeNamespace'] as const;
+
+export const getUpdateCodeNamespaceMutationOptions = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCodeNamespace>>, TError,UpdateCodeNamespaceMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCodeNamespace>>, TError,UpdateCodeNamespaceMutationVariables, TContext> => {
+
+const mutationKey = getUpdateCodeNamespaceMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCodeNamespace>>, UpdateCodeNamespaceMutationVariables> = (props) => {
+          const {namespaceId,data} = props ?? {};
+
+          return  updateCodeNamespace(namespaceId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCodeNamespaceMutationResult = NonNullable<Awaited<ReturnType<typeof updateCodeNamespace>>>
+    export type UpdateCodeNamespaceMutationBody = NamespaceWrite
+    export type UpdateCodeNamespaceMutationError = Problem
+    export type UpdateCodeNamespaceMutationVariables = {namespaceId: number;data: NamespaceWrite}
+
+    /**
+ * @summary Update Namespace
+ */
+export const useUpdateCodeNamespace = <TError = Problem,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCodeNamespace>>, TError,UpdateCodeNamespaceMutationVariables, TContext>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateCodeNamespace>>,
+        TError,
+        UpdateCodeNamespaceMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateCodeNamespaceMutationOptions(options), queryClient);
     }

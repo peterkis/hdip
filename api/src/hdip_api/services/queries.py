@@ -16,6 +16,7 @@ from hdip_api.models import (
     ChangeRequest,
     ClassificationCode,
     ClassificationScheme,
+    CodeNamespace,
     Department,
     DepartmentAlias,
     DepartmentClassification,
@@ -23,16 +24,21 @@ from hdip_api.models import (
     DepartmentInstitution,
     DepartmentRelation,
     DepartmentVersion,
+    ExternalCode,
+    ExternalCodeAssignment,
     Institution,
     InstitutionVersion,
     OperatorRelation,
     OrgView,
     ServiceUnit,
+    ServiceUnitClassification,
     ServiceUnitLineage,
     ServiceUnitVersion,
+    SourceSystem,
 )
 from hdip_api.schemas.items import KIND_LABELS
 from hdip_api.schemas.read import (
+    AssignmentOut,
     CampusDetail,
     CampusRow,
     CampusVersionOut,
@@ -50,11 +56,16 @@ from hdip_api.schemas.read import (
     DepartmentRow,
     DepartmentVersionOut,
     DeptRef,
+    ExternalCodeDetail,
+    ExternalCodeLink,
+    ExternalCodePage,
+    ExternalCodeRow,
     InstitutionDetail,
     InstitutionRow,
     InstitutionVersionOut,
     ItemOutcome,
     LineageOut,
+    NamespaceOut,
     OrgViewOut,
     Permissions,
     PrimaryOperator,
@@ -62,6 +73,8 @@ from hdip_api.schemas.read import (
     ServiceUnitDetail,
     ServiceUnitRow,
     ServiceUnitVersionOut,
+    SourceSystemOut,
+    UnitRef,
     UserRef,
 )
 from hdip_api.services import workflow
@@ -341,6 +354,17 @@ def get_service_unit(s: Session, unit_id: int, as_of: date) -> ServiceUnitDetail
         versions=[names.version_out(v) for v in versions],
         predecessors=list_lineage(s, successor_id=unit.id),
         successors=list_lineage(s, predecessor_id=unit.id),
+        classifications=_classifications_out(
+            s,
+            s.scalars(
+                select(ServiceUnitClassification)
+                .where(ServiceUnitClassification.service_unit_id == unit.id)
+                .order_by(ServiceUnitClassification.valid_from.desc())
+            ).all(),
+        ),
+        external_codes=_Codes(s, as_of).links(
+            lambda a: a.target_type == "service_unit" and a.service_unit_id == unit.id
+        ),
     )
 
 
@@ -564,23 +588,16 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
         ),
         reverse=True,
     )
+    units = list_service_units(s, as_of, department_id=d.id)
+    unit_ids = {u.id for u in units}
+    codes = _Codes(s, as_of)
     return DepartmentDetail(
         id=d.id,
         code=d.code,
         created_at=d.created_at,
         created_change_id=d.created_change_id,
         versions=[_dept_version_out(v, users) for v in versions],
-        classifications=[
-            DepartmentClassificationOut(
-                **names.ref(c.scheme_id, c.code).model_dump(),
-                id=c.id,
-                valid_from=c.valid_from,
-                valid_to=c.valid_to,
-                change_id=c.change_id,
-                closed_change_id=c.closed_change_id,
-            )
-            for c in classes
-        ],
+        classifications=_classifications_out(s, classes, names),
         affiliations=[
             DepartmentAffiliationOut(
                 id=a.id,
@@ -605,7 +622,7 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
             )
             for a in aliases
         ],
-        units=list_service_units(s, as_of, department_id=d.id),
+        units=units,
         level=org.level(d.id),
         path=[org.ref(x) for x in org.path(d.id)],
         parents=[
@@ -639,7 +656,29 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
             for r in relations
         ],
         change_ids=change_ids,
+        external_codes=codes.links(
+            lambda a: a.target_type == "department" and a.department_id == d.id
+        ),
+        unit_external_codes=codes.links(
+            lambda a: a.target_type == "service_unit" and a.service_unit_id in unit_ids,
+            current_only=True,
+        ),
     )
+
+
+def _classifications_out(s: Session, rows, names: "_ClassNames | None" = None):
+    names = names or _ClassNames(s)
+    return [
+        DepartmentClassificationOut(
+            **names.ref(c.scheme_id, c.code).model_dump(),
+            id=c.id,
+            valid_from=c.valid_from,
+            valid_to=c.valid_to,
+            change_id=c.change_id,
+            closed_change_id=c.closed_change_id,
+        )
+        for c in rows
+    ]
 
 
 # ------------------------------------------------------------------ 分类字典与组织视图
@@ -657,6 +696,8 @@ def list_classification_schemes(s: Session) -> list[ClassificationSchemeOut]:
             purpose=sc.purpose,
             is_exclusive=sc.is_exclusive,
             is_active=sc.is_active,
+            meaning_for_department=sc.meaning_for_department,
+            meaning_for_unit=sc.meaning_for_unit,
             codes=[
                 ClassificationCodeOut(
                     id=c.id,
@@ -681,6 +722,209 @@ def list_org_views(s: Session) -> list[OrgViewOut]:
         OrgViewOut(code=v.code, name=v.name, purpose=v.purpose, status=v.status)
         for v in s.scalars(select(OrgView).order_by(OrgView.sort_order))
     ]
+
+
+# ------------------------------------------------------------------ 外部标识（D3）
+class _Codes:
+    """来源系统、字典、源记录与解释（台账量在几千条以内，取全量在内存里挑选）。"""
+
+    def __init__(self, s: Session, as_of: date) -> None:
+        self.as_of = as_of
+        self.systems = {x.id: x for x in s.scalars(select(SourceSystem))}
+        self.namespaces = {x.id: x for x in s.scalars(select(CodeNamespace))}
+        self.codes = {x.id: x for x in s.scalars(select(ExternalCode))}
+        self.assignments: dict[int, list[ExternalCodeAssignment]] = defaultdict(list)
+        for a in s.scalars(
+            select(ExternalCodeAssignment).order_by(
+                ExternalCodeAssignment.valid_from.desc(), ExternalCodeAssignment.id.desc()
+            )
+        ):
+            self.assignments[a.external_code_id].append(a)
+        self._s = s
+        self._names: _UnitNames | None = None
+        self._unit_v: dict[int, list] | None = None
+        self._campus_v = _versions_by(s, CampusVersion, "campus_id")
+        self._campus_codes = {c.id: c.code for c in s.scalars(select(Campus))}
+
+    def _dept(self, dept_id: int) -> DeptRef:
+        if self._names is None:
+            self._names = _UnitNames(self._s, self.as_of)
+        d = self._names.departments[dept_id]
+        return DeptRef(id=d.id, code=d.code, name=_name_on(self._names.dept_v[d.id], self.as_of))
+
+    def _unit(self, unit_id: int) -> UnitRef:
+        if self._unit_v is None:
+            self._unit_v = _versions_by(self._s, ServiceUnitVersion, "service_unit_id")
+        unit = self._s.get(ServiceUnit, unit_id)
+        return UnitRef(id=unit.id, code=unit.code, name=_name_on(self._unit_v[unit.id], self.as_of))
+
+    def _campus(self, campus_id: int | None) -> tuple[str | None, str | None]:
+        if campus_id is None:
+            return None, None
+        return self._campus_codes[campus_id], _name_on(self._campus_v[campus_id], self.as_of)
+
+    def assignment_out(self, a: ExternalCodeAssignment) -> AssignmentOut:
+        campus_code, campus_name = self._campus(a.campus_id)
+        return AssignmentOut(
+            id=a.id,
+            target_type=a.target_type,
+            department=self._dept(a.department_id) if a.department_id else None,
+            service_unit=self._unit(a.service_unit_id) if a.service_unit_id else None,
+            unmodeled_type=a.unmodeled_type,
+            campus_code=campus_code,
+            campus_name=campus_name,
+            valid_from=a.valid_from,
+            valid_to=a.valid_to,
+            evidence_note=a.evidence_note,
+            change_id=a.change_id,
+            closed_change_id=a.closed_change_id,
+        )
+
+    def current(self, code_id: int) -> list[ExternalCodeAssignment]:
+        return _rows_on(self.assignments[code_id], self.as_of)
+
+    def status(self, code_id: int) -> str:
+        cur = self.current(code_id)
+        if not cur:
+            return "pending"
+        if all(a.target_type == "unmodeled" for a in cur):
+            return "unmodeled"
+        return "mapped"
+
+    def row(self, ec: ExternalCode) -> dict:
+        ns = self.namespaces[ec.namespace_id]
+        system = self.systems[ns.source_system_id]
+        return {
+            "id": ec.id,
+            "system_code": system.code,
+            "system_name": system.name,
+            "namespace_code": ns.code,
+            "namespace_name": ns.name,
+            "code": ec.code,
+            "source_name": ec.source_name,
+            "semantic_note": ec.semantic_note,
+            "status": self.status(ec.id),
+            "current": [self.assignment_out(a) for a in self.current(ec.id)],
+            "assignment_count": len(self.assignments[ec.id]),
+        }
+
+    def links(self, match, current_only: bool = False) -> list[ExternalCodeLink]:
+        out = []
+        for code_id, rows in self.assignments.items():
+            ec = self.codes[code_id]
+            ns = self.namespaces[ec.namespace_id]
+            system = self.systems[ns.source_system_id]
+            for a in rows:
+                if not match(a):
+                    continue
+                if current_only and not covers(a.valid_from, a.valid_to, self.as_of):
+                    continue
+                campus_code, campus_name = self._campus(a.campus_id)
+                out.append(
+                    ExternalCodeLink(
+                        assignment_id=a.id,
+                        external_code_id=ec.id,
+                        system_code=system.code,
+                        system_name=system.name,
+                        namespace_code=ns.code,
+                        namespace_name=ns.name,
+                        code=ec.code,
+                        source_name=ec.source_name,
+                        campus_code=campus_code,
+                        campus_name=campus_name,
+                        valid_from=a.valid_from,
+                        valid_to=a.valid_to,
+                        evidence_note=a.evidence_note,
+                        change_id=a.change_id,
+                        via_unit=self._unit(a.service_unit_id) if a.service_unit_id else None,
+                    )
+                )
+        out.sort(key=lambda x: (x.system_code, x.namespace_code, x.code, -x.valid_from.toordinal()))
+        return out
+
+
+def list_source_systems(s: Session, as_of: date) -> list[SourceSystemOut]:
+    codes = _Codes(s, as_of)
+    per_ns: dict[int, list[int]] = defaultdict(list)
+    for ec in codes.codes.values():
+        per_ns[ec.namespace_id].append(ec.id)
+    out = []
+    for system in sorted(codes.systems.values(), key=lambda x: x.id):
+        namespaces = [
+            NamespaceOut(
+                id=ns.id,
+                code=ns.code,
+                name=ns.name,
+                note=ns.note,
+                is_active=ns.is_active,
+                code_count=len(per_ns[ns.id]),
+                pending_count=sum(1 for i in per_ns[ns.id] if not codes.current(i)),
+            )
+            for ns in sorted(codes.namespaces.values(), key=lambda x: x.id)
+            if ns.source_system_id == system.id
+        ]
+        out.append(
+            SourceSystemOut(
+                id=system.id,
+                code=system.code,
+                name=system.name,
+                kind=system.kind,
+                note=system.note,
+                is_active=system.is_active,
+                namespaces=namespaces,
+            )
+        )
+    return out
+
+
+def list_external_codes(
+    s: Session,
+    as_of: date,
+    *,
+    namespace_id: int | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> ExternalCodePage:
+    codes = _Codes(s, as_of)
+    needle = (q or "").strip().lower()
+    picked = []
+    for ec in sorted(codes.codes.values(), key=lambda x: (x.namespace_id, x.code)):
+        if namespace_id is not None and ec.namespace_id != namespace_id:
+            continue
+        if (
+            needle
+            and needle not in ec.code.lower()
+            and needle not in (ec.source_name or "").lower()
+        ):
+            continue
+        picked.append(ec)
+    counts = {"pending": 0, "mapped": 0, "unmodeled": 0}
+    filtered = []
+    for ec in picked:
+        st = codes.status(ec.id)
+        counts[st] += 1
+        if status is None or st == status:
+            filtered.append(ec)
+    return ExternalCodePage(
+        total=len(filtered),
+        counts=counts,
+        rows=[ExternalCodeRow(**codes.row(ec)) for ec in filtered[offset : offset + limit]],
+    )
+
+
+def get_external_code(s: Session, code_id: int, as_of: date) -> ExternalCodeDetail:
+    codes = _Codes(s, as_of)
+    ec = codes.codes.get(code_id)
+    if ec is None:
+        raise NotFound("外部代码不存在")
+    return ExternalCodeDetail(
+        **codes.row(ec),
+        created_change_id=ec.created_change_id,
+        recorded_at=ec.recorded_at,
+        assignments=[codes.assignment_out(a) for a in codes.assignments[ec.id]],
+    )
 
 
 # ------------------------------------------------------------------ 变更申请

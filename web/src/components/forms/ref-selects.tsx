@@ -2,7 +2,7 @@
 // 选项 = 查看日期当天可选的已有对象 + 本张草稿里新建的对象（标“本申请新建”），
 // 所以“新建部门 + 改挂单元”可以在同一张申请里完成。必须放在 ItemDialog 内使用。
 import { useEffect, useRef } from 'react'
-import { useListCampuses, useListDepartments, useListInstitutions } from '@/api/generated/master/master'
+import { useListCampuses, useListDepartments, useListInstitutions, useListServiceUnits } from '@/api/generated/master/master'
 import { SelectField, type Option } from '@/components/forms/fields'
 import { useDraftItems } from '@/components/forms/item-dialog'
 import { useApp } from '@/lib/app-context'
@@ -55,7 +55,7 @@ export function CampusSelect(p: RefProps) {
     ...data.filter((c) => c.version.operating_status !== 'SUSPENDED').map((c) => ({ value: c.code, label: c.version.name })),
     ...draft.flatMap((i) => (i.kind === 'campus.create' ? [{ value: i.code, label: `${i.fields.name}${NEW}` }] : [])),
   ]
-  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder="请选择院区" />
+  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder={p.placeholder ?? '请选择院区'} />
 }
 
 /**
@@ -101,4 +101,16 @@ export function InstitutionSelect({ campusCode, ...p }: RefProps & { campusCode?
       hint={p.hint ?? (isAuto && campusCode ? '已按所属院区带出主要运营方，可改选' : undefined)}
     />
   )
+}
+
+/** 服务单元：查看日期当天有效或计划中的单元，名称后附院区，便于区分同名单元 */
+export function UnitSelect(p: RefProps) {
+  const { asOf } = useApp()
+  const draft = useDraftItems()
+  const { data = [] } = useListServiceUnits({ as_of: asOf })
+  const options: Option[] = [
+    ...data.map((u) => ({ value: u.code, label: `${u.version.name}（${u.version.campus_name}）` })),
+    ...draft.flatMap((i) => (i.kind === 'service_unit.create' ? [{ value: i.code, label: `${i.fields.name}${NEW}` }] : [])),
+  ]
+  return <SelectField {...p} options={withExclude(options, p.exclude)} placeholder={p.placeholder ?? '请选择服务单元'} />
 }

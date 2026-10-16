@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0007**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0008**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -8,7 +8,8 @@
 - **配置与用户**：[`app_user`](#app_user)、[`option_item`](#option_item)、[`approval_rule`](#approval_rule)
 - **变更申请**：[`change_request`](#change_request)
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
-- **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)
+- **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
+- **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -437,6 +438,8 @@
 | `is_active` | boolean | 是 | true |  |
 | `updated_by` | bigint |  |  | → `app_user` |
 | `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `meaning_for_department` | text |  |  |  |
+| `meaning_for_unit` | text |  |  |  |
 
 约束：
 
@@ -447,7 +450,7 @@
 
 触发器：
 
-- `classification_scheme_guard`：`CREATE TRIGGER classification_scheme_guard BEFORE UPDATE ON public.classification_scheme FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'purpose', 'is_active', 'updated_by', 'updated_at')`
+- `classification_scheme_guard`：`CREATE TRIGGER classification_scheme_guard BEFORE UPDATE ON public.classification_scheme FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'purpose', 'is_active', 'meaning_for_department', 'meaning_for_unit', 'updated_by', 'updated_at')`
 
 ### classification_code
 
@@ -470,7 +473,7 @@
 
 - `classification_code_pkey`（主键）：`PRIMARY KEY (id)`
 - `classification_code_uniq`（唯一）：`UNIQUE (scheme_id, code)`
-- `classification_code_code_check`（检查）：`CHECK ((code ~ '^[A-Z][A-Z0-9_]{0,63}$'::text))`
+- `classification_code_code_check`（检查）：`CHECK ((code ~ '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$'::text))`
 - `classification_code_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
 
 触发器：
@@ -661,6 +664,158 @@
 
 - `service_unit_lineage_guard`：`CREATE TRIGGER service_unit_lineage_guard BEFORE UPDATE ON public.service_unit_lineage FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
+### service_unit_classification
+
+服务单元分类赋值（与部门分类相互独立，不下发）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `service_unit_id` | bigint | 是 |  | → `service_unit` |
+| `scheme_id` | bigint | 是 |  |  |
+| `is_exclusive` | boolean | 是 |  |  |
+| `code` | text | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `service_unit_classification_pkey`（主键）：`PRIMARY KEY (id)`
+- `service_unit_classification_dup_excl`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, scheme_id WITH =, code WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `service_unit_classification_exclusive_excl`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, scheme_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE (is_exclusive)`
+- `service_unit_classification_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+
+索引：
+
+- `service_unit_classification_unit_idx`：`CREATE INDEX service_unit_classification_unit_idx ON public.service_unit_classification USING btree (service_unit_id)`
+
+触发器：
+
+- `service_unit_classification_guard`：`CREATE TRIGGER service_unit_classification_guard BEFORE UPDATE ON public.service_unit_classification FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
+## 外部标识（编码映射台账）
+
+### source_system
+
+来源系统实例（配置，维护人直接维护）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `kind` | text | 是 |  |  |
+| `note` | text |  |  |  |
+| `is_active` | boolean | 是 | true |  |
+| `updated_by` | bigint |  |  | → `app_user` |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `source_system_pkey`（主键）：`PRIMARY KEY (id)`
+- `source_system_code_uniq`（唯一）：`UNIQUE (code)`
+- `source_system_code_check`（检查）：`CHECK ((code ~ '^[A-Z][A-Z0-9_]{0,63}$'::text))`
+- `source_system_kind_check`（检查）：`CHECK ((kind = ANY (ARRAY['HIS'::text, 'MEDICAL_RECORD'::text, 'INTEROP'::text, 'OTHER'::text])))`
+- `source_system_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+
+触发器：
+
+- `source_system_guard`：`CREATE TRIGGER source_system_guard BEFORE UPDATE ON public.source_system FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'kind', 'note', 'is_active', 'updated_by', 'updated_at')`
+
+### code_namespace
+
+来源系统里的一本字典（配置）；不限定只装一种对象
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `source_system_id` | bigint | 是 |  | → `source_system` |
+| `code` | text | 是 |  |  |
+| `name` | text | 是 |  |  |
+| `note` | text |  |  |  |
+| `is_active` | boolean | 是 | true |  |
+| `updated_by` | bigint |  |  | → `app_user` |
+| `updated_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `code_namespace_pkey`（主键）：`PRIMARY KEY (id)`
+- `code_namespace_code_uniq`（唯一）：`UNIQUE (source_system_id, code)`
+- `code_namespace_code_check`（检查）：`CHECK ((code ~ '^[A-Z][A-Z0-9_]{0,63}$'::text))`
+- `code_namespace_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+
+触发器：
+
+- `code_namespace_guard`：`CREATE TRIGGER code_namespace_guard BEFORE UPDATE ON public.code_namespace FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('name', 'note', 'is_active', 'updated_by', 'updated_at')`
+
+### external_code
+
+台账里的一条源记录（经变更申请登记，身份行不可更新）
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `namespace_id` | bigint | 是 |  | → `code_namespace` |
+| `code` | text | 是 |  |  |
+| `source_name` | text |  |  |  |
+| `semantic_note` | text |  |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+
+约束：
+
+- `external_code_pkey`（主键）：`PRIMARY KEY (id)`
+- `external_code_uniq`（唯一）：`UNIQUE (namespace_id, code)`
+- `external_code_code_check`（检查）：`CHECK (((btrim(code) = code) AND (code <> ''::text)))`
+
+触发器：
+
+- `external_code_guard`：`CREATE TRIGGER external_code_guard BEFORE UPDATE ON public.external_code FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### external_code_assignment
+
+源记录在某段期间的解释：部门 / 服务单元 / 对象未建模，可带院区条件；同一条件同一时点只有一个
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `external_code_id` | bigint | 是 |  | → `external_code` |
+| `target_type` | text | 是 |  |  |
+| `department_id` | bigint |  |  | → `department` |
+| `service_unit_id` | bigint |  |  | → `service_unit` |
+| `unmodeled_type` | text |  |  |  |
+| `campus_id` | bigint |  |  | → `campus` |
+| `evidence_note` | text |  |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `external_code_assignment_pkey`（主键）：`PRIMARY KEY (id)`
+- `external_code_assignment_single_excl`（排他）：`EXCLUDE USING gist (external_code_id WITH =, COALESCE(campus_id, (0)::bigint) WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `external_code_assignment_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `external_code_assignment_target_check`（检查）：`CHECK ((((target_type = 'department'::text) AND (department_id IS NOT NULL) AND (service_unit_id IS NULL) AND (unmodeled_type IS NULL)) OR ((target_type = 'service_unit'::text) AND (service_unit_id IS NOT NULL) AND (department_id IS NULL) AND (unmodeled_type IS NULL)) OR ((target_type = 'unmodeled'::text) AND (unmodeled_type IS NOT NULL) AND (department_id IS NULL) AND (service_unit_id IS NULL))))`
+- `external_code_assignment_unmodeled_check`（检查）：`CHECK (((unmodeled_type IS NULL) OR (unmodeled_type = ANY (ARRAY['NURSING_UNIT'::text, 'WARD'::text, 'LOCATION'::text, 'STAT_GROUP'::text, 'COMPOSITE'::text, 'OTHER'::text]))))`
+
+索引：
+
+- `external_code_assignment_code_idx`：`CREATE INDEX external_code_assignment_code_idx ON public.external_code_assignment USING btree (external_code_id)`
+- `external_code_assignment_dept_idx`：`CREATE INDEX external_code_assignment_dept_idx ON public.external_code_assignment USING btree (department_id)`
+- `external_code_assignment_unit_idx`：`CREATE INDEX external_code_assignment_unit_idx ON public.external_code_assignment USING btree (service_unit_id)`
+
+触发器：
+
+- `external_code_assignment_guard`：`CREATE TRIGGER external_code_assignment_guard BEFORE UPDATE ON public.external_code_assignment FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
+
 ## 触发器函数
 
 ### hdip_guard_change_request
@@ -726,6 +881,7 @@ $function$
 | `change_request` | INSERT、SELECT、UPDATE |
 | `classification_code` | INSERT、SELECT、UPDATE |
 | `classification_scheme` | INSERT、SELECT、UPDATE |
+| `code_namespace` | INSERT、SELECT、UPDATE |
 | `department` | INSERT、SELECT、UPDATE |
 | `department_alias` | INSERT、SELECT、UPDATE |
 | `department_classification` | INSERT、SELECT、UPDATE |
@@ -733,14 +889,18 @@ $function$
 | `department_institution` | INSERT、SELECT、UPDATE |
 | `department_relation` | INSERT、SELECT、UPDATE |
 | `department_version` | INSERT、SELECT、UPDATE |
+| `external_code` | INSERT、SELECT、UPDATE |
+| `external_code_assignment` | INSERT、SELECT、UPDATE |
 | `institution` | INSERT、SELECT、UPDATE |
 | `institution_version` | INSERT、SELECT、UPDATE |
 | `operator_relation` | INSERT、SELECT、UPDATE |
 | `option_item` | INSERT、SELECT、UPDATE |
 | `org_view` | INSERT、SELECT、UPDATE |
 | `service_unit` | INSERT、SELECT、UPDATE |
+| `service_unit_classification` | INSERT、SELECT、UPDATE |
 | `service_unit_lineage` | INSERT、SELECT、UPDATE |
 | `service_unit_version` | INSERT、SELECT、UPDATE |
+| `source_system` | INSERT、SELECT、UPDATE |
 
 ## 配置表种子
 
@@ -748,9 +908,9 @@ $function$
 
 | 类别 | 代码 | 名称 | 排序 | 启用 |
 | --- | --- | --- | --- | --- |
-| campus_node_role | `HEADQUARTERS` | 本院院区 | 10 | 是 |
+| campus_node_role | `HEADQUARTERS` | 本部院区 | 10 | 是 |
 | campus_node_role | `HIGH_TECH` | 高新院区 | 20 | 是 |
-| campus_node_role | `CITY_CENTER` | 中心医院院区 | 30 | 是 |
+| campus_node_role | `CITY_CENTER` | 中心院区 | 30 | 是 |
 | service_unit_type | `OPD` | 门诊单元 | 10 | 是 |
 | service_unit_type | `IPD` | 住院单元 | 20 | 是 |
 | service_unit_type | `ED` | 急诊单元 | 30 | 是 |
@@ -779,12 +939,16 @@ $function$
 | department | rename | confirmer | 是 |
 | department | revise | confirmer | 是 |
 | department | set_parent | confirmer | 是 |
+| external_code | assign | confirmer | 是 |
+| external_code | assignment_close | confirmer | 是 |
+| external_code | register | confirmer | 是 |
 | institution | create | confirmer | 是 |
 | institution | revise | confirmer | 是 |
 | operator_relation | close | confirmer | 是 |
 | operator_relation | create | confirmer | 是 |
 | service_unit | change_department | confirmer | 是 |
 | service_unit | change_status | confirmer | 是 |
+| service_unit | classify | confirmer | 是 |
 | service_unit | create | confirmer | 是 |
 | service_unit | merge | confirmer | 是 |
 | service_unit | rebind | confirmer | 是 |

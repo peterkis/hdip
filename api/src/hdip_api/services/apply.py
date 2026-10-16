@@ -21,6 +21,7 @@ from hdip_api.models import (
     CampusVersion,
     ClassificationCode,
     ClassificationScheme,
+    CodeNamespace,
     Department,
     DepartmentAlias,
     DepartmentClassification,
@@ -28,14 +29,18 @@ from hdip_api.models import (
     DepartmentInstitution,
     DepartmentRelation,
     DepartmentVersion,
+    ExternalCode,
+    ExternalCodeAssignment,
     Institution,
     InstitutionVersion,
     OperatorRelation,
     OptionItem,
     OrgView,
     ServiceUnit,
+    ServiceUnitClassification,
     ServiceUnitLineage,
     ServiceUnitVersion,
+    SourceSystem,
 )
 from hdip_api.schemas.items import (
     KIND_LABELS,
@@ -56,12 +61,16 @@ from hdip_api.schemas.items import (
     DepartmentRename,
     DepartmentRevise,
     DepartmentSetParent,
+    ExternalCodeAssign,
+    ExternalCodeAssignmentClose,
+    ExternalCodeRegister,
     InstitutionCreate,
     InstitutionRevise,
     OperatorRelationClose,
     OperatorRelationCreate,
     ServiceUnitChangeDepartment,
     ServiceUnitChangeStatus,
+    ServiceUnitClassify,
     ServiceUnitCreate,
     ServiceUnitFields,
     ServiceUnitMerge,
@@ -127,6 +136,17 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "service_unit_version_no_overlap": "与该服务单元已有版本的期间重叠",
     "service_unit_lineage_pair_uniq": "这两个单元之间已有演变关系",
     "service_unit_lineage_self_check": "前身与后继不能是同一个单元",
+    "service_unit_classification_exclusive_excl": (
+        "该服务单元在这段期间已有该方案的分类，同一时点只能有一个"
+    ),
+    "service_unit_classification_dup_excl": "该服务单元在这段期间已有相同的分类",
+    "service_unit_classification_code_fk": "分类代码不在该方案中",
+    "external_code_uniq": "该字典里已登记过这个代码",
+    "external_code_assignment_single_excl": (
+        "该代码在这段期间、同一院区条件下已有解释，同一时点只能有一个"
+    ),
+    "external_code_assignment_target_check": "解释须指向且只指向一个对象",
+    "external_code_assignment_period_check": "结束日不能早于开始日",
 }
 
 
@@ -153,6 +173,8 @@ class Ctx:
     touched_views: dict[int, int] = field(default_factory=dict)
     # 被撤销 / 被替代的部门 id → (项序号, 生效日)（检查是否还有下级部门）
     ended_departments: dict[int, tuple[int, date]] = field(default_factory=dict)
+    # 新增过解释的源记录 id → 项序号（检查院区条件是否一致）
+    touched_codes: dict[int, int] = field(default_factory=dict)
 
 
 def _json(value: Any) -> Any:
@@ -577,7 +599,9 @@ def _close_open(ctx: Ctx, row, day: date, what: str) -> None:
     ctx.session.flush()
 
 
-def classification_snapshot(s: Session, c: DepartmentClassification | None) -> dict | None:
+def classification_snapshot(
+    s: Session, c: DepartmentClassification | ServiceUnitClassification | None
+) -> dict | None:
     if c is None:
         return None
     name = s.scalar(
@@ -593,68 +617,90 @@ def classification_snapshot(s: Session, c: DepartmentClassification | None) -> d
     }
 
 
-def _department_classify(ctx: Ctx, item: DepartmentClassify) -> dict:
-    s = ctx.session
-    d = _department(s, item.code)
-    _require_not_terminal(_dept_latest(s, d))
-    _require_after_start(s, d, item.effective_date, "effective_date")
+def _scheme_for(s: Session, scheme_code: str, class_code: str | None, owner: str):
+    """取分类方案并校验代码；owner 为 department / unit，方案须写明用在该对象上的含义。"""
     scheme = s.scalar(
         select(ClassificationScheme).where(
-            ClassificationScheme.code == item.scheme_code, ClassificationScheme.is_active
+            ClassificationScheme.code == scheme_code, ClassificationScheme.is_active
         )
     )
     if scheme is None:
-        raise ItemError(f"分类方案 {item.scheme_code} 不存在或已停用", "scheme_code")
-    if item.class_code is not None:
+        raise ItemError(f"分类方案 {scheme_code} 不存在或已停用", "scheme_code")
+    meaning = scheme.meaning_for_department if owner == "department" else scheme.meaning_for_unit
+    if not meaning:
+        what = "部门" if owner == "department" else "服务单元"
+        raise ItemError(f"“{scheme.name}”不适用于{what}", "scheme_code")
+    if class_code is not None:
         ok = s.scalar(
             select(ClassificationCode.id).where(
                 ClassificationCode.scheme_id == scheme.id,
-                ClassificationCode.code == item.class_code,
+                ClassificationCode.code == class_code,
                 ClassificationCode.is_active,
             )
         )
         if ok is None:
-            raise ItemError(
-                f"分类代码 {item.class_code} 不在“{scheme.name}”中或已停用", "class_code"
-            )
+            raise ItemError(f"分类代码 {class_code} 不在“{scheme.name}”中或已停用", "class_code")
+    return scheme
+
+
+def _reclassify(ctx: Ctx, model, owner_col: str, owner_id: int, scheme, class_code, day: date):
+    """单选方案：结束当前赋值再新建；多选方案只新增（class_code 为空表示只结束单选方案的赋值）。"""
+    s = ctx.session
     current = None
     if scheme.is_exclusive:
-        # 单选方案：结束当前赋值再新建；多选方案只新增
         current = s.scalar(
-            select(DepartmentClassification)
+            select(model)
             .where(
-                DepartmentClassification.department_id == d.id,
-                DepartmentClassification.scheme_id == scheme.id,
-                DepartmentClassification.valid_to.is_(None),
+                getattr(model, owner_col) == owner_id,
+                model.scheme_id == scheme.id,
+                model.valid_to.is_(None),
             )
-            .order_by(DepartmentClassification.valid_from.desc())
+            .order_by(model.valid_from.desc())
             .limit(1)
             .with_for_update()
         )
-    if current is not None and current.code == item.class_code:
+    if current is not None and current.code == class_code:
         raise ItemError("分类没有变化", "class_code")
-    if current is None and item.class_code is None:
+    if current is None and class_code is None:
         raise ItemError("当前没有分类，无需结束", "class_code")
     before = classification_snapshot(s, current)
     if current is not None:
-        _close_open(ctx, current, item.effective_date, "分类")
+        _close_open(ctx, current, day, "分类")
     new = None
-    if item.class_code is not None:
-        new = DepartmentClassification(
-            department_id=d.id,
+    if class_code is not None:
+        new = model(
+            **{owner_col: owner_id},
             scheme_id=scheme.id,
             is_exclusive=scheme.is_exclusive,
-            code=item.class_code,
-            valid_from=item.effective_date,
+            code=class_code,
+            valid_from=day,
             change_id=ctx.change_id,
             recorded_by=ctx.user_id,
         )
         s.add(new)
         s.flush()
+    return before, classification_snapshot(s, new) or {"class_code": None}
+
+
+def _department_classify(ctx: Ctx, item: DepartmentClassify) -> dict:
+    s = ctx.session
+    d = _department(s, item.code)
+    _require_not_terminal(_dept_latest(s, d))
+    _require_after_start(s, d, item.effective_date, "effective_date")
+    scheme = _scheme_for(s, item.scheme_code, item.class_code, "department")
+    before, after = _reclassify(
+        ctx,
+        DepartmentClassification,
+        "department_id",
+        d.id,
+        scheme,
+        item.class_code,
+        item.effective_date,
+    )
     return {
         "target": f"部门 {_dept_label(s, d, item.effective_date)} · {scheme.name}",
         "before": before,
-        "after": classification_snapshot(s, new) or {"class_code": None},
+        "after": after,
     }
 
 
@@ -1260,6 +1306,230 @@ def _unit_merge(ctx: Ctx, item: ServiceUnitMerge) -> dict:
     )
 
 
+# ------------------------------------------------------------------ 服务单元分类与外部标识（D3）
+def _unit_classify(ctx: Ctx, item: ServiceUnitClassify) -> dict:
+    s = ctx.session
+    unit = _unit(s, item.code)
+    latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+    if latest.valid_to is not None:
+        raise ItemError(f"服务单元已于 {latest.valid_to.isoformat()} 后永久退出，不能再调整")
+    start = _unit_start(s, unit)
+    if item.effective_date < start:
+        raise ItemError(f"生效日不能早于单元的开始日 {start.isoformat()}", "effective_date")
+    scheme = _scheme_for(s, item.scheme_code, item.class_code, "unit")
+    before, after = _reclassify(
+        ctx,
+        ServiceUnitClassification,
+        "service_unit_id",
+        unit.id,
+        scheme,
+        item.class_code,
+        item.effective_date,
+    )
+    return {
+        "target": f"服务单元 {unit.code} {latest.name} · {scheme.name}",
+        "before": before,
+        "after": after,
+    }
+
+
+def _unit_start(s: Session, unit: ServiceUnit) -> date:
+    return s.scalar(
+        select(func.min(ServiceUnitVersion.valid_from)).where(
+            ServiceUnitVersion.service_unit_id == unit.id
+        )
+    )
+
+
+UNMODELED_LABELS = {
+    "NURSING_UNIT": "护理单元",
+    "WARD": "病区",
+    "LOCATION": "地点",
+    "STAT_GROUP": "统计分组",
+    "COMPOSITE": "旧系统复合记录",
+    "OTHER": "其他",
+}
+
+
+def _namespace(s: Session, system_code: str, namespace_code: str) -> CodeNamespace:
+    row = s.execute(
+        select(CodeNamespace, SourceSystem)
+        .join(SourceSystem, SourceSystem.id == CodeNamespace.source_system_id)
+        .where(SourceSystem.code == system_code, CodeNamespace.code == namespace_code)
+    ).first()
+    if row is None:
+        raise ItemError(f"字典 {system_code}/{namespace_code} 不存在", "namespace_code")
+    ns, system = row
+    if not (ns.is_active and system.is_active):
+        raise ItemError(f"字典 {system_code}/{namespace_code} 已停用", "namespace_code")
+    return ns
+
+
+def _external_code(s: Session, item) -> ExternalCode:
+    ns = _namespace(s, item.system_code, item.namespace_code)
+    ec = s.scalar(
+        select(ExternalCode).where(
+            ExternalCode.namespace_id == ns.id, ExternalCode.code == item.external_code
+        )
+    )
+    if ec is None:
+        raise ItemError(
+            f"{item.system_code}/{item.namespace_code} 里尚未登记代码 {item.external_code}",
+            "external_code",
+        )
+    return ec
+
+
+def _ext_label(s: Session, ec: ExternalCode) -> str:
+    ns = s.get(CodeNamespace, ec.namespace_id)
+    system = s.get(SourceSystem, ns.source_system_id)
+    name = f" {ec.source_name}" if ec.source_name else ""
+    return f"外部代码 {system.code}/{ns.code} {ec.code}{name}"
+
+
+def assignment_target_label(s: Session, a: ExternalCodeAssignment) -> str:
+    if a.target_type == "department":
+        return f"部门 {_dept_label(s, s.get(Department, a.department_id), a.valid_from)}"
+    if a.target_type == "service_unit":
+        unit = s.get(ServiceUnit, a.service_unit_id)
+        v = _version_on(
+            s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id, a.valid_from
+        ) or _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+        return f"服务单元 {unit.code} {v.name}"
+    return f"对象未建模（{UNMODELED_LABELS[a.unmodeled_type]}）"
+
+
+def _assignment_snapshot(s: Session, a: ExternalCodeAssignment) -> dict:
+    campus = s.get(Campus, a.campus_id) if a.campus_id else None
+    return {
+        "assignment_id": a.id,
+        "target": assignment_target_label(s, a),
+        "campus": campus.code if campus else None,
+        "valid_from": _json(a.valid_from),
+        "valid_to": _json(a.valid_to),
+        "evidence_note": a.evidence_note,
+    }
+
+
+def _external_code_register(ctx: Ctx, item: ExternalCodeRegister) -> dict:
+    s = ctx.session
+    ns = _namespace(s, item.system_code, item.namespace_code)
+    exists = s.scalar(
+        select(ExternalCode.id).where(
+            ExternalCode.namespace_id == ns.id, ExternalCode.code == item.external_code
+        )
+    )
+    if exists:
+        raise ItemError(
+            f"{item.system_code}/{item.namespace_code} 里已登记过代码 {item.external_code}",
+            "external_code",
+        )
+    ec = ExternalCode(
+        namespace_id=ns.id,
+        code=item.external_code,
+        source_name=item.source_name,
+        semantic_note=item.semantic_note,
+        created_change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(ec)
+    s.flush()
+    after = {"source_name": ec.source_name, "semantic_note": ec.semantic_note}
+    return {"target": _ext_label(s, ec), "before": None, "after": after}
+
+
+def _external_code_assign(ctx: Ctx, item: ExternalCodeAssign) -> dict:
+    s = ctx.session
+    ec = _external_code(s, item)
+    a = ExternalCodeAssignment(
+        external_code_id=ec.id,
+        target_type=item.target_type,
+        unmodeled_type=item.unmodeled_type,
+        evidence_note=item.evidence_note,
+        valid_from=item.valid_from,
+        valid_to=item.valid_to,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    if item.target_type == "department":
+        d = _department(s, item.department_code, "department_code")
+        start = _dept_start(s, d)
+        if item.valid_from < start:
+            raise ItemError(f"开始日不能早于部门的设立日 {start.isoformat()}", "valid_from")
+        a.department_id = d.id
+    elif item.target_type == "service_unit":
+        unit = _ref(s, _unit, item.service_unit_code, "service_unit_code")
+        start = _unit_start(s, unit)
+        if item.valid_from < start:
+            raise ItemError(f"开始日不能早于单元的开始日 {start.isoformat()}", "valid_from")
+        latest = _latest(s, ServiceUnitVersion, ServiceUnitVersion.service_unit_id, unit.id)
+        if latest.valid_to is not None and (
+            item.valid_to is None or item.valid_to > latest.valid_to
+        ):
+            raise ItemError(
+                f"单元已于 {latest.valid_to.isoformat()} 后永久退出，解释须在此前结束", "valid_to"
+            )
+        a.service_unit_id = unit.id
+    if item.campus_code is not None:
+        a.campus_id = _ref(s, _campus, item.campus_code, "campus_code").id
+    s.add(a)
+    s.flush()
+    ctx.touched_codes[ec.id] = ctx.index
+    return {"target": _ext_label(s, ec), "before": None, "after": _assignment_snapshot(s, a)}
+
+
+def _external_code_assignment_close(ctx: Ctx, item: ExternalCodeAssignmentClose) -> dict:
+    s = ctx.session
+    a = s.get(ExternalCodeAssignment, item.assignment_id, with_for_update=True)
+    if a is None:
+        raise ItemError(f"解释 #{item.assignment_id} 不存在", "assignment_id")
+    if a.valid_to is not None:
+        raise ItemError(f"该解释已于 {a.valid_to.isoformat()} 结束", "assignment_id")
+    if item.valid_to < a.valid_from:
+        raise ItemError(f"结束日不能早于开始日 {a.valid_from.isoformat()}", "valid_to")
+    before = _assignment_snapshot(s, a)
+    a.valid_to = item.valid_to
+    a.closed_change_id = ctx.change_id
+    s.flush()
+    ec = s.get(ExternalCode, a.external_code_id)
+    return {"target": _ext_label(s, ec), "before": before, "after": _assignment_snapshot(s, a)}
+
+
+def _check_codes(ctx: Ctx) -> list[ProblemItem]:
+    """同一源记录在重叠期间的解释，要么都带院区条件，要么都不带（否则某院区同时有两个解释）。"""
+    s = ctx.session
+    problems = []
+    for code_id, index in sorted(ctx.touched_codes.items(), key=lambda x: x[1]):
+        rows = s.scalars(
+            select(ExternalCodeAssignment).where(ExternalCodeAssignment.external_code_id == code_id)
+        ).all()
+        for x in rows:
+            clash = next(
+                (
+                    y
+                    for y in rows
+                    if (x.campus_id is None) != (y.campus_id is None)
+                    and (x.valid_to is None or y.valid_from <= x.valid_to)
+                    and (y.valid_to is None or x.valid_from <= y.valid_to)
+                ),
+                None,
+            )
+            if clash is not None:
+                start = max(x.valid_from, clash.valid_from)
+                problems.append(
+                    ProblemItem(
+                        message=(
+                            f"{_ext_label(s, s.get(ExternalCode, code_id))} 自 "
+                            f"{start.isoformat()} 起同时有带院区条件和不带条件的解释；"
+                            "同一时点要么都按院区区分，要么不区分"
+                        ),
+                        item_index=index,
+                    )
+                )
+                break
+    return problems
+
+
 # ------------------------------------------------------------------ 单元依赖校验
 def _uncovered_from(relations: list[OperatorRelation], start: date, end: date | None):
     """返回 [start, end] 中第一个没有被这些关系覆盖的日期；全部覆盖返回 None。"""
@@ -1388,6 +1658,10 @@ HANDLERS = {
     "service_unit.retire": _unit_retire,
     "service_unit.split": _unit_split,
     "service_unit.merge": _unit_merge,
+    "service_unit.classify": _unit_classify,
+    "external_code.register": _external_code_register,
+    "external_code.assign": _external_code_assign,
+    "external_code.assignment_close": _external_code_assignment_close,
 }
 
 
@@ -1427,7 +1701,7 @@ def apply_items(
                 problems=[ProblemItem(message=msg, item_index=index)],
             ) from None
         outcomes.append({"index": index, "kind": item.kind, "label": label, **out})
-    problems = _check_units(ctx) + _check_org(ctx)
+    problems = _check_units(ctx) + _check_org(ctx) + _check_codes(ctx)
     if problems:
         first = problems[0]
         label = KIND_LABELS[items[first.item_index].kind]

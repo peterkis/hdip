@@ -164,6 +164,11 @@ InitialLifecycle = Literal["PREPARING", "ACTIVE"]
 TargetLifecycle = Literal["ACTIVE", "SUSPENDED", "REVOKED"]
 Duty = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
 SchemeCode = Annotated[str, StringConstraints(pattern=r"^[A-Z][A-Z0-9_]{0,63}$")]
+# 外部分类代码按正式代码表原样书写（如 03.05、0305），不删点号、不补零
+ClassCode = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"),
+]
 
 
 def _check_temporary(form: str | None, until: date | None, form_set: bool = True) -> None:
@@ -236,7 +241,7 @@ class DepartmentClassify(_Item):
     kind: Literal["department.classify"]
     code: Code
     scheme_code: SchemeCode = "DEPT_MAIN_CLASS"
-    class_code: SchemeCode | None
+    class_code: ClassCode | None
     effective_date: date
 
 
@@ -464,6 +469,78 @@ class ServiceUnitMerge(_Item):
         return self
 
 
+# ------------------------------------------------------------------ 外部标识与分类关联（D3）
+# 来源系统里的代码原样保存：不限字符，只去掉首尾空白
+SourceCode = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+UnmodeledType = Literal["NURSING_UNIT", "WARD", "LOCATION", "STAT_GROUP", "COMPOSITE", "OTHER"]
+
+
+class ServiceUnitClassify(_Item):
+    """给服务单元在某分类方案下赋值；与部门分类相互独立，部门分类不下发给单元。"""
+
+    kind: Literal["service_unit.classify"]
+    code: Code
+    scheme_code: SchemeCode
+    class_code: ClassCode | None
+    effective_date: date
+
+
+class _CodeRef(_Item):
+    """源记录用“来源系统 + 字典 + 代码”引用，同一张申请里可引用前面刚登记的记录。"""
+
+    system_code: SchemeCode
+    namespace_code: SchemeCode
+    external_code: SourceCode
+
+
+class ExternalCodeRegister(_CodeRef):
+    """登记一条源记录。只登记、不解释时，该记录在任何日期都是待裁决。"""
+
+    kind: Literal["external_code.register"]
+    source_name: Text | None = None
+    semantic_note: Text | None = None
+
+
+class ExternalCodeAssign(_CodeRef):
+    """一条源记录自 valid_from 起的解释：指向部门、服务单元，或标“对象未建模”。
+
+    campus_code 是条件：同一字典同一代码在不同院区指向不同对象时才填。
+    """
+
+    kind: Literal["external_code.assign"]
+    target_type: Literal["department", "service_unit", "unmodeled"]
+    department_code: Code | None = None
+    service_unit_code: Code | None = None
+    unmodeled_type: UnmodeledType | None = None
+    campus_code: Code | None = None
+    valid_from: date
+    valid_to: date | None = None
+    evidence_note: Text | None = None
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        given = {
+            "department": self.department_code,
+            "service_unit": self.service_unit_code,
+            "unmodeled": self.unmodeled_type,
+        }
+        if given[self.target_type] is None:
+            raise ValueError("请指明解释指向的对象")
+        if sum(v is not None for v in given.values()) != 1:
+            raise ValueError("一条解释只能指向一个对象")
+        if self.valid_to is not None and self.valid_to < self.valid_from:
+            raise ValueError("结束日不能早于开始日")
+        return self
+
+
+class ExternalCodeAssignmentClose(_Item):
+    """结束一条解释：valid_to 为最后有效日。"""
+
+    kind: Literal["external_code.assignment_close"]
+    assignment_id: int
+    valid_to: date
+
+
 ChangeItem = Annotated[
     InstitutionCreate
     | InstitutionRevise
@@ -491,7 +568,11 @@ ChangeItem = Annotated[
     | ServiceUnitChangeStatus
     | ServiceUnitRetire
     | ServiceUnitSplit
-    | ServiceUnitMerge,
+    | ServiceUnitMerge
+    | ServiceUnitClassify
+    | ExternalCodeRegister
+    | ExternalCodeAssign
+    | ExternalCodeAssignmentClose,
     Field(discriminator="kind"),
 ]
 
@@ -525,6 +606,10 @@ KIND_LABELS: dict[str, str] = {
     "service_unit.retire": "永久退出服务单元",
     "service_unit.split": "拆分服务单元",
     "service_unit.merge": "合并服务单元",
+    "service_unit.classify": "调整服务单元分类",
+    "external_code.register": "登记外部代码",
+    "external_code.assign": "解释外部代码",
+    "external_code.assignment_close": "结束外部代码解释",
 }
 
 

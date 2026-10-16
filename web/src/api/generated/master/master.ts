@@ -25,22 +25,28 @@ import type {
   ClassificationSchemeOut,
   DepartmentDetail,
   DepartmentRow,
+  ExternalCodeDetail,
+  ExternalCodePage,
   GetCampusParams,
   GetDepartmentParams,
+  GetExternalCodeParams,
   GetInstitutionParams,
   GetServiceUnitParams,
   InstitutionDetail,
   InstitutionRow,
   ListCampusesParams,
   ListDepartmentsParams,
+  ListExternalCodesParams,
   ListInstitutionsParams,
   ListOperatorRelationsParams,
   ListServiceUnitsParams,
+  ListSourceSystemsParams,
   OrgViewOut,
   Problem,
   RelationOut,
   ServiceUnitDetail,
-  ServiceUnitRow
+  ServiceUnitRow,
+  SourceSystemOut
 } from '../model';
 
 import { hdipFetch } from '../../fetcher';
@@ -1258,6 +1264,337 @@ export function useListOrgViews<TData = Awaited<ReturnType<typeof listOrgViews>>
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListOrgViewsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListSourceSystemsUrl = (params?: ListSourceSystemsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/source-systems?${stringifiedParams}` : `/api/source-systems`
+}
+
+/**
+ * 来源系统实例与其字典，附每本字典的代码数与查看日期当天的待裁决数。
+ * @summary List Source Systems
+ */
+export const listSourceSystems = async (params?: ListSourceSystemsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<SourceSystemOut[]> => {
+
+  return hdipFetch<SourceSystemOut[]>(getListSourceSystemsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSourceSystemsQueryKey = (params?: ListSourceSystemsParams,) => {
+    return [
+    `/api/source-systems`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListSourceSystemsQueryOptions = <TData = Awaited<ReturnType<typeof listSourceSystems>>, TError = Problem>(params?: ListSourceSystemsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSourceSystemsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSourceSystems>>> = ({ signal }) => listSourceSystems(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListSourceSystemsQueryResult = NonNullable<Awaited<ReturnType<typeof listSourceSystems>>>
+export type ListSourceSystemsQueryError = Problem
+
+
+export function useListSourceSystems<TData = Awaited<ReturnType<typeof listSourceSystems>>, TError = Problem>(
+ params: undefined |  ListSourceSystemsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSourceSystems>>,
+          TError,
+          Awaited<ReturnType<typeof listSourceSystems>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSourceSystems<TData = Awaited<ReturnType<typeof listSourceSystems>>, TError = Problem>(
+ params?: ListSourceSystemsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listSourceSystems>>,
+          TError,
+          Awaited<ReturnType<typeof listSourceSystems>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListSourceSystems<TData = Awaited<ReturnType<typeof listSourceSystems>>, TError = Problem>(
+ params?: ListSourceSystemsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Source Systems
+ */
+
+export function useListSourceSystems<TData = Awaited<ReturnType<typeof listSourceSystems>>, TError = Problem>(
+ params?: ListSourceSystemsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listSourceSystems>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListSourceSystemsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListExternalCodesUrl = (params?: ListExternalCodesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/external-codes?${stringifiedParams}` : `/api/external-codes`
+}
+
+/**
+ * 编码映射台账。某日没有任何解释覆盖的源记录，当天即待裁决。
+ * @summary List External Codes
+ */
+export const listExternalCodes = async (params?: ListExternalCodesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ExternalCodePage> => {
+
+  return hdipFetch<ExternalCodePage>(getListExternalCodesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListExternalCodesQueryKey = (params?: ListExternalCodesParams,) => {
+    return [
+    `/api/external-codes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListExternalCodesQueryOptions = <TData = Awaited<ReturnType<typeof listExternalCodes>>, TError = Problem>(params?: ListExternalCodesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListExternalCodesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listExternalCodes>>> = ({ signal }) => listExternalCodes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListExternalCodesQueryResult = NonNullable<Awaited<ReturnType<typeof listExternalCodes>>>
+export type ListExternalCodesQueryError = Problem
+
+
+export function useListExternalCodes<TData = Awaited<ReturnType<typeof listExternalCodes>>, TError = Problem>(
+ params: undefined |  ListExternalCodesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listExternalCodes>>,
+          TError,
+          Awaited<ReturnType<typeof listExternalCodes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListExternalCodes<TData = Awaited<ReturnType<typeof listExternalCodes>>, TError = Problem>(
+ params?: ListExternalCodesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listExternalCodes>>,
+          TError,
+          Awaited<ReturnType<typeof listExternalCodes>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListExternalCodes<TData = Awaited<ReturnType<typeof listExternalCodes>>, TError = Problem>(
+ params?: ListExternalCodesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List External Codes
+ */
+
+export function useListExternalCodes<TData = Awaited<ReturnType<typeof listExternalCodes>>, TError = Problem>(
+ params?: ListExternalCodesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listExternalCodes>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListExternalCodesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetExternalCodeUrl = (codeId: number,
+    params?: GetExternalCodeParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/external-codes/${codeId}?${stringifiedParams}` : `/api/external-codes/${codeId}`
+}
+
+/**
+ * @summary Get External Code
+ */
+export const getExternalCode = async (codeId: number,
+    params?: GetExternalCodeParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ExternalCodeDetail> => {
+
+  return hdipFetch<ExternalCodeDetail>(getGetExternalCodeUrl(codeId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetExternalCodeQueryKey = (codeId: number,
+    params?: GetExternalCodeParams,) => {
+    return [
+    `/api/external-codes/${codeId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetExternalCodeQueryOptions = <TData = Awaited<ReturnType<typeof getExternalCode>>, TError = Problem>(codeId: number,
+    params?: GetExternalCodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetExternalCodeQueryKey(codeId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getExternalCode>>> = ({ signal }) => getExternalCode(codeId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: codeId !== null && codeId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetExternalCodeQueryResult = NonNullable<Awaited<ReturnType<typeof getExternalCode>>>
+export type GetExternalCodeQueryError = Problem
+
+
+export function useGetExternalCode<TData = Awaited<ReturnType<typeof getExternalCode>>, TError = Problem>(
+ codeId: number,
+    params: undefined |  GetExternalCodeParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExternalCode>>,
+          TError,
+          Awaited<ReturnType<typeof getExternalCode>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExternalCode<TData = Awaited<ReturnType<typeof getExternalCode>>, TError = Problem>(
+ codeId: number,
+    params?: GetExternalCodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getExternalCode>>,
+          TError,
+          Awaited<ReturnType<typeof getExternalCode>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetExternalCode<TData = Awaited<ReturnType<typeof getExternalCode>>, TError = Problem>(
+ codeId: number,
+    params?: GetExternalCodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get External Code
+ */
+
+export function useGetExternalCode<TData = Awaited<ReturnType<typeof getExternalCode>>, TError = Problem>(
+ codeId: number,
+    params?: GetExternalCodeParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getExternalCode>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetExternalCodeQueryOptions(codeId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

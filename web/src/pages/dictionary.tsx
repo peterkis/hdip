@@ -6,7 +6,7 @@ import { useState, type FormEvent } from 'react'
 import { useCreateClassificationCode, useUpdateClassificationCode } from '@/api/generated/dictionary/dictionary'
 import { useListClassificationSchemes } from '@/api/generated/master/master'
 import type { ClassificationCodeOut, ClassificationSchemeOut } from '@/api/generated/model'
-import { FormErrorsContext, requireFields, TextField } from '@/components/forms/fields'
+import { FormErrorsContext, requireFields, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
@@ -20,15 +20,18 @@ import { MAIN_CLASS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
+/** 代码多的方案（如外部分类体系）默认只显示前几项 */
+const FOLD = 12
+
 export function DictionaryPage() {
   const { data: schemes = [] } = useListClassificationSchemes()
   const { me } = useMe()
   const canEdit = me?.permissions.includes('dictionary.maintain') ?? false
   return (
     <div className="max-w-(--hd-page-max-width)">
-      <PageHeader icon={Tag01Icon} title="分类方案" description="部门管理主分类等分类字典。描述“这个组织主要承担什么职责”；成本分类将来另设。" />
+      <PageHeader icon={Tag01Icon} title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
       <Callout className="mb-6" title="这是配置字典，保存即生效">
-        有“维护分类字典”权限（维护人）即可直接修改，不需确认；每次修改记下维护人与时间。代码一经使用不可改、不删除，只能停用。给部门设置分类请到部门页面，那是业务数据，照常经变更申请。
+        有“维护分类字典”权限（维护人）即可直接修改，不需确认；每次修改记下维护人与时间。代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请；部门分类不会自动下发给服务单元。
       </Callout>
       <div className="grid gap-10">
         {schemes.map((s) => (
@@ -41,7 +44,9 @@ export function DictionaryPage() {
 
 function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; canEdit: boolean }) {
   const [editing, setEditing] = useState<ClassificationCodeOut | 'new' | null>(null)
+  const [expanded, setExpanded] = useState(scheme.codes.length <= FOLD)
   const update = useUpdate()
+  const shown = expanded ? scheme.codes : scheme.codes.slice(0, FOLD)
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -50,6 +55,9 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
             {scheme.name} <span className="text-fg-muted text-xs font-normal">{scheme.version} · {scheme.is_exclusive ? '单选' : '可多选'}</span>
           </h2>
           {scheme.purpose && <p className="text-fg-secondary text-xs">{scheme.purpose}</p>}
+          <p className="text-fg-muted text-caption">
+            用于部门：{scheme.meaning_for_department ?? '不适用'} · 用于服务单元：{scheme.meaning_for_unit ?? '不适用'}
+          </p>
         </div>
         {canEdit && (
           <Button variant="outline" size="sm" onClick={() => setEditing('new')}>
@@ -68,7 +76,7 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
           { label: '' },
         ]}
       >
-        {scheme.codes.map((c) => (
+        {shown.map((c) => (
           <DbRow key={c.id} className={cn(!c.is_active && 'text-fg-muted')}>
             <DbCell className="whitespace-nowrap">
               <Tag tone={c.is_active ? (MAIN_CLASS_TONE[c.code] ?? 'gray') : 'gray'}>{c.name}</Tag>
@@ -105,6 +113,11 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
           </DbRow>
         ))}
       </DbTable>
+      {!expanded && (
+        <Button variant="ghost" size="sm" className="text-fg-muted justify-self-start" onClick={() => setExpanded(true)}>
+          展开全部 {scheme.codes.length} 项
+        </Button>
+      )}
       {editing && (
         <CodeDialog scheme={scheme} code={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />
       )}
@@ -134,17 +147,19 @@ function CodeDialog({ scheme, code, onClose }: { scheme: ClassificationSchemeOut
     sort_order: String(code?.sort_order ?? (scheme.codes.length + 1) * 10),
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const focus = useFocusFirstInvalid()
   const bind = (k: keyof typeof f) => ({ value: f[k], onChange: (v: string) => setF({ ...f, [k]: v }) })
 
   function onSubmit(e: FormEvent) {
     e.preventDefault()
     const bad = requireFields([
       ['name', !!f.name.trim(), '请填写名称'],
-      ['code', !!code || /^[A-Z][A-Z0-9_]{0,63}$/.test(f.code.trim().toUpperCase()), '代码只能用大写字母、数字、下划线，且以字母开头'],
+      ['code', !!code || /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(f.code.trim()), '代码只能包含字母、数字、点、下划线、短横线'],
       ['sort_order', /^\d+$/.test(f.sort_order), '排序须是整数'],
     ])
     if (bad) {
       setErrors(bad.fieldErrors)
+      focus.focusFirst()
       return
     }
     const body = { name: f.name.trim(), criterion: f.criterion, caution: f.caution, sort_order: Number(f.sort_order) }
@@ -153,13 +168,13 @@ function CodeDialog({ scheme, code, onClose }: { scheme: ClassificationSchemeOut
       onClose()
     }
     if (code) update.mutate({ codeId: code.id, data: body }, { onSuccess: done })
-    else create.mutate({ schemeCode: scheme.code, data: { ...body, code: f.code.trim().toUpperCase() } }, { onSuccess: done })
+    else create.mutate({ schemeCode: scheme.code, data: { ...body, code: f.code.trim() } }, { onSuccess: done })
   }
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-lg">
-        <form onSubmit={onSubmit} noValidate className="grid gap-4">
+        <form ref={focus.ref} onSubmit={onSubmit} noValidate className="grid gap-4">
           <DialogHeader>
             <DialogTitle>{code ? `编辑：${code.name}` : `新增代码：${scheme.name}`}</DialogTitle>
             <DialogDescription>保存即生效，不需确认。{code ? '代码值不可改。' : '代码一经保存不可改、不删除，只能停用。'}</DialogDescription>
@@ -178,7 +193,7 @@ function CodeDialog({ scheme, code, onClose }: { scheme: ClassificationSchemeOut
             <div className="grid gap-3">
               <TextField label="名称" name="name" required {...bind('name')} />
               <div className="grid grid-cols-2 gap-3">
-                <TextField label="代码" name="code" required disabled={!!code} hint="大写字母、数字、下划线" {...bind('code')} />
+                <TextField label="代码" name="code" required disabled={!!code} hint="按正式代码表原样填写（如 03.05）" {...bind('code')} />
                 <TextField label="排序" name="sort_order" {...bind('sort_order')} />
               </div>
               <TextField label="按什么判断" {...bind('criterion')} />

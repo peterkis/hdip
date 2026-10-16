@@ -27,6 +27,8 @@ Dataset = Literal[
     "service-unit-lineage",
     "department-hierarchy",
     "department-relations",
+    "external-codes",
+    "classifications",
 ]
 
 OPERATING_STATUS = {
@@ -51,6 +53,7 @@ DEPT_RELATION = {
 }
 RELATION_TYPE = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
 LINEAGE_TYPE = {"SPLIT": "拆分", "MERGE": "合并"}
+TARGET_TYPE = {"department": "部门", "service_unit": "服务单元", "unmodeled": "对象未建模"}
 
 
 def _options(s: Session, category: str) -> dict[str, str]:
@@ -228,6 +231,82 @@ def _lineage(s: Session, day: date) -> Iterable[dict]:
         }
 
 
+def _external_codes(s: Session, day: date) -> Iterable[dict]:
+    """当天有效、指向平台对象的解释。
+
+    待裁决（当天没有解释）与“对象未建模”的源记录都不进入导出：导出回答“外部代码对应平台哪个对象”。
+    """
+    from hdip_api.services.apply import UNMODELED_LABELS
+
+    codes = queries._Codes(s, day)
+    for ec in sorted(codes.codes.values(), key=lambda x: (x.namespace_id, x.code)):
+        row = codes.row(ec)
+        for a in row["current"]:
+            if a.target_type == "unmodeled":
+                continue
+            target = a.department or a.service_unit
+            yield {
+                "system_code": row["system_code"],
+                "namespace_code": row["namespace_code"],
+                "external_code": ec.code,
+                "source_name": ec.source_name,
+                "target_type": a.target_type,
+                "target_type_name": TARGET_TYPE[a.target_type],
+                "target_code": target.code if target else None,
+                "target_name": target.name if target else None,
+                "unmodeled_type": a.unmodeled_type,
+                "unmodeled_type_name": UNMODELED_LABELS.get(a.unmodeled_type or ""),
+                "campus_code": a.campus_code,
+                "campus_name": a.campus_name,
+                "valid_from": a.valid_from,
+                "valid_to": a.valid_to,
+            }
+
+
+def _classifications(s: Session, day: date) -> Iterable[dict]:
+    """当天有效的分类赋值：部门与服务单元分开列出，部门分类不下发给单元。"""
+    from hdip_api.models import (
+        Department,
+        DepartmentClassification,
+        DepartmentVersion,
+        ServiceUnit,
+        ServiceUnitClassification,
+        ServiceUnitVersion,
+    )
+
+    names = queries._ClassNames(s)
+    sources = [
+        ("department", Department, DepartmentClassification, "department_id", DepartmentVersion),
+        (
+            "service_unit",
+            ServiceUnit,
+            ServiceUnitClassification,
+            "service_unit_id",
+            ServiceUnitVersion,
+        ),
+    ]
+    for object_type, ident, model, fk, version in sources:
+        objs = {o.id: o for o in s.scalars(select(ident))}
+        versions = queries._versions_by(s, version, fk)
+        rows = [
+            r for r in s.scalars(select(model)) if queries.covers(r.valid_from, r.valid_to, day)
+        ]
+        for r in sorted(rows, key=lambda r: (objs[getattr(r, fk)].code, r.scheme_id, r.code)):
+            obj = objs[getattr(r, fk)]
+            ref = names.ref(r.scheme_id, r.code)
+            yield {
+                "object_type": object_type,
+                "object_code": obj.code,
+                "object_name": queries._name_on(versions[obj.id], day),
+                "scheme_code": ref.scheme_code,
+                "scheme_name": ref.scheme_name,
+                "class_code": ref.code,
+                "class_name": ref.name,
+                "valid_from": r.valid_from,
+                "valid_to": r.valid_to,
+            }
+
+
 # 列顺序即对外契约；新增列只加在末尾
 # fmt: off
 BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]] = {
@@ -270,6 +349,16 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
     "service-unit-lineage": (_lineage, [
         "lineage_type", "lineage_type_name", "effective_date",
         "predecessor_code", "predecessor_name", "successor_code", "successor_name", "change_id",
+    ]),
+    "external-codes": (_external_codes, [
+        "system_code", "namespace_code", "external_code", "source_name",
+        "target_type", "target_type_name", "target_code", "target_name",
+        "unmodeled_type", "unmodeled_type_name", "campus_code", "campus_name",
+        "valid_from", "valid_to",
+    ]),
+    "classifications": (_classifications, [
+        "object_type", "object_code", "object_name", "scheme_code", "scheme_name",
+        "class_code", "class_name", "valid_from", "valid_to",
     ]),
 }
 # fmt: on

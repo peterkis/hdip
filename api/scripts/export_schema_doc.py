@@ -60,6 +60,20 @@ TABLES: list[tuple[str, list[tuple[str, str]]]] = [
             ("service_unit", "服务单元身份（单元类型属于身份，不可修订）"),
             ("service_unit_version", "服务单元版本：部门 × 院区 × 运营主体 × 期间"),
             ("service_unit_lineage", "拆分 / 合并的前身 → 后继，只追加"),
+            ("service_unit_classification", "服务单元分类赋值（与部门分类相互独立，不下发）"),
+        ],
+    ),
+    (
+        "外部标识（编码映射台账）",
+        [
+            ("source_system", "来源系统实例（配置，维护人直接维护）"),
+            ("code_namespace", "来源系统里的一本字典（配置）；不限定只装一种对象"),
+            ("external_code", "台账里的一条源记录（经变更申请登记，身份行不可更新）"),
+            (
+                "external_code_assignment",
+                "源记录在某段期间的解释：部门 / 服务单元 / 对象未建模，可带院区条件；"
+                "同一条件同一时点只有一个",
+            ),
         ],
     ),
 ]

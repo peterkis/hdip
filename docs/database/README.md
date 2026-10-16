@@ -42,7 +42,8 @@ erDiagram
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
 | 字典 | `classification_scheme`、`classification_code`、`org_view` | 配置：分类方案与代码（维护人可直接维护）、组织视图 |
 | 部门关系 | `department_hierarchy`、`department_relation` | 行政隶属（一级 / 二级部门）；专业管理、协作、院区管理（D2，迁移 0007） |
-| 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系 |
+| 外部标识 | `source_system`、`code_namespace`、`external_code`、`external_code_assignment` | 来源系统与字典（配置）；源记录与按期间的解释（编码映射台账，D3，迁移 0008） |
+| 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage`、`service_unit_classification` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系；单元分类（D3） |
 
 ## 2. 设计约定
 
@@ -140,6 +141,7 @@ stateDiagram-v2
 | 0005 | 服务单元演变关系；单元类型中文名；拆分 / 合并的确认规则 |
 | 0006 | 部门深化 D1：部门属性版本（回填现有部门为第 1 版）、别名、分类方案与代码（配置）、分类赋值、主体归属、组织视图；`department` 只留身份 |
 | 0007 | 部门深化 D2：行政隶属（视图内上下级）、部门管理关系（专业管理、协作、院区管理） |
+| 0008 | 部门深化 D3：来源系统与字典（配置）、外部代码与解释（编码映射台账）、服务单元分类；分类方案增加“用于部门 / 单元时的含义”；分类代码放宽为外部正式代码表写法；院区节点角色名更正为本部院区、中心院区 |
 
 ### 新增一类对象或变更的检查单
 
@@ -149,7 +151,7 @@ stateDiagram-v2
 4. 写测试：剧本测试 `test_scriptN.py`；每条新约束在 `test_rules*.py` 里要有反例。
 5. `make migrate && make db-doc`，同步本文与 CLAUDE.md。
 
-## 6. 部门深化（D1、D2 已实施，D3 定稿待实施）
+## 6. 部门深化（D1、D2、D3 已实施）
 
 需求与决定见 [部门主数据深化-实施计划](../部门主数据深化-实施计划.md)。
 
@@ -262,7 +264,18 @@ erDiagram
 - 专业管理按事项记录，不构成行政上级。例如医务部对临床医疗工作、护理部对护理专业的管理。
 - 软件不从名称推断这些关系，由院内制度确认后录入。
 
-### 6.3 D3 外部标识与分类关联（定稿 2026-10-16，待实施）
+### 6.3 D3 外部标识与分类关联（已实施，迁移 0008）
+
+实施说明（与下面的定稿一致之处不再重复）：
+- 变更项：`external_code.register`、`external_code.assign`（`campus_code` 为条件）、`external_code.assignment_close`、`service_unit.classify`。源记录按“系统代码 + 字典代码 + 源代码”引用，所以同一张申请里可以先登记、再解释。
+- “要么都带院区条件、要么都不带”在申请全部应用后检查（`apply.py` 的 `_check_codes`）。解释的开始日不能早于部门设立日 / 单元开始日；单元已退出时解释须在退出日前结束。
+- 源代码原样保存（不限字符，只去首尾空白）；分类代码按正式代码表原样书写，检查约束放宽为 `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`（如 `03.05`、`0305`，不删点号、不补零）。
+- 分类方案的 `meaning_for_department` / `meaning_for_unit` 为空时，该方案不能赋给对应对象（应用层拒绝）。
+- 只读接口：`GET /api/source-systems`、`GET /api/external-codes`（台账，按状态 / 字典 / 关键词筛选，分页）、`GET /api/external-codes/{id}`；部门详情加 `external_codes` 与 `unit_external_codes`，服务单元详情加 `classifications` 与 `external_codes`。配置维护：`/api/dictionary/source-systems`、`/api/dictionary/code-namespaces/{id}`、`/api/dictionary/classification-schemes`。
+- 导出：`external-codes`（当天有效、指向部门或服务单元的解释；待裁决与对象未建模不导出）、`classifications`（部门与单元分列）。
+- 样例数据：`api/scripts/import_sample.py` 读取院方资料包，配置直接登记，业务数据生成变更申请由确认人确认（见脚本说明）。
+
+以下为定稿原文（2026-10-16）。
 
 原则：**代码跟着它标识的对象走，分类跟着它描述的语义走，报送跟着具体业务角色和时点走。** 部门与服务单元是不同的对象类型，不是组织树的上下两层。编码归到哪个对象由它的语义决定，不由界面位置决定，也不按系统名统一决定（“HIS 一律挂单元”“病案一律挂部门”都不对）。
 

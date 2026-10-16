@@ -56,3 +56,10 @@ export const LINEAGE_TONE: Record<string, Tone> = {
   SPLIT: 'purple',
   MERGE: 'pink',
 }
+
+/** 外部代码状态：待裁决需要处理，用黄色提示 */
+export const CODE_STATUS_TONE: Record<string, Tone> = {
+  pending: 'yellow',
+  mapped: 'green',
+  unmodeled: 'gray',
+}

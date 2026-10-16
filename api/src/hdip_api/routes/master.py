@@ -1,7 +1,7 @@
 """主数据只读查询。所有写入都经 /change-requests，这里没有任何增改接口。"""
 
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
@@ -15,12 +15,15 @@ from hdip_api.schemas.read import (
     ClassificationSchemeOut,
     DepartmentDetail,
     DepartmentRow,
+    ExternalCodeDetail,
+    ExternalCodePage,
     InstitutionDetail,
     InstitutionRow,
     OrgViewOut,
     RelationOut,
     ServiceUnitDetail,
     ServiceUnitRow,
+    SourceSystemOut,
 )
 from hdip_api.services import queries
 
@@ -138,3 +141,45 @@ def list_classification_schemes(session: SessionDep):
 def list_org_views(session: SessionDep):
     """组织视图：行政视图启用；运营、病案视图占位（status = PLANNED）。"""
     return queries.list_org_views(session)
+
+
+@router.get(
+    "/source-systems", response_model=list[SourceSystemOut], operation_id="listSourceSystems"
+)
+def list_source_systems(session: SessionDep, as_of: AsOf = None):
+    """来源系统实例与其字典，附每本字典的代码数与查看日期当天的待裁决数。"""
+    return queries.list_source_systems(session, _day(session, as_of))
+
+
+@router.get("/external-codes", response_model=ExternalCodePage, operation_id="listExternalCodes")
+def list_external_codes(
+    session: SessionDep,
+    as_of: AsOf = None,
+    namespace_id: int | None = None,
+    status: Annotated[
+        Literal["pending", "mapped", "unmodeled"] | None,
+        Query(description="查看日期当天：待裁决 / 已映射 / 对象未建模"),
+    ] = None,
+    q: Annotated[str | None, Query(description="按代码或源名称搜索")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    offset: Annotated[int, Query(ge=0)] = 0,
+):
+    """编码映射台账。某日没有任何解释覆盖的源记录，当天即待裁决。"""
+    return queries.list_external_codes(
+        session,
+        _day(session, as_of),
+        namespace_id=namespace_id,
+        status=status,
+        q=q,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/external-codes/{code_id}",
+    response_model=ExternalCodeDetail,
+    operation_id="getExternalCode",
+)
+def get_external_code(session: SessionDep, code_id: int, as_of: AsOf = None):
+    return queries.get_external_code(session, code_id, _day(session, as_of))

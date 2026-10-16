@@ -4,6 +4,8 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DepartmentClassificationOut } from './departmentClassificationOut';
+import type { ExternalCodeLink } from './externalCodeLink';
 import type { LineageOut } from './lineageOut';
 import type { ServiceUnitVersionOut } from './serviceUnitVersionOut';
 
@@ -17,4 +19,6 @@ export interface ServiceUnitDetail {
   versions: ServiceUnitVersionOut[];
   predecessors: LineageOut[];
   successors: LineageOut[];
+  classifications: DepartmentClassificationOut[];
+  external_codes: ExternalCodeLink[];
 }

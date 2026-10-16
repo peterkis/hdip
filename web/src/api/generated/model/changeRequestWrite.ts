@@ -19,12 +19,16 @@ import type { DepartmentRelationCreate } from './departmentRelationCreate';
 import type { DepartmentRename } from './departmentRename';
 import type { DepartmentRevise } from './departmentRevise';
 import type { DepartmentSetParent } from './departmentSetParent';
+import type { ExternalCodeAssign } from './externalCodeAssign';
+import type { ExternalCodeAssignmentClose } from './externalCodeAssignmentClose';
+import type { ExternalCodeRegister } from './externalCodeRegister';
 import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
 import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
 import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
+import type { ServiceUnitClassify } from './serviceUnitClassify';
 import type { ServiceUnitCreate } from './serviceUnitCreate';
 import type { ServiceUnitMerge } from './serviceUnitMerge';
 import type { ServiceUnitRebind } from './serviceUnitRebind';
@@ -33,6 +37,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
   note?: string | null;
 }
