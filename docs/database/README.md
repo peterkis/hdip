@@ -149,7 +149,7 @@ stateDiagram-v2
 4. 写测试：剧本测试 `test_scriptN.py`；每条新约束在 `test_rules*.py` 里要有反例。
 5. `make migrate && make db-doc`，同步本文与 CLAUDE.md。
 
-## 6. 部门深化（D1、D2 已实施，D3 规划中）
+## 6. 部门深化（D1、D2 已实施，D3 定稿待实施）
 
 需求与决定见 [部门主数据深化-实施计划](../部门主数据深化-实施计划.md)。
 
@@ -167,7 +167,9 @@ erDiagram
     org_view ||--o{ department_hierarchy : "视图内上下级"
     department ||--o{ department_hierarchy : "上级 / 下级"
     department ||--o{ department_relation : "专业管理 / 协作 / 院区管理"
-    department ||--o{ external_mapping : "外部代码"
+    external_code ||--o{ external_code_assignment : "按期间的解释"
+    external_code_assignment }o--o| department : "映射到"
+    external_code_assignment }o--o| service_unit : "映射到"
 ```
 
 ### 6.1 D1 部门核心（已实施，迁移 0006）
@@ -260,12 +262,64 @@ erDiagram
 - 专业管理按事项记录，不构成行政上级。例如医务部对临床医疗工作、护理部对护理专业的管理。
 - 软件不从名称推断这些关系，由院内制度确认后录入。
 
-### 6.3 D3 外部映射
+### 6.3 D3 外部标识与分类关联（定稿 2026-10-16，待实施）
 
-**`external_mapping`（新增）**
-- 列：`target_type`（首期只有 `department`）、`target_id`、`source_system`、`namespace`（含院区账套）、`external_code`、`external_name`、`mapping_relation`、`purpose`、期间、`change_id`。
-- `mapping_relation` 沿用旧仓库码表：`EXACT` 等价 / `BROADER` 目标更宽 / `NARROWER` 目标更窄 / `RELATED` 相关 / `UNRESOLVED` 待裁决。
-- 行政隶属、主分类调整都不改动映射。“待裁决”的映射不进入导出。
+原则：**代码跟着它标识的对象走，分类跟着它描述的语义走，报送跟着具体业务角色和时点走。** 部门与服务单元是不同的对象类型，不是组织树的上下两层。编码归到哪个对象由它的语义决定，不由界面位置决定，也不按系统名统一决定（“HIS 一律挂单元”“病案一律挂部门”都不对）。
+
+三类关系分开管理，可以协同，不能互相替代：
+
+| 关系 | 回答什么 | 例子 | D3 |
+| --- | --- | --- | --- |
+| **身份映射** | 这个外部代码标识的是哪个具体对象 | 某 HIS 实例 / 挂号单元字典 / M101 → 服务单元 SU-101 | 做 |
+| **分类关联** | 这个对象属于什么类别 | 部门—专业定位；服务单元—服务专业；对象—病案科室分类 | 做（含服务单元、外部分类方案登记） |
+| 分类之间的概念对照 | 院内分类转换成外部分类时，两者是什么关系（有方向） | 院内专业 → 外部业务科室分类：等价 / 更宽 / 更窄 | 不做，等有报送剧本 |
+| 字段输出规则 | 某消息、某字段此次应填什么 | 出院科室 = 出院事件当时的责任部门或单元 → 按字段规范取身份或分类 | 不做：依赖入院、转科、出院、执行等业务事件，平台尚无 |
+
+**配置（维护人直接维护，不经变更申请）**
+
+- `source_system` 来源系统实例：`code`、`name`、`kind`（HIS / 病案 / 互联互通 / 其他）、实例说明、`is_active`。同一厂商的多个实例（如各院区账套）是不同实例。
+- `code_namespace` 字典（命名空间）：`source_system_id`、`code`、`name`（如“科室字典”“挂号单元字典”）、含义说明、`is_active`。命名空间只描述字典本身；**不规定**整张字典只能映射到某一种对象类型，混装字典逐条判断。
+- 外部分类方案沿用 `classification_scheme` / `classification_code` 登记，例如病案科室分类、WS/T 846.3—2024 引用的“医疗卫生机构业务科室分类与代码表”（数据元 DE08.10.025.00）。代码以正式代码表为准，不臆造。
+
+**`external_code`（业务数据，经变更申请）：台账里的一条源记录**
+
+- 列：`namespace_id`、`code`、`source_name`（源系统中的名称）、`semantic_note`（经核实的含义说明）、`created_change_id`。
+- `(namespace_id, code)` 唯一；身份行不可更新。
+- 只登记、不解释时，该记录在任何日期都是**待裁决**：显示在待裁决清单，不进入导出。
+
+**`external_code_assignment`（业务数据，经变更申请）：一条源记录在某段期间的解释**
+
+| 列 | 说明 |
+| --- | --- |
+| `external_code_id` | 源记录 |
+| `target_type` | `department` / `service_unit` / `unmodeled` |
+| `department_id`、`service_unit_id` | 与 `target_type` 一致的那一个非空（检查约束） |
+| `unmodeled_type` | `target_type = unmodeled` 时必填：`NURSING_UNIT` 护理单元 / `WARD` 病区 / `LOCATION` 地点 / `STAT_GROUP` 统计分组 / `COMPOSITE` 旧系统复合记录 / `OTHER` |
+| `campus_id` | 条件（可空）：同一字典同一代码在不同院区指向不同对象时才填 |
+| `evidence_note` | 判定说明（选填文本，维持决策 3，不做依据对象、不校验） |
+| 期间、`change_id`、`closed_change_id` | 同其他关系 |
+
+约束与规则：
+- **同一源记录、同一条件、同一时点只有一个解释**：`EXCLUDE (external_code_id, coalesce(campus_id, 0), daterange)`。所以同一个代码不能同时“等价”于服务单元和它的所属部门；要汇总到部门，沿服务单元版本的“所属部门”（带期间）往上走，这一步不是身份等价。
+- 条件不冲突、不留空档：同一源记录在重叠期间，要么都带院区条件，要么都不带（应用层在申请全部应用后检查）。
+- 历史代码复用：不同期间可以指向不同对象，按日期还原当时指向谁。
+- 裁决待裁决的记录 = 新增一条解释，开始日可以在过去，不覆盖任何已有事实。
+- “对象未建模”（护理单元、病区、地点等）是已经核实的结论，不硬塞给部门或服务单元；将来这些对象建模后，结束这条解释，再新增指向新对象的解释。
+- 来源只知道部门就映射部门，不推测出服务单元；来源明确到服务单元就映射服务单元，不提前丢掉单元信息。
+- 行政隶属、主分类调整都不改动身份映射。
+
+**分类关联扩展**
+
+- 新增 `service_unit_classification`，与 `department_classification` 同形（单选方案部分排他）。
+- `classification_scheme` 增加两列，写明这个方案用在部门、用在服务单元时各表示什么含义；为空表示不适用于该对象类型：
+  - `meaning_for_department`，例如“专业定位”“管理主分类”；
+  - `meaning_for_unit`，例如“服务专业”。
+- 部门的分类不自动下发为其服务单元的分类。
+- 多个对象归入同一类别，不能反推它们是同一个对象。
+
+**页面**
+- 部门、服务单元详情各有“外部编码”：显示映射到**本对象**的代码。部门页另列“关联单元编码”（经服务单元得到，只读，标明不是本部门的身份标识）。
+- 编辑统一在“编码映射台账”（标准与数据集下）进行，同一事实只有一个编辑入口。台账按来源系统、字典浏览，可按“待裁决 / 已映射 / 对象未建模”筛选。
 
 ### 6.4 权限（预先设计）
 
