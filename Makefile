@@ -1,4 +1,4 @@
-.PHONY: db db-init db-docker migrate db-doc api web gen test check walk-db api-walk web-walk
+.PHONY: db db-init db-docker migrate db-doc api web gen test check walk-db walk-db-minimal api-walk web-walk
 
 # 本机 Homebrew PostgreSQL 18
 db:
@@ -26,8 +26,12 @@ web:
 	cd web && npm run dev
 
 # 剧本走查：独立的 <库名>_walk 库，不在开发库里留下走查记录（api/scripts/walk_db.py）
+# walk-db 带上组织变更、批量操作的起点数据；walk-db-minimal 只建最小起点（剧本 1–17）
 walk-db:
 	cd api && uv run python scripts/walk_db.py
+
+walk-db-minimal:
+	cd api && uv run python scripts/walk_db.py --minimal
 
 api-walk:
 	cd api && HDIP_DATABASE_URL="$$(uv run python scripts/walk_db.py --url)" uv run uvicorn hdip_api.main:app --reload --port 8001
