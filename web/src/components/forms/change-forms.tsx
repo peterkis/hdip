@@ -9,7 +9,6 @@ import type {
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
 import { CampusSelect, InstitutionSelect, useStartFloor } from '@/components/forms/ref-selects'
-import { useApp } from '@/lib/app-context'
 import {
   OPERATING_STATUS,
   OPERATING_STATUS_ORDER,
@@ -141,7 +140,7 @@ export function InstitutionReviseDialog({
 // ------------------------------------------------------------------ 院区
 const emptyCampus = {
   name: '',
-  node_role: '',
+  public_name: '',
   address: '',
   admin_division_code: '',
   phone: '',
@@ -159,7 +158,7 @@ function toCampusForm(v?: CampusVersionOut): CampusForm {
 function campusValues(f: CampusForm) {
   return {
     name: f.name.trim(),
-    node_role: orNull(f.node_role),
+    public_name: orNull(f.public_name),
     address: orNull(f.address),
     admin_division_code: orNull(f.admin_division_code),
     phone: orNull(f.phone),
@@ -168,16 +167,14 @@ function campusValues(f: CampusForm) {
 }
 
 function CampusFields({ f, set }: { f: CampusForm; set: (f: CampusForm) => void }) {
-  const { nodeRoleOptions } = useApp()
   const bind = (k: keyof CampusForm) => ({ value: f[k], onChange: (v: string) => set({ ...f, [k]: v }) })
   return (
     <>
       <TextField label="名称" name="name" required {...bind('name')} />
-      <SelectField
-        label="节点角色"
-        placeholder="（不填）"
-        options={nodeRoleOptions.map((o) => ({ value: o.code, label: o.name }))}
-        {...bind('node_role')}
+      <TextField
+        label="对外名称"
+        hint="对外使用、与名称不同的叫法，如中心院区对外称“成都市中心医院”；相同则不填"
+        {...bind('public_name')}
       />
       <TextField label="地址" {...bind('address')} />
       <div className="grid grid-cols-2 gap-3">

@@ -255,7 +255,7 @@ def campus_items(starts: Starts) -> list[dict]:
             "code": "ZX",
             "valid_from": iso(PLANNED_CAMPUS_START),
             "operating_status": "PLANNING",
-            "fields": {"name": "中心院区", "node_role": "CITY_CENTER"},
+            "fields": {"name": "中心院区", "public_name": "成都市中心医院"},
         },
         {
             "kind": "operator_relation.create",

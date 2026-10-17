@@ -11,6 +11,7 @@
 export interface CampusPatch {
   name?: string | null;
   node_role?: string | null;
+  public_name?: string | null;
   address?: string | null;
   admin_division_code?: string | null;
   phone?: string | null;

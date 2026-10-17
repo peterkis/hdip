@@ -53,6 +53,7 @@ class InstitutionVersionOut(VersionMeta):
 class CampusVersionOut(VersionMeta):
     name: str
     node_role: str | None
+    public_name: str | None
     address: str | None
     admin_division_code: str | None
     phone: str | None

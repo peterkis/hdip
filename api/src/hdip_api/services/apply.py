@@ -122,6 +122,7 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "department_version_no_overlap": "与该部门已有版本的期间重叠",
     "department_version_temporary_check": "经批准的临时部门必须填期限；常设部门不填期限",
     "department_version_name_check": "部门名称不能为空",
+    "campus_version_public_name_check": "对外名称不能是空白；不需要时不填",
     "department_alias_dup_excl": "该部门在这段期间已有相同的别名",
     "department_classification_exclusive_excl": "该部门在这段期间已有主分类，同一时点只能有一个",
     "department_classification_dup_excl": "该部门在这段期间已有相同的分类",

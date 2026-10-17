@@ -60,7 +60,7 @@ START = [
         "code": "BY",
         "valid_from": "2020-01-01",
         "operating_status": "RUNNING",
-        "fields": {"name": "本部院区", "node_role": "HEADQUARTERS"},
+        "fields": {"name": "本部院区"},
     },
     {
         "kind": "operator_relation.create",

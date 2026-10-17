@@ -173,6 +173,7 @@ def _campuses(s: Session, day: date) -> Iterable[dict]:
             "address": v.address,
             "admin_division_code": v.admin_division_code,
             "phone": v.phone,
+            "public_name": v.public_name,
             "actual_open_date": v.actual_open_date,
             "version_no": v.version_no,
             "valid_from": v.valid_from,
@@ -335,7 +336,7 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
         "operating_status", "operating_status_name",
         "primary_operator_code", "primary_operator_name",
         "address", "admin_division_code", "phone", "actual_open_date",
-        "version_no", "valid_from", "valid_to",
+        "version_no", "valid_from", "valid_to", "public_name",
     ]),
     "institutions": (_institutions, [
         "institution_code", "institution_name", "nature", "unified_credit_code",

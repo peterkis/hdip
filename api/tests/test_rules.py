@@ -149,6 +149,19 @@ def test_suspended_campus_cannot_change_status(api):
     assert "已停用" in _problem(api.submit(cr["id"]))
 
 
+def test_campus_public_name(api):
+    """对外名称随版本走，可修订；只填空白被拒（节点角色已停用，改用对外名称）。"""
+    zx = campus_create(code="ZX", name="中心院区", public_name="成都市中心医院")
+    api.apply(inst_create(), zx)
+    row = api.get("/api/campuses", params={"as_of": "2026-12-01"}).json()[0]
+    assert row["version"]["public_name"] == "成都市中心医院"
+    assert row["version"]["node_role"] is None
+    csv = api.get("/api/export/campuses.csv", params={"as_of": "2026-12-01"}).text
+    assert csv.splitlines()[0].endswith(",public_name")
+    cr = api.draft(campus_create(code="KB", name="空白院区", public_name="  "))
+    assert "对外名称" in _problem(api.submit(cr["id"]))
+
+
 def test_unknown_node_role_rejected(api):
     cr = api.draft(campus_create(node_role="MOON"))
     assert "可选范围" in _problem(api.submit(cr["id"]))

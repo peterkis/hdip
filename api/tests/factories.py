@@ -15,7 +15,7 @@ def campus_create(code="GX", name="高新院区", valid_from="2026-10-01", statu
         "kind": "campus.create",
         "code": code,
         "valid_from": valid_from,
-        "fields": {"name": name, "node_role": "HIGH_TECH", **fields},
+        "fields": {"name": name, **fields},
     }
     if status:
         item["operating_status"] = status

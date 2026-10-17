@@ -93,7 +93,9 @@ class CampusFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: Name
+    # 节点角色已停用（与院区名称重复），只为读取旧申请保留；对外叫法写 public_name
     node_role: Text | None = None
+    public_name: Text | None = None
     address: Text | None = None
     admin_division_code: Text | None = None
     phone: Text | None = None
@@ -105,6 +107,7 @@ class CampusPatch(_Patch):
 
     name: Name | None = None
     node_role: Text | None = None
+    public_name: Text | None = None
     address: Text | None = None
     admin_division_code: Text | None = None
     phone: Text | None = None

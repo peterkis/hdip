@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0009**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0010**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -213,6 +213,7 @@
 | `phone` | text |  |  |  |
 | `actual_open_date` | date |  |  |  |
 | `operating_status` | text | 是 |  |  |
+| `public_name` | text |  |  |  |
 
 约束：
 
@@ -221,6 +222,7 @@
 - `campus_version_no_overlap`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
 - `campus_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
 - `campus_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `campus_version_public_name_check`（检查）：`CHECK (((public_name IS NULL) OR (btrim(public_name) <> ''::text)))`
 - `campus_version_status_check`（检查）：`CHECK ((operating_status = ANY (ARRAY['PLANNING'::text, 'TRIAL_RUNNING'::text, 'RUNNING'::text, 'SUSPENDED'::text])))`
 
 触发器：

@@ -3756,6 +3756,18 @@
             ],
             "title": "Node Role"
           },
+          "public_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Name"
+          },
           "address": {
             "anyOf": [
               {
@@ -3838,6 +3850,18 @@
               }
             ],
             "title": "Node Role"
+          },
+          "public_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Name"
           },
           "address": {
             "anyOf": [
@@ -4017,6 +4041,17 @@
             ],
             "title": "Node Role"
           },
+          "public_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Name"
+          },
           "address": {
             "anyOf": [
               {
@@ -4077,6 +4112,7 @@
           "recorded_by",
           "name",
           "node_role",
+          "public_name",
           "address",
           "admin_division_code",
           "phone",

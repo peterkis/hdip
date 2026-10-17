@@ -26,7 +26,7 @@ import { FIELD_LABELS, formatValue, period, type OperatingStatus } from '@/lib/f
 import { useMe } from '@/lib/use-me'
 
 export function CampusesPage() {
-  const { asOf, optionLabels } = useApp()
+  const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListCampuses({ as_of: asOf })
   const [creating, setCreating] = useState(false)
@@ -51,7 +51,7 @@ export function CampusesPage() {
             <TableRow>
               <TableHead>代码</TableHead>
               <TableHead>名称</TableHead>
-              <TableHead>节点角色</TableHead>
+              <TableHead>对外名称</TableHead>
               <TableHead>运营状态</TableHead>
               <TableHead>主要运营方</TableHead>
               <TableHead>版本期间</TableHead>
@@ -76,7 +76,7 @@ export function CampusesPage() {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell>{formatValue('node_role', r.version.node_role, optionLabels)}</TableCell>
+                <TableCell>{r.version.public_name ?? <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell>
                   <OperatingStatusBadge status={r.version.operating_status} />
                 </TableCell>
@@ -94,7 +94,7 @@ export function CampusesPage() {
 
 const CAMPUS_FIELDS: (keyof CampusVersionOut)[] = [
   'name',
-  'node_role',
+  'public_name',
   'operating_status',
   'address',
   'admin_division_code',

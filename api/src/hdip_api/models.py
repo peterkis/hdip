@@ -125,7 +125,8 @@ class CampusVersion(_Version, Base):
 
     campus_id: Mapped[int] = mapped_column(ForeignKey("campus.id"))
     name: Mapped[str] = mapped_column(Text)
-    node_role: Mapped[str | None] = mapped_column(Text)
+    node_role: Mapped[str | None] = mapped_column(Text)  # 已停用，只读历史
+    public_name: Mapped[str | None] = mapped_column(Text)
     address: Mapped[str | None] = mapped_column(Text)
     admin_division_code: Mapped[str | None] = mapped_column(Text)
     phone: Mapped[str | None] = mapped_column(Text)
@@ -135,6 +136,7 @@ class CampusVersion(_Version, Base):
     CONTENT = (
         "name",
         "node_role",
+        "public_name",
         "address",
         "admin_division_code",
         "phone",
