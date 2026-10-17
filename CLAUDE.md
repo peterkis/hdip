@@ -110,7 +110,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/styles/tokens.css       设计令牌（原始 → 语义）；index.css 桥接到 Tailwind 与 shadcn 变量
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
   src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、Steps（多步骤进度节点）、database（列表页的数据库视图）、toaster（轻提示）
-  src/components/             图示：evolve-flow.tsx（拆分 / 合并 / 部门沿革，React Flow）、operator-flow.tsx（主体—院区运营关系图：运行中 = 流动虚线，其他状态 = 实线 + 标签）、version-timeline.tsx（竖向版本时间线：状态、期间、改动字段旧 → 新）
+  src/components/             图示：evolve-flow.tsx（拆分 / 合并 / 部门沿革，React Flow）、operator-flow.tsx（主体—院区运营关系图：直角折线、黑色端点，运行中 = 流动虚线，其他状态 = 实线 + 标签）、version-timeline.tsx（版本与事件时间线：按原型的竖线 + 蓝点 + 日期 / 事件名 / 说明）；细节见 docs/design/ui-tokens.md 第 8.1 节
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
   src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页

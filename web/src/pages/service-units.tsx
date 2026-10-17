@@ -230,7 +230,15 @@ export function ServiceUnitDetailPage() {
         </Section>
 
         <Section title="版本时间线">
-          <VersionTimeline versions={data.versions} fields={UNIT_FIELDS} asOf={asOf} />
+          <VersionTimeline
+            versions={data.versions}
+            fields={UNIT_FIELDS}
+            asOf={asOf}
+            first={{
+              title: '开设',
+              detail: (v) => `${formatValue('unit_type', data.unit_type, optionLabels)} · ${v.department_name} · ${v.campus_name}`,
+            }}
+          />
           <p className="text-fg-muted text-caption">
             新建于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。
             {canEdit && (

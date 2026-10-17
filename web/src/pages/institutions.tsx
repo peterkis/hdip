@@ -184,7 +184,12 @@ export function InstitutionDetailPage() {
             <CardTitle>版本时间线</CardTitle>
           </CardHeader>
           <CardContent>
-            <VersionTimeline versions={data.versions} fields={FIELDS} asOf={asOf} />
+            <VersionTimeline
+              versions={data.versions}
+              fields={FIELDS}
+              asOf={asOf}
+              first={{ title: '建立', detail: (v) => [v.nature, v.unified_credit_code].filter(Boolean).join('，') }}
+            />
           </CardContent>
         </Card>
       </div>

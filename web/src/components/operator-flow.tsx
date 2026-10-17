@@ -2,7 +2,16 @@
 // 查看日期当天在“运行”的院区用流动的虚线连接（一目了然：正在运行）；
 // 其他状态（筹建、试运行、停用、关系尚未开始）用实线 + 标签写明状态。只展示与点击跳转，不拖动、不缩放。
 import '@xyflow/react/dist/base.css'
-import { Building03Icon, Hospital01Icon } from '@hugeicons/core-free-icons'
+import {
+  Building03Icon,
+  Calendar03Icon,
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  Hospital01Icon,
+  Loading03Icon,
+  UserGroupIcon,
+} from '@hugeicons/core-free-icons'
 import {
   Background,
   BackgroundVariant,
@@ -16,10 +25,10 @@ import {
 import { Link } from 'react-router'
 import type { CampusRow, RelationOut } from '@/api/generated/model'
 import { Icon, type AppIcon } from '@/components/kit/icon'
-import { Tag, type Tone } from '@/components/kit/tag'
 import { OPERATING_STATUS, RELATION_TYPE, type OperatingStatus, type RelationType } from '@/lib/format'
-import { OPERATING_STATUS_TONE } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+
+type Pill = { label: string; tone: 'success' | 'info' | 'danger' | 'neutral'; icon: AppIcon }
 
 type CardData = {
   icon: AppIcon
@@ -27,56 +36,73 @@ type CardData = {
   code: string
   subtitle?: string
   footer?: string
-  tag?: { label: string; tone: Tone }
+  footerIcon: AppIcon
+  pill?: Pill
   href: string
   strong?: boolean
-  side: 'left' | 'right'
 }
 type CardNode = Node<CardData, 'card'>
 
-const W = 260
-const H = 96
-const GAP = 22
+const W = 272
+const H = 100
+const GAP = 28
 
+// 状态胶囊：与截图一致——成功 = 浅绿底绿字，失败 = 浅红底红字，其他 = 白底细边框
+const PILL: Record<Pill['tone'], string> = {
+  success: 'bg-success-soft text-success-text border-success-text/25',
+  info: 'bg-info-soft text-info-text border-info-text/25',
+  danger: 'bg-danger-soft text-danger-text border-danger-text/25',
+  neutral: 'bg-surface-raised text-fg-strong border-line',
+}
+
+const STATUS_PILL: Record<OperatingStatus, Pill> = {
+  RUNNING: { label: '运行', tone: 'success', icon: CheckmarkCircle02Icon },
+  TRIAL_RUNNING: { label: '试运行', tone: 'info', icon: Loading03Icon },
+  PLANNING: { label: '筹建', tone: 'neutral', icon: Clock01Icon },
+  SUSPENDED: { label: '停用', tone: 'danger', icon: CancelCircleIcon },
+}
+
+/** 卡片：左右两侧中点各一个黑色实心端点（截图样式），连线从端点出发 */
 function Card({ data }: NodeProps<CardNode>) {
   return (
     <>
-      {data.side === 'right' && <Handle type="target" position={Position.Left} isConnectable={false} />}
+      <Handle type="target" position={Position.Left} isConnectable={false} />
       <Link
         to={data.href}
-        className={cn(
-          'bg-surface-raised hover:border-line-strong flex flex-col rounded-lg border shadow-xs transition-colors',
-          data.strong ? 'border-line-strong' : 'border-line',
-        )}
+        className="bg-surface-raised border-line hover:border-line-strong flex flex-col rounded-lg border shadow-xs transition-colors"
         style={{ width: W, height: H }}
       >
-        <div className="flex min-w-0 items-center gap-2.5 px-3 pt-2.5 pb-2">
+        <div className="flex min-w-0 items-center gap-2.5 px-3 pt-3 pb-2.5">
           <span
             className={cn(
               'flex size-8 shrink-0 items-center justify-center rounded-md',
-              data.strong ? 'bg-fg-strong text-surface-raised' : 'border-line text-fg-secondary border',
+              data.strong ? 'bg-fg-strong text-surface-raised' : 'border-line text-fg-strong border',
             )}
           >
             <Icon icon={data.icon} className="size-4" strokeWidth={1.75} />
           </span>
-          <span className="grid min-w-0">
-            <span className="text-fg-strong flex items-baseline gap-1.5 truncate text-xs font-medium">
+          <span className="grid min-w-0 leading-tight">
+            <span className="text-fg-strong flex items-baseline gap-1.5 text-sm font-medium">
               <span className="truncate">{data.title}</span>
               <span className="text-fg-muted shrink-0 font-mono text-caption font-normal">{data.code}</span>
             </span>
-            <span className="text-fg-muted truncate text-caption">{data.subtitle || ' '}</span>
+            <span className="text-fg-muted truncate text-xs">{data.subtitle || ' '}</span>
           </span>
         </div>
         <div className="border-line-subtle mt-auto flex items-center gap-2 border-t px-3 py-1.5">
-          <span className="text-fg-muted truncate text-caption">{data.footer}</span>
-          {data.tag && (
-            <Tag tone={data.tag.tone} className="ml-auto h-auto text-caption">
-              {data.tag.label}
-            </Tag>
+          <span className="bg-surface-subtle text-fg-secondary flex size-5 shrink-0 items-center justify-center rounded-full">
+            <Icon icon={data.footerIcon} className="size-3" strokeWidth={2} />
+          </span>
+          <span className="text-fg-muted truncate text-xs">{data.footer}</span>
+          {data.pill && (
+            <span className={cn('ml-auto inline-flex h-6 shrink-0 items-center gap-1 rounded-md border px-1.5 text-xs font-medium', PILL[data.pill.tone])}>
+              <Icon icon={data.pill.icon} className="size-3.5" strokeWidth={2} />
+              {data.pill.label}
+            </span>
           )}
         </div>
       </Link>
-      {data.side === 'left' && <Handle type="source" position={Position.Right} isConnectable={false} />}
+      <Handle type="source" position={Position.Right} isConnectable={false} />
     </>
   )
 }
@@ -124,9 +150,9 @@ export function OperatorFlow({
           code: inst.code,
           subtitle: inst.subtitle ?? '运营主体（法人）',
           footer: `运营 ${relations.filter((r) => r.institution_id === inst.id && r.effective_on_as_of).length} 个院区`,
+          footerIcon: UserGroupIcon,
           href: `/institutions/${inst.id}`,
           strong: true,
-          side: 'left',
         },
       }),
     ),
@@ -135,7 +161,7 @@ export function OperatorFlow({
       return {
         id: `c${c.id}`,
         type: 'card',
-        position: { x: W + 200, y: rightY(i) },
+        position: { x: W + 160, y: rightY(i) },
         draggable: false,
         selectable: false,
         data: {
@@ -144,9 +170,9 @@ export function OperatorFlow({
           code: c.code,
           subtitle: c.version.public_name ? `对外称 ${c.version.public_name}` : c.version.address ?? undefined,
           footer: c.not_yet_effective ? `${c.version.valid_from} 起` : relations.some((r) => r.campus_id === c.id) ? `自 ${c.version.valid_from} 起` : '尚未建立运营关系',
-          tag: { label: OPERATING_STATUS[status], tone: OPERATING_STATUS_TONE[status] },
+          footerIcon: Calendar03Icon,
+          pill: STATUS_PILL[status],
           href: `/campuses/${c.id}`,
-          side: 'right',
         },
       }
     }),
@@ -170,13 +196,13 @@ export function OperatorFlow({
         id: `r${r.id}`,
         source: `i${r.institution_id}`,
         target: `c${r.campus_id}`,
-        // 贝塞尔曲线：每条连线各走各的路，标签不挤在同一根竖线上
-        type: 'default',
+        // 直线 + 直角转折（与截图一致）；标签落在中间的竖段上
+        type: 'step',
         animated: running,
         className: running ? 'hd-edge-running' : 'hd-edge-idle',
         label,
-        labelBgPadding: [6, 3] as [number, number],
-        labelBgBorderRadius: 4,
+        labelBgPadding: [8, 4] as [number, number],
+        labelBgBorderRadius: 6,
         focusable: false,
       },
     ]
@@ -187,8 +213,10 @@ export function OperatorFlow({
 
   return (
     <div className="grid gap-2">
-      <div className="hd-flow bg-surface-sidebar border-line-subtle rounded-md border" style={{ height }}>
+      <div className="hd-flow hd-flow-dots bg-surface-sidebar border-line-subtle rounded-md border" style={{ height }}>
         <ReactFlow
+          // 节点变化（数据加载完、增删后继）时重新挂载，让 fitView 按新内容适配
+          key={nodes.map((n) => n.id).join(',')}
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}

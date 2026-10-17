@@ -23,7 +23,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut, ReorgEventOut } from '@/api/generated/model'
+import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut, ReorgEventOut, DepartmentDetail } from '@/api/generated/model'
 import {
   DepartmentAffiliateDialog,
   DepartmentAliasCloseDialog,
@@ -52,10 +52,10 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ExternalCodeLinks } from '@/components/external-code-links'
 import { ClassificationCloseDialog, ClassifyDialog } from '@/components/forms/code-forms'
 import { UnitsTable } from '@/components/units-table'
-import { VersionTimeline } from '@/components/version-timeline'
+import { VersionTimeline, type TimelineEvent } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, stamp, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
+import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
@@ -765,15 +765,16 @@ export function DepartmentDetailPage() {
           </Section>
         )}
         {tab === 'history' && (
-          <Section title="版本时间线">
-            <VersionTimeline versions={data.versions} fields={VERSION_FIELDS} asOf={asOf} />
-            <p className="text-fg-muted text-caption">
-              新建于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。相关申请：
-              {data.change_ids.map((cid) => (
-                <ChangeLink key={cid} id={cid} className="ml-1.5" />
-              ))}
-            </p>
-          </Section>
+          <VersionTimeline
+            versions={data.versions}
+            fields={VERSION_FIELDS}
+            asOf={asOf}
+            first={{
+              title: '设立',
+              detail: (v) => `${ESTABLISHMENT_FORM[v.establishment_form]}，${DEPARTMENT_LIFECYCLE[v.lifecycle as DepartmentLifecycle]}`,
+            }}
+            extra={departmentEvents(data)}
+          />
         )}
 
         {terminal && (
@@ -888,6 +889,46 @@ function RelationsTable({
     </DbTable>
   )
 }
+/** 部门时间线上版本之外的事件：分类赋值、行政隶属调整、管理关系、组织变更 */
+function departmentEvents(d: DepartmentDetail): TimelineEvent[] {
+  const created = d.versions.at(-1)?.valid_from
+  return [
+    ...d.classifications.map((c) => ({
+      key: `c${c.id}`,
+      date: c.valid_from,
+      title: c.scheme_code === MAIN_SCHEME ? '主分类赋值' : '分类赋值',
+      detail: `${c.scheme_name}：${c.name}`,
+      changeId: c.change_id,
+    })),
+    ...d.parents
+      .filter((e) => e.valid_from !== created || e.parent)
+      .map((e) => ({
+        key: `p${e.id}`,
+        date: e.valid_from,
+        title: '调整行政隶属',
+        detail: `${e.view_name}：隶属${e.parent.name}`,
+        changeId: e.change_id,
+      })),
+    ...d.relations.map((r) => ({
+      key: `r${r.id}`,
+      date: r.valid_from,
+      title: `建立${DEPT_RELATION[r.kind as DeptRelationKind]}关系`,
+      detail: `${r.from_department.name}${r.to_department ? ` → ${r.to_department.name}` : ''}：${r.scope}`,
+      changeId: r.change_id,
+    })),
+    ...d.reorganizations.map((e) => {
+      const names = (role: string) => e.participants.filter((p) => p.role === role).map((p) => p.department.name).join('、')
+      return {
+        key: `e${e.id}`,
+        date: e.effective_date,
+        title: `组织变更：${REORG_TITLE[e.event_type]}`,
+        detail: `${names('SOURCE')} → ${names('RESULT')}（依据：${e.basis_note}）`,
+        changeId: e.change_id,
+      }
+    }),
+  ]
+}
+
 /** 沿革：每个组织变更事件一张图，写明依据、身份结论与承接范围；点部门跳到它 */
 function ReorgHistory({ events, selfCode }: { events: ReorgEventOut[]; selfCode: string }) {
   const OUTCOME = { EXITS: '退出', NEW: '新设', CONTINUES: '存续' } as const

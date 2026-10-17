@@ -199,7 +199,16 @@ export function CampusDetailPage() {
             <CardTitle>版本时间线</CardTitle>
           </CardHeader>
           <CardContent>
-            <VersionTimeline versions={data.versions} fields={CAMPUS_FIELDS} asOf={asOf} />
+            <VersionTimeline
+              versions={data.versions}
+              fields={CAMPUS_FIELDS}
+              asOf={asOf}
+              first={{
+                title: '建立',
+                detail: (v) =>
+                  [formatValue('operating_status', v.operating_status), v.public_name && `对外称 ${v.public_name}`].filter(Boolean).join('，'),
+              }}
+            />
           </CardContent>
         </Card>
       </div>

@@ -207,6 +207,8 @@ export function EvolveFlow({
   return (
     <div className={cn('hd-flow bg-surface-sidebar border-line-subtle rounded-md border', className)} style={{ height }}>
       <ReactFlow
+        // 节点变化（数据加载完、增删后继）时重新挂载，让 fitView 按新内容适配
+        key={nodes.map((n) => n.id).join(',')}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

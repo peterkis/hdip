@@ -1,11 +1,9 @@
-// 版本时间线：竖向进度线，新版本在上。每个节点一眼看清三件事——
-// ① 这一版的状态（查看日期当天有效 / 计划中 / 已结束 / 生效前已更正）与业务期间；
-// ② 相对上一版改了什么（旧值划掉 → 新值），第一版列出建立时填写的内容；
-// ③ 来源申请、确认人与时间（次要信息，弱化显示）。
+// 版本与事件时间线（按原型复刻）：左侧一条浅灰竖线，每个事件一个蓝色实心圆点；
+// 日期（灰）→ 事件名（粗）→ 一句说明（灰）。按时间从早到晚；查看日期之后的事件显示为灰色。
+// 事件由版本推出（设立、更名、修订属性、生命周期变更…），页面还可补充其他事件（分类赋值、隶属调整、组织变更）。
 import { Link } from 'react-router'
-import { Tag, type Tone } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
-import { FIELD_LABELS, formatValue, stamp } from '@/lib/format'
+import { FIELD_LABELS, formatValue } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface Version {
@@ -17,101 +15,128 @@ interface Version {
   recorded_by: { display_name: string }
 }
 
-type Phase = 'current' | 'future' | 'ended' | 'void'
-
-const PHASE: Record<Phase, { label: string; tone: Tone; dot: string }> = {
-  current: { label: '当前有效', tone: 'green', dot: 'bg-brand ring-4 ring-brand-soft' },
-  future: { label: '计划中', tone: 'blue', dot: 'bg-surface-raised ring-2 ring-brand' },
-  ended: { label: '已结束', tone: 'gray', dot: 'bg-line-strong' },
-  void: { label: '生效前已更正', tone: 'gray', dot: 'bg-surface-raised ring-1 ring-line-strong' },
+export interface TimelineEvent {
+  key: string
+  date: string
+  title: string
+  detail?: string
+  changeId?: number
+  /** 生效前已更正的版本：从未生效 */
+  void?: boolean
 }
 
-function phaseOf(v: Version, asOf: string): Phase {
-  if (v.valid_to !== null && v.valid_to < v.valid_from) return 'void'
-  if (v.valid_from > asOf) return 'future'
-  if (v.valid_to !== null && v.valid_to < asOf) return 'ended'
-  return 'current'
-}
+/** 只改了这些字段时用专门的事件名 */
+const SPECIAL: [string, string][] = [
+  ['name', '更名'],
+  ['lifecycle', '生命周期变更'],
+  ['operating_status', '运营状态变更'],
+  ['status', '状态变更'],
+  ['department_name', '更换所属部门'],
+]
 
 function isEmpty(x: unknown) {
   return x === null || x === undefined || x === '' || (Array.isArray(x) && x.length === 0)
 }
 
-/** 版本按新到旧排列；每版只显示与上一版相比改动的字段，查看日期所在的版本突出显示。 */
+/** 由版本推出事件：第一版 = 设立 / 建立；之后每版按改动的字段命名，说明写“旧 → 新” */
+export function useVersionEvents<V extends Version>(
+  versions: V[],
+  fields: (keyof V)[],
+  first: { title: string; detail: (v: V) => string },
+): TimelineEvent[] {
+  const { optionLabels } = useApp()
+  const fmt = (f: keyof V, v: V) => formatValue(String(f), v[f], optionLabels)
+  const asc = [...versions].sort((a, b) => a.version_no - b.version_no)
+  const live = asc.filter((v) => !(v.valid_to !== null && v.valid_to < v.valid_from))
+  return asc.map((v): TimelineEvent => {
+    const isVoid = v.valid_to !== null && v.valid_to < v.valid_from
+    const prev = live.filter((x) => x.version_no < v.version_no).at(-1)
+    if (!prev)
+      return { key: `v${v.version_no}`, date: v.valid_from, title: first.title, detail: first.detail(v), changeId: v.change_id, void: isVoid }
+    const changed = fields.filter((f) => JSON.stringify(prev[f]) !== JSON.stringify(v[f]))
+    const special = changed.length === 1 ? SPECIAL.find(([f]) => f === changed[0])?.[1] : undefined
+    const detail = changed
+      .map((f) => {
+        const label = changed.length === 1 && special ? '' : `${FIELD_LABELS[String(f)]}：`
+        return isEmpty(prev[f]) ? `${label}补录 ${fmt(f, v)}` : `${label}${fmt(f, prev)} → ${fmt(f, v)}`
+      })
+      .join('；')
+    return {
+      key: `v${v.version_no}`,
+      date: v.valid_from,
+      title: isVoid ? '生效前已更正' : (special ?? '修订属性'),
+      detail: (special === '更名' ? `${detail}（身份不变）` : detail) || '内容未变，只调整了期间',
+      changeId: v.change_id,
+      void: isVoid,
+    }
+  })
+}
+
+export function Timeline({ events, asOf }: { events: TimelineEvent[]; asOf: string }) {
+  const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date))
+  return (
+    <div className="grid gap-5">
+      <ol className="relative">
+        <span aria-hidden className="bg-line-subtle absolute top-0 bottom-0 left-1.5 w-0.5 rounded-full" />
+        {sorted.map((e) => {
+          const muted = e.date > asOf || e.void
+          return (
+            <li key={e.key} className="group relative pb-4 pl-7 last:pb-2">
+              <span
+                aria-hidden
+                className={cn('absolute top-1 left-0 size-3.5 rounded-full', muted ? 'bg-line-strong' : 'bg-brand')}
+              />
+              <div className="flex items-baseline gap-3">
+                <span className={cn('text-xs tabular-nums', muted ? 'text-fg-disabled' : 'text-fg-muted')}>{e.date}</span>
+                {e.changeId && (
+                  <Link
+                    to={`/changes/${e.changeId}`}
+                    className="text-fg-muted hover:text-fg text-caption opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+                  >
+                    申请 #{e.changeId}
+                  </Link>
+                )}
+              </div>
+              <div className={cn('text-xs font-semibold', muted ? 'text-fg-muted' : 'text-fg-strong', e.void && 'line-through')}>
+                {e.title}
+              </div>
+              {e.detail && <div className={cn('text-caption', muted ? 'text-fg-disabled' : 'text-fg-secondary')}>{e.detail}</div>}
+            </li>
+          )
+        })}
+      </ol>
+      <p className="text-fg-muted text-xs">每个事件都对应一张已确认的变更申请；查看日期之后的事件显示为灰色。</p>
+    </div>
+  )
+}
+
+/** 版本时间线：由版本推出事件，可附加页面自己的事件 */
 export function VersionTimeline<V extends Version>({
   versions,
   fields,
   asOf,
+  first,
+  extra = [],
 }: {
   versions: V[]
   fields: (keyof V)[]
   asOf: string
+  first?: { title: string; detail: (v: V) => string }
+  extra?: TimelineEvent[]
 }) {
   const { optionLabels } = useApp()
-  // 比较对象：跳过“生效前已更正”的版本，它从未生效
-  const live = versions.filter((v) => phaseOf(v, asOf) !== 'void')
-  return (
-    <ol className="relative grid">
-      {versions.map((v, i) => {
-        const phase = phaseOf(v, asOf)
-        const style = PHASE[phase]
-        const prev = phase === 'void' ? versions[i + 1] : live[live.indexOf(v) + 1]
-        const changed = fields.filter((f) =>
-          prev ? JSON.stringify(prev[f]) !== JSON.stringify(v[f]) : !isEmpty(v[f]),
-        )
-        const lastItem = i === versions.length - 1
-        return (
-          <li key={v.version_no} className="relative grid grid-cols-[1.5rem_1fr] gap-x-3">
-            {/* 竖线与节点 */}
-            <div className="relative flex justify-center">
-              {!lastItem && <span aria-hidden className="bg-line absolute top-4 bottom-0 w-px" />}
-              <span aria-hidden className={cn('relative z-10 mt-1.5 size-2.5 rounded-full', style.dot)} />
-            </div>
-            <div className={cn('grid gap-2 pb-6', phase === 'current' && 'bg-surface-subtle -mx-2 mb-4 rounded-md px-2 pt-1 pb-3')}>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <span className={cn('text-sm font-semibold', phase === 'void' || phase === 'ended' ? 'text-fg-secondary' : 'text-fg-strong')}>
-                  第 {v.version_no} 版
-                </span>
-                <Tag tone={style.tone}>{style.label}</Tag>
-                <span className={cn('text-xs', phase === 'void' ? 'text-fg-muted line-through' : 'text-fg-secondary')}>
-                  {v.valid_from} → {phase === 'void' ? '未生效' : (v.valid_to ?? '长期')}
-                </span>
-                <span className="text-fg-muted ml-auto text-caption">
-                  <Link className="hover:text-fg hover:underline" to={`/changes/${v.change_id}`}>
-                    申请 #{v.change_id}
-                  </Link>
-                  {' · '}
-                  {v.recorded_by.display_name} · {stamp(v.recorded_at)}
-                </span>
-              </div>
-              {changed.length > 0 ? (
-                <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-xs">
-                  {changed.map((f) => (
-                    <div key={String(f)} className="contents">
-                      <dt className="text-fg-muted">{FIELD_LABELS[String(f)]}</dt>
-                      <dd className="min-w-0">
-                        {prev && (
-                          <>
-                            <span className="text-fg-muted line-through">{formatValue(String(f), prev[f], optionLabels)}</span>
-                            <span className="text-fg-disabled mx-1.5">→</span>
-                          </>
-                        )}
-                        <span className={cn(prev ? 'text-fg-strong font-medium' : 'text-fg')}>
-                          {formatValue(String(f), v[f], optionLabels)}
-                        </span>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              ) : (
-                <p className="text-fg-muted text-xs">{prev ? '内容与上一版相同（只调整了期间）' : '建立'}</p>
-              )}
-              {!prev && phase !== 'void' && <p className="text-fg-muted text-caption">建立：以上为这一版填写的内容</p>}
-              {phase === 'void' && <p className="text-fg-muted text-caption">这一版在开始日前已被下一版更正，从未生效，记录保留。</p>}
-            </div>
-          </li>
-        )
-      })}
-    </ol>
+  const events = useVersionEvents(
+    versions,
+    fields,
+    first ?? {
+      title: '建立',
+      detail: (v) =>
+        fields
+          .filter((f) => !isEmpty(v[f]))
+          .slice(0, 3)
+          .map((f) => formatValue(String(f), v[f], optionLabels))
+          .join('，'),
+    },
   )
+  return <Timeline events={[...events, ...extra]} asOf={asOf} />
 }
