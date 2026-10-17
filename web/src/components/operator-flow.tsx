@@ -40,6 +40,8 @@ type CardData = {
   pill?: Pill
   href: string
   strong?: boolean
+  /** 左列（主体）只有右侧端点；右列（院区）只有左侧端点：没有上级或下级的一侧不画端点 */
+  side: 'left' | 'right'
 }
 type CardNode = Node<CardData, 'card'>
 
@@ -66,7 +68,7 @@ const STATUS_PILL: Record<OperatingStatus, Pill> = {
 function Card({ data }: NodeProps<CardNode>) {
   return (
     <>
-      <Handle type="target" position={Position.Left} isConnectable={false} />
+      {data.side === 'right' && <Handle type="target" position={Position.Left} isConnectable={false} />}
       <Link
         to={data.href}
         className="bg-surface-raised border-line hover:border-line-strong flex flex-col rounded-lg border shadow-xs transition-colors"
@@ -102,7 +104,7 @@ function Card({ data }: NodeProps<CardNode>) {
           )}
         </div>
       </Link>
-      <Handle type="source" position={Position.Right} isConnectable={false} />
+      {data.side === 'left' && <Handle type="source" position={Position.Right} isConnectable={false} />}
     </>
   )
 }
@@ -153,6 +155,7 @@ export function OperatorFlow({
           footerIcon: UserGroupIcon,
           href: `/institutions/${inst.id}`,
           strong: true,
+          side: 'left',
         },
       }),
     ),
@@ -173,6 +176,7 @@ export function OperatorFlow({
           footerIcon: Calendar03Icon,
           pill: STATUS_PILL[status],
           href: `/campuses/${c.id}`,
+          side: 'right',
         },
       }
     }),
