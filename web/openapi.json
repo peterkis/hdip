@@ -578,7 +578,7 @@
           "master"
         ],
         "summary": "List Relations",
-        "description": "查看日期当天有效的主体—院区关系。",
+        "description": "查看日期当天有效的主体—院区关系；include_future 时另含之后才开始的。",
         "operationId": "listOperatorRelations",
         "parameters": [
           {
@@ -631,6 +631,18 @@
               ],
               "title": "Campus Id"
             }
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "是否包含查看日期之后才开始的关系（如筹建院区的未来运营关系）",
+              "default": false,
+              "title": "Include Future"
+            },
+            "description": "是否包含查看日期之后才开始的关系（如筹建院区的未来运营关系）"
           },
           {
             "name": "x-hdip-user",
@@ -4657,6 +4669,30 @@
               }
             ],
             "title": "Confirmed At"
+          },
+          "returned_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Returned At"
+          },
+          "cancelled_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cancelled At"
           }
         },
         "type": "object",
@@ -4668,7 +4704,9 @@
           "created_by",
           "created_at",
           "submitted_at",
-          "confirmed_at"
+          "confirmed_at",
+          "returned_at",
+          "cancelled_at"
         ],
         "title": "ChangeRequestSummary"
       },

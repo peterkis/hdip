@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
-import { useGetInstitution, useListInstitutions } from '@/api/generated/master/master'
+import { useGetInstitution, useListCampuses, useListInstitutions, useListOperatorRelations } from '@/api/generated/master/master'
+import { OperatorFlow } from '@/components/operator-flow'
 import type { InstitutionVersionOut } from '@/api/generated/model'
 import {
   InstitutionCreateDialog,
@@ -25,6 +26,8 @@ export function InstitutionsPage() {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListInstitutions({ as_of: asOf })
+  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
+  const { data: relations = [] } = useListOperatorRelations({ as_of: asOf, include_future: true })
   const [creating, setCreating] = useState(false)
 
   return (
@@ -79,6 +82,18 @@ export function InstitutionsPage() {
           </TableBody>
         </Table>
       )}
+      {rows.length > 0 && (
+        <section className="mt-6 grid gap-2">
+          <h2 className="text-fg-strong text-sm font-semibold">主体—院区运营关系（{asOf}）</h2>
+          <OperatorFlow
+            institutions={rows.map((r) => ({ id: r.id, code: r.code, name: r.version.name, subtitle: r.version.nature ?? undefined }))}
+            campuses={campuses}
+            relations={relations}
+            asOf={asOf}
+            allCampuses
+          />
+        </section>
+      )}
       {creating && <InstitutionCreateDialog open onOpenChange={setCreating} />}
     </>
   )
@@ -99,6 +114,8 @@ export function InstitutionDetailPage() {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data, isError } = useGetInstitution(id, { as_of: asOf })
+  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
+  const { data: relations = [] } = useListOperatorRelations({ as_of: asOf, institution_id: id, include_future: true })
   const [dialog, setDialog] = useState<'revise' | 'relation' | null>(null)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
   if (!data) return isError || !Number.isInteger(id) ? <Missing what="主体" back={{ to: '/institutions', label: '返回主体列表' }} /> : null
@@ -152,7 +169,13 @@ export function InstitutionDetailPage() {
           <CardHeader>
             <CardTitle>运营的院区与关系</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-4">
+            <OperatorFlow
+              institutions={[{ id: data.id, code: data.code, name: (onDay ?? latest).name, subtitle: (onDay ?? latest).nature ?? undefined }]}
+              campuses={campuses}
+              relations={relations}
+              asOf={asOf}
+            />
             <RelationsTable relations={data.relations} canEdit={isMaintainer} />
           </CardContent>
         </Card>

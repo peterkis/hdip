@@ -11,7 +11,7 @@ import {
   useGetChangeRequest,
   useListChangeRequests,
 } from '@/api/generated/changes/changes'
-import type { ChangeRequestOut, ItemOutcome, ListChangeRequestsStatus } from '@/api/generated/model'
+import type { ChangeRequestOut, ChangeRequestSummary, ItemOutcome, ListChangeRequestsStatus } from '@/api/generated/model'
 import { ChangeStatusBadge } from '@/components/badges'
 import {
   CampusCreateDialog,
@@ -23,7 +23,9 @@ import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { Callout } from '@/components/kit/callout'
+import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
+import { Tag } from '@/components/kit/tag'
 import { Steps, type StepItem } from '@/components/kit/steps'
 import { QuoteDownIcon } from '@hugeicons/core-free-icons'
 import { PageHeader } from '@/components/layout'
@@ -74,42 +76,87 @@ export function ChangesPage() {
           </EmptyHeader>
         </Empty>
       ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>#</TableHead>
-              <TableHead>状态</TableHead>
-              <TableHead>变更内容</TableHead>
-              <TableHead>说明</TableHead>
-              <TableHead>创建</TableHead>
-              <TableHead>提交</TableHead>
-              <TableHead>确认</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>
-                  <Link className="font-medium hover:underline" to={`/changes/${r.id}`}>
-                    #{r.id}
-                  </Link>
-                </TableCell>
-                <TableCell>
-                  <ChangeStatusBadge status={r.status} />
-                </TableCell>
-                <TableCell className="whitespace-normal">{r.item_labels.join('、') || '（空）'}</TableCell>
-                <TableCell className="max-w-48 truncate">{r.note ?? ''}</TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {r.created_by.display_name} · {stamp(r.created_at)}
-                </TableCell>
-                <TableCell className="whitespace-nowrap">{stamp(r.submitted_at)}</TableCell>
-                <TableCell className="whitespace-nowrap">{stamp(r.confirmed_at)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <DbTable
+          columns={[
+            { label: '#', className: 'w-12' },
+            { label: '状态', className: 'w-20' },
+            { label: '变更内容', className: 'min-w-64' },
+            { label: '说明', className: 'w-48' },
+            { label: '最近处理', className: 'w-36' },
+          ]}
+        >
+          {rows.map((r) => (
+            <DbRow key={r.id}>
+              <DbCell>
+                <Link className="text-fg-strong font-medium hover:underline" to={`/changes/${r.id}`}>
+                  #{r.id}
+                </Link>
+              </DbCell>
+              <DbCell>
+                <ChangeStatusBadge status={r.status} />
+              </DbCell>
+              <DbCell className="py-1.5">
+                <ItemSummary labels={r.item_labels} />
+              </DbCell>
+              <DbCell className="max-w-48">
+                <span className="text-fg-secondary block truncate" title={r.note ?? undefined}>
+                  {r.note ?? ''}
+                </span>
+              </DbCell>
+              <DbCell className="whitespace-nowrap">
+                <LastStep r={r} />
+              </DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
       )}
     </>
+  )
+}
+
+/** 最近一步：确认 / 退回 / 撤销 / 提交 / 创建，只显示最新的一步与时间（完整流程在详情页的进度条里） */
+function LastStep({ r }: { r: ChangeRequestSummary }) {
+  const [label, at] = r.confirmed_at
+    ? ['确认', r.confirmed_at]
+    : r.returned_at
+      ? ['退回', r.returned_at]
+      : r.cancelled_at
+        ? ['撤销', r.cancelled_at]
+        : r.submitted_at
+          ? ['提交', r.submitted_at]
+          : ['创建', r.created_at]
+  return (
+    <span className="grid leading-tight" title={`创建：${r.created_by.display_name} ${stamp(r.created_at)}`}>
+      <span className="text-fg-secondary">{label}</span>
+      <span className="text-fg-muted text-caption">{stamp(at)}</span>
+    </span>
+  )
+}
+
+/**
+ * 变更内容摘要：同类变更项合并计数（“新建部门 ×94”），按数量从多到少，最多显示 3 类，其余收成“另 N 类”。
+ * 大批量导入的申请不再把表格撑出屏幕；完整内容在申请详情里看。
+ */
+function ItemSummary({ labels }: { labels: string[] }) {
+  if (labels.length === 0) return <span className="text-fg-disabled">（空）</span>
+  const groups = [...labels.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1])
+  const shown = groups.slice(0, 3)
+  const rest = groups.slice(3)
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {shown.map(([label, n]) => (
+        <Tag key={label} tone="gray">
+          {label}
+          {n > 1 && <span className="text-fg-muted ml-1 tabular-nums">×{n}</span>}
+        </Tag>
+      ))}
+      {rest.length > 0 && (
+        <span className="text-fg-muted text-caption" title={rest.map(([l, n]) => `${l} ×${n}`).join('、')}>
+          另 {rest.length} 类
+        </span>
+      )}
+      {labels.length > 1 && <span className="text-fg-muted text-caption">共 {labels.length} 项</span>}
+    </span>
   )
 }
 
@@ -120,6 +167,8 @@ export function ChangeDetailPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
+  // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
+  const [itemLimit, setItemLimit] = useState(50)
   const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
@@ -285,7 +334,7 @@ export function ChangeDetailPage() {
           </CardHeader>
           <CardContent className="grid gap-3">
             {cr.items.length === 0 && <p className="text-muted-foreground text-xs">没有变更项</p>}
-            {cr.items.map((item, i) => {
+            {cr.items.slice(0, itemLimit).map((item, i) => {
               const outcome = cr.outcomes?.find((o) => o.index === i)
               const problem = cr.problems.find((x) => x.item_index === i)
               return (
@@ -305,6 +354,20 @@ export function ChangeDetailPage() {
                 </div>
               )
             })}
+            {cr.items.length > itemLimit && (
+              <div className="flex items-center gap-3 text-xs">
+                <span className="text-fg-muted">
+                  已显示 {itemLimit} / {cr.items.length} 项
+                  {cr.problems.some((x) => (x.item_index ?? 0) >= itemLimit) && '（后面还有未通过校验的项）'}
+                </span>
+                <Button size="sm" variant="outline" onClick={() => setItemLimit(itemLimit + 200)}>
+                  再显示 200 项
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setItemLimit(cr.items.length)}>
+                  全部显示
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

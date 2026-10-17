@@ -8,8 +8,9 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通，剧本 18–20（部门组织变更）有后端测试（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`、`make api-walk`、`make web-walk`）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通，剧本 18–20（部门组织变更）有后端测试（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`、`make api-walk`、`make web-walk`）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树（连线、可折叠）、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。主体列表与详情有主体—院区运营关系图；各详情页的版本时间线为竖向进度式；变更申请列表合并同类变更项计数、详情分批显示。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
+- **文档与改动同步（Peter 2026-10-18 要求）**：迁移、表结构、接口、导出数据集或业务规则有任何改动，**在同一次提交里**同步：`make db-doc`（结构参考）、`docs/database/README.md`（全景表、写入表、读取与导出、迁移史、相应章节）、本文件的规则速查与文档索引，以及相关业务文档（设计文档、实施计划、评估与分期、走查记录）。新定的规则当场写进对应文档，不留到以后。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
 - 业务尚不明确、随时可能调整：优先小而可改的实现，不做提前抽象。
 
@@ -109,6 +110,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/styles/tokens.css       设计令牌（原始 → 语义）；index.css 桥接到 Tailwind 与 shadcn 变量
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
   src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、Steps（多步骤进度节点）、database（列表页的数据库视图）、toaster（轻提示）
+  src/components/             图示：evolve-flow.tsx（拆分 / 合并 / 部门沿革，React Flow）、operator-flow.tsx（主体—院区运营关系图：运行中 = 流动虚线，其他状态 = 实线 + 标签）、version-timeline.tsx（竖向版本时间线：状态、期间、改动字段旧 → 新）
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
   src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页

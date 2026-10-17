@@ -200,3 +200,35 @@
 .hd-flow .react-flow__node {
   cursor: default;
 }
+
+/* 主体—院区运营关系图（components/operator-flow.tsx）：运行中 = 强调色流动虚线；其他 = 实线 + 状态标签 */
+.hd-flow .hd-edge-running .react-flow__edge-path {
+  stroke: var(--hd-accent);
+  stroke-width: 1.75;
+}
+.hd-flow .hd-edge-idle .react-flow__edge-path {
+  stroke: var(--hd-border-strong);
+  stroke-dasharray: none;
+}
+.hd-flow .react-flow__edge-textbg {
+  fill: var(--hd-surface-raised);
+  stroke: var(--hd-border-default);
+}
+.hd-flow .react-flow__edge-text {
+  fill: var(--hd-text-secondary);
+  font-size: var(--hd-type-caption-size);
+}
+.hd-legend-running,
+.hd-legend-idle {
+  display: inline-block;
+  width: 1.5rem;
+  border-top-width: 2px;
+}
+.hd-legend-running {
+  border-top-style: dashed;
+  border-color: var(--hd-accent);
+}
+.hd-legend-idle {
+  border-top-style: solid;
+  border-color: var(--hd-border-strong);
+}

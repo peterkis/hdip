@@ -533,7 +533,7 @@ export const getListOperatorRelationsUrl = (params?: ListOperatorRelationsParams
 }
 
 /**
- * 查看日期当天有效的主体—院区关系。
+ * 查看日期当天有效的主体—院区关系；include_future 时另含之后才开始的。
  * @summary List Relations
  */
 export const listOperatorRelations = async (params?: ListOperatorRelationsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<RelationOut[]> => {

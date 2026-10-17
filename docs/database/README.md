@@ -1,6 +1,6 @@
 # HDIP 数据库设计
 
-2026-10-15 · PostgreSQL 18 · 迁移目录 `migrations/versions/` · 当前迁移版本见 [schema-reference.md](schema-reference.md)
+2026-10-18 · PostgreSQL 18 · 迁移目录 `migrations/versions/` · 当前迁移版本见 [schema-reference.md](schema-reference.md)
 
 本文是数据库的**设计说明**：结构为什么是这样、规则在哪一层保证、数据怎样写入和读取，以及已经规划但尚未实施的部分。
 
@@ -12,6 +12,10 @@
 | [schema-reference.md](schema-reference.md) | 自动生成：每张表的列、约束、索引、触发器、触发器函数、应用账号权限、配置种子 |
 | [../HDIP 轻量 MVP 设计：主体、院区、服务单元维护.md](../HDIP%20轻量%20MVP%20设计：主体、院区、服务单元维护.md) | 业务设计依据（对象、规则、验收剧本） |
 | [../部门主数据深化-实施计划.md](../部门主数据深化-实施计划.md) | 部门深化的需求、决定与阶段 |
+| [../部门组织变更-评估与分期.md](../部门组织变更-评估与分期.md) | 部门拆分、合并等组织变更：模型评估、第一期（已实施）与第二期规划 |
+| [../剧本走查记录.md](../剧本走查记录.md) | 浏览器走查结果、发现的问题与处理（含 Peter 的反馈与决定） |
+
+> **同步规则**：任何迁移、表结构或业务规则的改动，在同一次提交里同步——本文（全景表、写入表、读取与导出、迁移史及相应章节）、`make db-doc` 生成的结构参考、CLAUDE.md 的规则速查，以及相关业务文档。
 
 ---
 
@@ -32,6 +36,8 @@ erDiagram
     campus ||--o{ service_unit_version : "院区"
     institution ||--o{ service_unit_version : "运营主体"
     service_unit ||--o{ service_unit_lineage : "前身 / 后继"
+    department_change_event ||--|{ department_change_participant : "参与部门"
+    department ||--o{ department_change_participant : "原部门 / 结果部门"
 ```
 
 | 分组 | 表 | 说明 |
@@ -44,6 +50,9 @@ erDiagram
 | 部门关系 | `department_hierarchy`、`department_relation` | 行政隶属（一级 / 二级部门）；专业管理、协作、院区管理（D2，迁移 0007） |
 | 外部标识 | `source_system`、`code_namespace`、`external_code`、`external_code_assignment` | 来源系统与字典（配置）；源记录与按期间的解释（编码映射台账，D3，迁移 0008） |
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage`、`service_unit_classification` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系；单元分类（D3） |
+| 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
+
+院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
 
 ## 2. 设计约定
 
@@ -61,6 +70,7 @@ erDiagram
   - 数据库里以 `daterange(valid_from, valid_to, '[]')` 表达。
   - 不重叠用 `EXCLUDE USING gist (对象 WITH =, daterange(...) WITH &&)`，依赖迁移 0001 启用的 `btree_gist`。
   - 修订在 D 生效：旧版 `valid_to = D-1`，新版 `valid_from = D`。允许未来生效日。
+  - **未生效版本的更正**（迁移 0011）：最新版本尚未生效（开始日晚于今天）时，可在其开始日当天修订。原版本 `valid_to = valid_from - 1`，成为**空期间**——从未生效、记录保留（`apply.is_void`）；新版本自同一天起。为此四张版本表（主体、院区、部门、服务单元）的期间检查放宽为 `valid_to >= valid_from - 1`，排他约束改用等价的半开区间 `daterange(valid_from, valid_to + 1)`（空期间不与任何期间重叠）。读取“某日有效版本 / 最早计划版本”时跳过空期间版本；时间线显示为“生效前已更正”。
 - **审计时间**用 `timestamp without time zone`，**不用 `timestamptz`**。写入时取 `LOCALTIMESTAMP`；连接时会话时区固定为 `HDIP_TIMEZONE`（默认 Asia/Shanghai，见 `api/src/hdip_api/core/db.py`）。
 - 审计时间和业务时间分开：`recorded_at` 是系统记录时间，`valid_from` 是业务生效日。
 
@@ -110,6 +120,7 @@ stateDiagram-v2
   - 所属部门在单元整个期间内须为“正式履职”（D1 起按部门版本期间校验）。被改为非正式履职的部门、被停用的院区、被关闭的运营关系，其影响到的单元版本也在此重新校验。
 
   所以“停用院区 + 改挂单元”可以放在同一张申请里，不论先后。
+- 同样在全部变更项应用后进行的还有：`_check_org`（视图不成环；撤销 / 被替代的部门不能还有下级）、`_check_codes`（同一代码重叠期间的解释要么都带院区条件、要么都不带）、`_check_ended_codes`（退出的部门在退出日及以后不能还有外部编码解释指向它）。
 - 确认权限：`approval_rule`（对象类型 × 动作 → 确认角色、是否允许提交人自确认）。改规则不改代码。
 
 | 对象 | 变更项 kind | 写入的表 |
@@ -121,6 +132,8 @@ stateDiagram-v2
 | 部门关系 | `department.set_parent`、`.relation_create`、`.relation_close`；撤销部门时自动结束它自己的上级边与参与的关系 | `department_hierarchy`、`department_relation` |
 | 服务单元 | `service_unit.create`、`.revise`、`.rebind`、`.change_department`、`.change_status`、`.retire` | `service_unit`、`service_unit_version` |
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
+| 分类与外部标识 | `department.classification_close`、`service_unit.classify`、`service_unit.classification_close`、`external_code.register`、`.assign`、`.assignment_close` | `department_classification`、`service_unit_classification`、`external_code`、`external_code_assignment` |
+| 部门组织变更 | `department.reorganize`（与同一申请里的 `department.create`、单元改挂、隶属调整、结束编码解释等配合） | `department_version`（退出部门新版本为“被替代”）、`department_change_event`、`department_change_participant`；自动结束退出部门的上级边、管理关系、分类、别名、主体归属 |
 
 ## 4. 读取：按日期
 
@@ -128,7 +141,9 @@ stateDiagram-v2
 - 列表默认也列出“尚未生效的计划对象”，并标 `not_yet_effective`。服务单元列表用 `include_future=false` 只看当天已生效的，这就是“某日在运营的单元”，含暂停。
 - 名称显示：主体、院区、部门都取当日版本的名称（部门自 D1 起有版本）。
 - 部门数口径：查看日期当天已设立且组织生命周期为“正式履职”的部门。
-- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元、部门、院区、主体、运营关系、单元演变关系，以及部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）。列名和列顺序是对外契约，新增列只能加在末尾。
+- 运营关系列表 `GET /api/operator-relations?include_future=true` 另含查看日期之后才开始的关系（主体—院区关系图用它画出筹建院区）。
+- 承接清单 `GET /api/departments/{id}/dependencies?day=`：部门在某日及以后仍有效的服务单元、下级部门、外部编码解释、分类与管理关系（组织变更向导用）。
+- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`）、部门（`departments`）、院区（`campuses`，末尾加了 `public_name`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）。列名和列顺序是对外契约，新增列只能加在末尾。
 
 ## 5. 迁移史
 
@@ -153,7 +168,7 @@ stateDiagram-v2
 2. `models.py` 加映射；`schemas/items.py` 加变更项；`services/apply.py` 加处理函数，登记到 `HANDLERS`，并补 `CONSTRAINT_MESSAGES`。
 3. 加查询、路由（写明 `operation_id`），然后执行 `make gen`。
 4. 写测试：剧本测试 `test_scriptN.py`；每条新约束在 `test_rules*.py` 里要有反例。
-5. `make migrate && make db-doc`，同步本文与 CLAUDE.md。
+5. `make migrate && make db-doc`，在同一次提交里同步：本文（全景表、写入表、读取与导出、迁移史、相应章节）、CLAUDE.md 的规则速查与文档索引、相关业务文档（设计文档、实施计划、评估与分期、走查记录）。
 
 ## 6. 部门深化（D1、D2、D3 已实施）
 
@@ -353,3 +368,14 @@ erDiagram
 - **部门—服务单元的其他责任关系**：本期只有服务单元版本上的“所属部门”。
 - **成本分类、核算单元**：等核算域。
 - **部门拆分合并**：生命周期已预留“被替代”；将来增加与 `service_unit_lineage` 同形的 `department_lineage`。
+
+## 7. 部门组织变更（第一期已实施，迁移 0012）
+
+评估与分期见 [部门组织变更-评估与分期](../部门组织变更-评估与分期.md)。
+
+- **身份先定**：`department_change_event.event_type` 为 `SPLIT`（整体拆分）/ `SPLIT_OFF`（分设）/ `ABSORB`（吸收合并）/ `MERGE`（合并新设）；`department_change_participant` 一行一个部门一个角色（`SOURCE` 原部门 / `RESULT` 结果部门），`outcome` 为 `CONTINUES` 存续 / `EXITS` 退出 / `NEW` 新设。分设时原部门同时记为存续的结果部门。正式依据 `basis_note` 必填（检查约束）。两表只追加（`hdip_guard_update()` 无可改列）。
+- **被替代只由事件产生**：退出部门的新版本 `lifecycle = SUPERSEDED`（手工改生命周期不能选它）；同时自动结束它的上级边、管理关系、分类、别名、主体归属（止于生效日前一日）。
+- **依赖逐项处置**：服务单元、下级部门、指向它的外部编码解释不自动处置，须在同一申请里用其他变更项处理，否则 `_check_units`、`_check_org`、`_check_ended_codes` 阻止确认。旧代码不直接改指向新部门；部门退出后也不能再新增指向它的解释。
+- **新设部门**须在同一申请里先 `department.create`，开始日 = 生效日、正式履职。
+- 演变关系不是行政上下级，A → B → A 允许出现，不做成环检查。
+

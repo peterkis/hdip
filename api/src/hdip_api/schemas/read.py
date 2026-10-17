@@ -445,6 +445,8 @@ class ChangeRequestSummary(BaseModel):
     created_at: datetime
     submitted_at: datetime | None
     confirmed_at: datetime | None
+    returned_at: datetime | None
+    cancelled_at: datetime | None
 
 
 class ChangeRequestOut(BaseModel):

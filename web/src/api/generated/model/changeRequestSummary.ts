@@ -16,4 +16,6 @@ export interface ChangeRequestSummary {
   created_at: string;
   submitted_at: string | null;
   confirmed_at: string | null;
+  returned_at: string | null;
+  cancelled_at: string | null;
 }

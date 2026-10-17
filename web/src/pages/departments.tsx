@@ -2,6 +2,7 @@
 // 部门数口径：查看日期当天已设立、且组织生命周期为“正式履职”的部门；筹备、暂停等不计入。
 import {
   Add01Icon,
+  ArrowDown01Icon,
   ArrowRight01Icon,
   Building03Icon,
   HierarchyIcon,
@@ -124,8 +125,17 @@ export function DepartmentsPage() {
       ),
     [all, future, cls, life, lvl],
   )
-  // 层级树：按行政隶属深度优先排列，同级按代码
-  const ordered = useMemo(() => (mode === 'tree' ? treeOrder(rows) : rows), [rows, mode])
+  // 层级树：按行政隶属深度优先排列，同级按代码；可折叠子树
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const tree = useMemo(() => (mode === 'tree' ? treeOrder(rows, collapsed) : null), [rows, mode, collapsed])
+  const ordered: (DepartmentRow & { tree?: TreeMeta })[] = tree ?? rows
+  const toggle = (id: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
@@ -192,12 +202,25 @@ export function DepartmentsPage() {
         <DbTable columns={COLUMNS}>
           {ordered.map((d) => (
             <DbRow key={d.id}>
-              <DbCell>
+              <DbCell className={cn(d.tree && 'relative')}>
+                {d.tree && <TreeGuides meta={d.tree} />}
                 <span
                   className="flex items-center gap-2"
-                  style={mode === 'tree' ? { paddingLeft: `calc(var(--hd-space-20) * ${d.level - 1})` } : undefined}
+                  style={d.tree ? { paddingLeft: `calc(var(--hd-space-20) * ${d.tree.depth})` } : undefined}
                 >
-                  {mode === 'tree' && d.level > 1 && <Icon icon={ArrowRight01Icon} className="text-fg-disabled size-3" />}
+                  {d.tree &&
+                    (d.tree.kids > 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => toggle(d.id)}
+                        className="text-fg-muted hover:text-fg hover:bg-surface-hover relative z-10 -mx-0.5 flex size-4 items-center justify-center rounded-sm"
+                        title={d.tree.closed ? `展开 ${d.tree.kids} 个下级` : '收起下级'}
+                      >
+                        <Icon icon={d.tree.closed ? ArrowRight01Icon : ArrowDown01Icon} className="size-3" strokeWidth={2} />
+                      </button>
+                    ) : (
+                      <span className="size-3" />
+                    ))}
                   <Link
                     to={`/departments/${d.id}`}
                     className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
@@ -205,6 +228,7 @@ export function DepartmentsPage() {
                     {d.version.name}
                   </Link>
                   {d.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+                  {d.tree?.closed && <span className="text-fg-muted text-caption">+{d.tree.descendants}</span>}
                 </span>
               </DbCell>
               <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{d.code}</DbCell>
@@ -251,8 +275,20 @@ export function DepartmentsPage() {
   )
 }
 
-/** 层级树顺序：一级部门按代码，其下级紧随其后（深度优先） */
-function treeOrder(rows: DepartmentRow[]): DepartmentRow[] {
+interface TreeMeta {
+  /** 在当前树里的深度（0 = 根；筛选后上级不在列表里的部门也作为根） */
+  depth: number
+  /** 是否是同级最后一个：最后一个的连线在此转弯结束 */
+  last: boolean
+  /** 各层祖先下方是否还有兄弟：有则那一层的竖线继续往下 */
+  guides: boolean[]
+  kids: number
+  descendants: number
+  closed: boolean
+}
+
+/** 层级树顺序：一级部门按代码，其下级紧随其后（深度优先）；带上画连线所需的信息 */
+function treeOrder(rows: DepartmentRow[], collapsed: Set<number>): (DepartmentRow & { tree: TreeMeta })[] {
   const ids = new Set(rows.map((r) => r.id))
   const kids = new Map<number, DepartmentRow[]>()
   const roots: DepartmentRow[] = []
@@ -260,14 +296,43 @@ function treeOrder(rows: DepartmentRow[]): DepartmentRow[] {
     if (r.parent && ids.has(r.parent.id)) kids.set(r.parent.id, [...(kids.get(r.parent.id) ?? []), r])
     else roots.push(r)
   }
-  const out: DepartmentRow[] = []
-  const walk = (list: DepartmentRow[]) =>
-    [...list].sort((a, b) => a.code.localeCompare(b.code)).forEach((r) => {
-      out.push(r)
-      walk(kids.get(r.id) ?? [])
+  const count = (id: number): number => (kids.get(id) ?? []).reduce((n, k) => n + 1 + count(k.id), 0)
+  const out: (DepartmentRow & { tree: TreeMeta })[] = []
+  const walk = (list: DepartmentRow[], depth: number, guides: boolean[]) => {
+    const sorted = [...list].sort((a, b) => a.code.localeCompare(b.code))
+    sorted.forEach((r, i) => {
+      const last = i === sorted.length - 1
+      const children = kids.get(r.id) ?? []
+      const closed = collapsed.has(r.id)
+      out.push({ ...r, tree: { depth, last, guides, kids: children.length, descendants: count(r.id), closed } })
+      if (!closed) walk(children, depth + 1, [...guides, !last])
     })
-  walk(roots)
+  }
+  walk(roots, 0, [])
   return out
+}
+
+/**
+ * 层级连线（类似讨论区“回复”引线）：上级的竖线贯穿到最后一个下级，
+ * 每个下级从竖线圆角转弯接到自己的名称前。坐标与展开按钮中心对齐。
+ */
+function TreeGuides({ meta }: { meta: TreeMeta }) {
+  if (meta.depth === 0) return null
+  // 第 k 层竖线的横坐标：单元格左内边距 + k 个缩进 + 展开按钮半宽
+  const x = (k: number) => `calc(var(--hd-space-8) + var(--hd-space-20) * ${k} + var(--hd-space-6))`
+  const self = meta.depth - 1
+  return (
+    <span aria-hidden className="pointer-events-none absolute inset-0">
+      {meta.guides.slice(1).map((on, k) =>
+        on ? <span key={k} className="border-line-strong absolute top-0 bottom-0 border-l" style={{ left: x(k) }} /> : null,
+      )}
+      <span
+        className="border-line-strong absolute top-0 h-1/2 rounded-bl-md border-b border-l"
+        style={{ left: x(self), width: 'var(--hd-space-20)' }}
+      />
+      {!meta.last && <span className="border-line-strong absolute top-1/2 bottom-0 border-l" style={{ left: x(self) }} />}
+    </span>
+  )
 }
 
 /** 统计条：正式履职部门数、按主分类计数（每个部门只计一次）、不计入的筹备与暂停。点击按主分类筛选 */

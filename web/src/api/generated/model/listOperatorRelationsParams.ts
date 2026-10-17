@@ -12,4 +12,8 @@ export type ListOperatorRelationsParams = {
 as_of?: string | null;
 institution_id?: number | null;
 campus_id?: number | null;
+/**
+ * 是否包含查看日期之后才开始的关系（如筹建院区的未来运营关系）
+ */
+include_future?: boolean;
 };

@@ -396,3 +396,16 @@ def test_corrected_campus_still_carries_units(api):
     api.apply(_campus_revise("ZX", "2030-01-01", phone="028-1"))
     units = api.get("/api/service-units", params={"as_of": "2030-02-01"}).json()
     assert [u["code"] for u in units] == ["ZX-OPD"]
+
+
+def test_operator_relations_include_future(api):
+    """运营关系图要画出筹建院区的未来关系：include_future 另含查看日期之后才开始的关系。"""
+    api.apply(
+        inst_create(),
+        campus_create(code="ZX", name="中心院区", valid_from="2030-01-01"),
+        relation_create(campus="ZX", valid_from="2030-01-01"),
+    )
+    day = {"as_of": "2026-12-01"}
+    assert api.get("/api/operator-relations", params=day).json() == []
+    rows = api.get("/api/operator-relations", params=day | {"include_future": True}).json()
+    assert [(r["campus_code"], r["effective_on_as_of"]) for r in rows] == [("ZX", False)]

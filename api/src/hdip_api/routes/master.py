@@ -69,10 +69,17 @@ def list_relations(
     as_of: AsOf = None,
     institution_id: int | None = None,
     campus_id: int | None = None,
+    include_future: Annotated[
+        bool, Query(description="是否包含查看日期之后才开始的关系（如筹建院区的未来运营关系）")
+    ] = False,
 ):
-    """查看日期当天有效的主体—院区关系。"""
+    """查看日期当天有效的主体—院区关系；include_future 时另含之后才开始的。"""
     return queries.list_relations(
-        session, _day(session, as_of), institution_id=institution_id, campus_id=campus_id
+        session,
+        _day(session, as_of),
+        institution_id=institution_id,
+        campus_id=campus_id,
+        include_future=include_future,
     )
 
 

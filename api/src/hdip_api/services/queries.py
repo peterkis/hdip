@@ -234,6 +234,7 @@ def list_relations(
     institution_id: int | None = None,
     campus_id: int | None = None,
     include_all: bool = False,
+    include_future: bool = False,
 ) -> list[RelationOut]:
     q = select(OperatorRelation).order_by(
         OperatorRelation.valid_from.desc(), OperatorRelation.id.desc()
@@ -250,7 +251,7 @@ def list_relations(
     out = []
     for r in s.scalars(q):
         effective = covers(r.valid_from, r.valid_to, as_of)
-        if not include_all and not effective:
+        if not include_all and not effective and not (include_future and r.valid_from > as_of):
             continue
         out.append(
             RelationOut(
@@ -1065,6 +1066,8 @@ def list_changes(s: Session, status: str | None) -> list[ChangeRequestSummary]:
             created_at=cr.created_at,
             submitted_at=cr.submitted_at,
             confirmed_at=cr.confirmed_at,
+            returned_at=cr.returned_at,
+            cancelled_at=cr.cancelled_at,
         )
         for cr in s.scalars(q)
     ]
