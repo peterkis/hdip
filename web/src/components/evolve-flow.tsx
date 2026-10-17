@@ -34,7 +34,7 @@ export type FlowUnit = {
 }
 
 type UnitNode = Node<FlowUnit & { selected?: boolean; onPick?: () => void }, 'unit'>
-type HubNode = Node<{ kind: 'split' | 'merge'; day: string }, 'hub'>
+type HubNode = Node<{ kind: 'split' | 'merge'; day: string; label?: string }, 'hub'>
 type AddNode = Node<{ label: string; onAdd: () => void }, 'add'>
 
 const W = 248
@@ -103,7 +103,7 @@ function Hub({ data }: NodeProps<HubNode>) {
       >
         <span className="text-fg-strong flex items-center gap-1 font-medium">
           <Icon icon={data.kind === 'split' ? GitForkIcon : GitMergeIcon} className="size-3.5" strokeWidth={2} />
-          {data.kind === 'split' ? '拆分' : '合并'}
+          {data.label ?? (data.kind === 'split' ? '拆分' : '合并')}
         </span>
         <span>{data.day ? `${data.day} 起` : '待选生效日'}</span>
       </div>
@@ -142,6 +142,7 @@ export function EvolveFlow({
   onSelect,
   onAdd,
   addLabel,
+  label,
   className,
 }: {
   kind: 'split' | 'merge'
@@ -154,6 +155,8 @@ export function EvolveFlow({
   /** 在可增加的一侧末尾显示“+”节点 */
   onAdd?: () => void
   addLabel?: string
+  /** 中间节点的文字，默认“拆分 / 合并” */
+  label?: string
   className?: string
 }) {
   const addSide = kind === 'split' ? 'a' : 'b'
@@ -173,7 +176,7 @@ export function EvolveFlow({
   })
   const nodes: Node[] = [
     ...before.map((u, i) => unitNode(u, `b${i}`, 0, leftY(i))),
-    { id: 'hub', type: 'hub', position: { x: hubX, y: -24 }, draggable: false, selectable: false, data: { kind, day } },
+    { id: 'hub', type: 'hub', position: { x: hubX, y: -24 }, draggable: false, selectable: false, data: { kind, day, label } },
     ...after.map((u, i) => unitNode(u, `a${i}`, rightX, rightY(i))),
   ]
   if (onAdd) {

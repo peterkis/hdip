@@ -359,6 +359,37 @@ class ServiceUnitLineage(Base):
     recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
 
 
+class DepartmentChangeEvent(Base):
+    """部门组织变更事件（整体拆分 / 分设 / 吸收合并 / 合并新设）；只追加。"""
+
+    __tablename__ = "department_change_event"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_type: Mapped[str] = mapped_column(Text)
+    effective_date: Mapped[date]
+    basis_note: Mapped[str] = mapped_column(Text)
+    scope_note: Mapped[str | None] = mapped_column(Text)
+    other_matters: Mapped[str | None] = mapped_column(Text)
+    change_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    recorded_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    recorded_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+
+
+class DepartmentChangeParticipant(Base):
+    """参与部门：原部门 / 结果部门，身份结论 存续 / 退出 / 新设；只追加。"""
+
+    __tablename__ = "department_change_participant"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_id: Mapped[int] = mapped_column(ForeignKey("department_change_event.id"))
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    role: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(Text)
+    scope_note: Mapped[str | None] = mapped_column(Text)
+
+
 class ServiceUnitClassification(_Period, Base):
     __tablename__ = "service_unit_classification"
     __mapper_args__ = {"eager_defaults": True}

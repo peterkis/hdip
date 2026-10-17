@@ -21,6 +21,7 @@ import {
 import { DepartmentCreateDialog } from '@/components/forms/department-forms'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
+import { REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { Callout } from '@/components/kit/callout'
 import { Missing } from '@/components/kit/missing'
 import { Steps, type StepItem } from '@/components/kit/steps'
@@ -441,8 +442,49 @@ function EvolveDiff({ outcome }: { outcome: ItemOutcome }) {
 }
 
 function OutcomeDiff({ outcome }: { outcome: ItemOutcome }) {
+  if (outcome.after && typeof outcome.after === 'object' && 'participants' in outcome.after) return <ReorgDiff outcome={outcome} />
   if (outcome.after && typeof outcome.after === 'object' && 'successors' in outcome.after) return <EvolveDiff outcome={outcome} />
   return <PlainDiff outcome={outcome} />
+}
+
+/** 部门组织变更：身份结论一张图，依据与随原部门结束的关联写在下面 */
+function ReorgDiff({ outcome }: { outcome: ItemOutcome }) {
+  type P = { code: string; name: string; role: 'SOURCE' | 'RESULT'; outcome: 'EXITS' | 'NEW' | 'CONTINUES'; scope_note: string | null }
+  const after = outcome.after as {
+    event_type: keyof typeof REORG_TITLE
+    effective_date: string
+    basis_note: string
+    other_matters: string | null
+    participants: P[]
+    ended_links: string | null
+  }
+  const day = after.effective_date
+  const label = { EXITS: '退出', NEW: '新设', CONTINUES: '存续' }
+  const card = (p: P): FlowUnit => ({
+    name: p.name,
+    code: p.code,
+    subtitle: p.scope_note ?? undefined,
+    footer: p.outcome === 'EXITS' ? `最后有效日 ${dayBefore(day)}` : p.outcome === 'NEW' ? `自 ${day} 起` : '身份不变',
+    tag: { label: label[p.outcome], tone: p.outcome === 'EXITS' ? 'retire' : p.outcome === 'NEW' ? 'new' : 'current' },
+  })
+  const sources = after.participants.filter((p) => p.role === 'SOURCE')
+  return (
+    <div className="grid gap-2">
+      <EvolveFlow
+        kind={sources.length > 1 ? 'merge' : 'split'}
+        day={day}
+        label={REORG_TITLE[after.event_type]}
+        before={sources.map(card)}
+        after={after.participants.filter((p) => p.role === 'RESULT').map(card)}
+      />
+      <p className="text-xs">
+        依据：{after.basis_note}。
+        {after.ended_links && <>随原部门结束（历史保留）：{after.ended_links}。</>}
+        {after.other_matters && <>需其他系统办理：{after.other_matters}。</>}
+        受影响的单元、下级部门与编码见本申请的其他变更项。
+      </p>
+    </div>
+  )
 }
 
 function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
@@ -549,6 +591,8 @@ function describeItem(item: ChangeRequestOut['items'][number]): string {
   if (item.kind === 'operator_relation.close') return `运营关系 #${item.relation_id}`
   if ('external_code' in item) return `${item.system_code}/${item.namespace_code} ${item.external_code}`
   if (item.kind === 'external_code.assignment_close') return `解释 #${item.assignment_id}`
+  if (item.kind === 'department.reorganize')
+    return `${REORG_TITLE[item.event_type]}：${item.sources.map((p) => p.code).join('、')} → ${item.results.map((p) => p.code).join('、')}`
   return ''
 }
 

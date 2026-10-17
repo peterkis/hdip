@@ -24,6 +24,8 @@ from hdip_api.models import (
     CodeNamespace,
     Department,
     DepartmentAlias,
+    DepartmentChangeEvent,
+    DepartmentChangeParticipant,
     DepartmentClassification,
     DepartmentHierarchy,
     DepartmentInstitution,
@@ -45,6 +47,7 @@ from hdip_api.models import (
 from hdip_api.schemas.items import (
     KIND_LABELS,
     OPERATING_STATUS_ORDER,
+    REORG_LABELS,
     CampusChangeStatus,
     CampusCreate,
     CampusRevise,
@@ -60,6 +63,7 @@ from hdip_api.schemas.items import (
     DepartmentRelationClose,
     DepartmentRelationCreate,
     DepartmentRename,
+    DepartmentReorganize,
     DepartmentRevise,
     DepartmentSetParent,
     ExternalCodeAssign,
@@ -243,11 +247,6 @@ def _check_option(s: Session, category: str, code: str | None, field: str) -> No
         raise ItemError(f"选项 {code} 不在可选范围内", field)
 
 
-def today(s: Session) -> date:
-    """业务“今天”：数据库会话时区（HDIP_TIMEZONE）下的当前日期。"""
-    return s.scalar(select(func.current_date()))
-
-
 def is_void(v) -> bool:
     """生效前已被更正的版本：期间为空（结束日 = 开始日前一日），从未生效。"""
     return v.valid_to is not None and v.valid_to < v.valid_from
@@ -261,7 +260,7 @@ def _next_version(ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date,
     """
     if latest.valid_to is not None:
         raise ItemError("当前版本已结束，不能修订")
-    correcting = day == latest.valid_from and latest.valid_from > today(ctx.session)
+    correcting = day == latest.valid_from and latest.valid_from > _today(ctx.session)
     if day < latest.valid_from or (day == latest.valid_from and not correcting):
         raise ItemError(
             f"生效日须晚于当前版本的开始日 {latest.valid_from.isoformat()}"
@@ -1005,6 +1004,194 @@ def _end_department_links(ctx: Ctx, d: Department, day: date) -> list[str]:
     return ended
 
 
+# ------------------------------------------------------------------ 部门组织变更
+def _end_department_attachments(ctx: Ctx, d: Department, day: date) -> list[str]:
+    """部门退出时：它的分类赋值、别名、主体归属止于 day 前一日（历史保留）。
+
+    结果部门的分类不自动继承，在承接清单里逐个确认。
+    """
+    s = ctx.session
+    last = day - timedelta(days=1)
+    ended: list[str] = []
+    for model, what in (
+        (DepartmentClassification, "分类"),
+        (DepartmentAlias, "别名"),
+        (DepartmentInstitution, "主体归属"),
+    ):
+        rows = s.scalars(
+            select(model).where(
+                model.department_id == d.id,
+                (model.valid_to.is_(None)) | (model.valid_to >= day),
+            )
+        ).all()
+        for r in rows:
+            if r.valid_from > last:
+                raise ItemError(
+                    f"该部门有一条自 {r.valid_from.isoformat()} 起的{what}，晚于退出日，请先调整",
+                    "effective_date",
+                )
+            r.valid_to = last
+            r.closed_change_id = ctx.change_id
+        if rows:
+            ended.append(what)
+    s.flush()
+    return ended
+
+
+def _department_reorganize(ctx: Ctx, item: DepartmentReorganize) -> dict:
+    s = ctx.session
+    day = item.effective_date
+    last = day - timedelta(days=1)
+    exits = item.event_type != "SPLIT_OFF"
+    new_results = item.event_type != "ABSORB"
+
+    sources: list[tuple[Department, DepartmentVersion]] = []
+    for i, p in enumerate(item.sources):
+        d = _department(s, p.code, f"sources.{i}.code")
+        latest = _dept_latest(s, d)
+        _require_not_terminal(latest)
+        on_last = _version_on(s, DepartmentVersion, DepartmentVersion.department_id, d.id, last)
+        if on_last is None or on_last.lifecycle not in ("ACTIVE", "SUSPENDED"):
+            raise ItemError(
+                f"原部门 {d.code} 在 {last.isoformat()} 须为正式履职或暂停履职", f"sources.{i}.code"
+            )
+        # 存续的原部门可在同一申请里于生效日改名；退出的原部门不能在生效日及以后另有版本
+        if exits and latest.valid_from >= day:
+            raise ItemError(
+                f"原部门 {d.code} 自 {latest.valid_from.isoformat()} 起另有版本，"
+                "请把组织变更的生效日放在其后",
+                "effective_date",
+            )
+        sources.append((d, latest))
+
+    results: list[Department] = []
+    for i, p in enumerate(item.results):
+        d = _department(s, p.code, f"results.{i}.code")
+        if new_results:
+            first = s.scalars(
+                select(DepartmentVersion)
+                .where(DepartmentVersion.department_id == d.id)
+                .order_by(DepartmentVersion.version_no)
+            ).first()
+            if d.created_change_id != ctx.change_id or first.valid_from != day:
+                raise ItemError(
+                    f"新设部门 {d.code} 须在本申请里新建，开始日为 {day.isoformat()}",
+                    f"results.{i}.code",
+                )
+            if first.lifecycle != "ACTIVE":
+                raise ItemError(f"新设部门 {d.code} 须为正式履职", f"results.{i}.code")
+        else:
+            v = _version_on(s, DepartmentVersion, DepartmentVersion.department_id, d.id, day)
+            if v is None or v.lifecycle != "ACTIVE":
+                raise ItemError(
+                    f"承接部门 {d.code} 在 {day.isoformat()} 须为正式履职", f"results.{i}.code"
+                )
+        results.append(d)
+
+    before = {"departments": [version_snapshot(v) | {"code": d.code} for d, v in sources]}
+    ended_notes: list[str] = []
+    if exits:
+        for d, latest in sources:
+            content = {k: getattr(latest, k) for k in DepartmentVersion.CONTENT}
+            content |= {"lifecycle": "SUPERSEDED"}
+            _next_version(ctx, DepartmentVersion, "department_id", d.id, latest, day, content)
+            # 依赖它的单元、下级部门、外部编码解释在全部变更项应用后统一校验
+            ctx.touched_departments[d.id] = ctx.index
+            ctx.ended_departments[d.id] = (ctx.index, day)
+            ended = _end_department_links(ctx, d, day) + _end_department_attachments(ctx, d, day)
+            if ended:
+                ended_notes.append(f"{d.code}：{'、'.join(dict.fromkeys(ended))}")
+
+    event = DepartmentChangeEvent(
+        event_type=item.event_type,
+        effective_date=day,
+        basis_note=item.basis_note,
+        scope_note=item.scope_note,
+        other_matters=item.other_matters,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(event)
+    s.flush()
+    rows = [
+        (d, "SOURCE", "EXITS" if exits else "CONTINUES", p.scope_note)
+        for (d, _), p in zip(sources, item.sources, strict=True)
+    ]
+    if not exits:  # 分设：原部门既是原部门，也是存续的结果部门
+        rows.append((sources[0][0], "RESULT", "CONTINUES", item.sources[0].scope_note))
+    rows += [
+        (d, "RESULT", "NEW" if new_results else "CONTINUES", p.scope_note)
+        for d, p in zip(results, item.results, strict=True)
+    ]
+    participants = []
+    for d, role, outcome, note in rows:
+        s.add(
+            DepartmentChangeParticipant(
+                event_id=event.id, department_id=d.id, role=role, outcome=outcome, scope_note=note
+            )
+        )
+        participants.append(
+            {
+                "code": d.code,
+                "name": _dept_latest(s, d).name if outcome != "EXITS" else _dept_label(s, d, last),
+                "role": role,
+                "outcome": outcome,
+                "scope_note": note,
+            }
+        )
+    s.flush()
+    names = lambda ds: "、".join(d.code for d in ds)  # noqa: E731
+    return {
+        "target": f"{REORG_LABELS[item.event_type]}："
+        f"{names([d for d, _ in sources])} → {names(results)}",
+        "before": before,
+        "after": {
+            "event_id": event.id,
+            "event_type": item.event_type,
+            "effective_date": day.isoformat(),
+            "basis_note": item.basis_note,
+            "scope_note": item.scope_note,
+            "other_matters": item.other_matters,
+            "participants": participants,
+            "ended_links": "；".join(ended_notes) or None,
+        },
+    }
+
+
+def _check_ended_codes(ctx: Ctx) -> list[ProblemItem]:
+    """退出（撤销 / 被替代）的部门在退出日及以后不能还有外部编码解释指向它。
+
+    历史解释保留；须在同一张申请里结束（最后有效日 = 退出日前一日）。外部系统确实把代码重新分配给
+    新部门时，另新增一条解释并写明依据，不能直接改指向。
+    """
+    s = ctx.session
+    problems: list[ProblemItem] = []
+    for dept_id, (index, day) in ctx.ended_departments.items():
+        rows = s.execute(
+            select(ExternalCode.code, ExternalCode.source_name)
+            .join(
+                ExternalCodeAssignment, ExternalCodeAssignment.external_code_id == ExternalCode.id
+            )
+            .where(
+                ExternalCodeAssignment.department_id == dept_id,
+                (ExternalCodeAssignment.valid_to.is_(None))
+                | (ExternalCodeAssignment.valid_to >= day),
+            )
+        ).all()
+        if rows:
+            d = s.get(Department, dept_id)
+            listed = "、".join(f"{c}（{n}）" for c, n in rows[:5]) + ("等" if len(rows) > 5 else "")
+            problems.append(
+                ProblemItem(
+                    message=f"部门 {d.code} 自 {day.isoformat()} 起退出，"
+                    f"仍有 {len(rows)} 条外部编码解释指向它：{listed}。"
+                    "请在本申请里结束这些解释（历史仍指向原部门）",
+                    item_index=index,
+                )
+            )
+    return problems
+
+
 def _check_org(ctx: Ctx) -> list[ProblemItem]:
     """全部变更项应用后：被调整的视图不得成环；被撤销 / 被替代的部门不得还有下级部门。"""
     s = ctx.session
@@ -1513,6 +1700,16 @@ def _external_code_assign(ctx: Ctx, item: ExternalCodeAssign) -> dict:
         start = _dept_start(s, d)
         if item.valid_from < start:
             raise ItemError(f"开始日不能早于部门的设立日 {start.isoformat()}", "valid_from")
+        exit_day = s.scalar(
+            select(func.min(DepartmentVersion.valid_from)).where(
+                DepartmentVersion.department_id == d.id,
+                DepartmentVersion.lifecycle.in_(LIFECYCLE_TERMINAL),
+            )
+        )
+        if exit_day and (item.valid_to is None or item.valid_to >= exit_day):
+            raise ItemError(
+                f"部门 {d.code} 自 {exit_day.isoformat()} 起已退出，解释须在此前结束", "valid_to"
+            )
         a.department_id = d.id
     elif item.target_type == "service_unit":
         unit = _ref(s, _unit, item.service_unit_code, "service_unit_code")
@@ -1723,6 +1920,7 @@ HANDLERS = {
     "department.create": _department_create,
     "department.revise": _department_revise,
     "department.change_lifecycle": _department_change_lifecycle,
+    "department.reorganize": _department_reorganize,
     "department.classify": _department_classify,
     "department.affiliate": _department_affiliate,
     "department.alias_add": _department_alias_add,
@@ -1785,7 +1983,7 @@ def apply_items(
                 problems=[ProblemItem(message=msg, item_index=index)],
             ) from None
         outcomes.append({"index": index, "kind": item.kind, "label": label, **out})
-    problems = _check_units(ctx) + _check_org(ctx) + _check_codes(ctx)
+    problems = _check_units(ctx) + _check_org(ctx) + _check_codes(ctx) + _check_ended_codes(ctx)
     if problems:
         first = problems[0]
         label = KIND_LABELS[items[first.item_index].kind]

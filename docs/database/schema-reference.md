@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0011**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0012**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,6 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
+- **其他（未登记说明）**：[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -818,6 +819,58 @@
 
 - `external_code_assignment_guard`：`CREATE TRIGGER external_code_assignment_guard BEFORE UPDATE ON public.external_code_assignment FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to', 'closed_change_id')`
 
+## 其他（未登记说明）
+
+### department_change_event
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `event_type` | text | 是 |  |  |
+| `effective_date` | date | 是 |  |  |
+| `basis_note` | text | 是 |  |  |
+| `scope_note` | text |  |  |  |
+| `other_matters` | text |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+
+约束：
+
+- `department_change_event_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_change_event_basis_check`（检查）：`CHECK ((btrim(basis_note) <> ''::text))`
+- `department_change_event_type_check`（检查）：`CHECK ((event_type = ANY (ARRAY['SPLIT'::text, 'SPLIT_OFF'::text, 'ABSORB'::text, 'MERGE'::text])))`
+
+触发器：
+
+- `department_change_event_guard`：`CREATE TRIGGER department_change_event_guard BEFORE UPDATE ON public.department_change_event FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### department_change_participant
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `event_id` | bigint | 是 |  | → `department_change_event` |
+| `department_id` | bigint | 是 |  | → `department` |
+| `role` | text | 是 |  |  |
+| `outcome` | text | 是 |  |  |
+| `scope_note` | text |  |  |  |
+
+约束：
+
+- `department_change_participant_pkey`（主键）：`PRIMARY KEY (id)`
+- `department_change_participant_uniq`（唯一）：`UNIQUE (event_id, department_id, role)`
+- `department_change_participant_outcome_check`（检查）：`CHECK ((outcome = ANY (ARRAY['CONTINUES'::text, 'EXITS'::text, 'NEW'::text])))`
+- `department_change_participant_role_check`（检查）：`CHECK ((role = ANY (ARRAY['SOURCE'::text, 'RESULT'::text])))`
+
+索引：
+
+- `department_change_participant_department_idx`：`CREATE INDEX department_change_participant_department_idx ON public.department_change_participant USING btree (department_id)`
+
+触发器：
+
+- `department_change_participant_guard`：`CREATE TRIGGER department_change_participant_guard BEFORE UPDATE ON public.department_change_participant FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ## 触发器函数
 
 ### hdip_guard_change_request
@@ -886,6 +939,8 @@ $function$
 | `code_namespace` | INSERT、SELECT、UPDATE |
 | `department` | INSERT、SELECT、UPDATE |
 | `department_alias` | INSERT、SELECT、UPDATE |
+| `department_change_event` | INSERT、SELECT、UPDATE |
+| `department_change_participant` | INSERT、SELECT、UPDATE |
 | `department_classification` | INSERT、SELECT、UPDATE |
 | `department_hierarchy` | INSERT、SELECT、UPDATE |
 | `department_institution` | INSERT、SELECT、UPDATE |
@@ -940,6 +995,7 @@ $function$
 | department | relation_close | confirmer | 是 |
 | department | relation_create | confirmer | 是 |
 | department | rename | confirmer | 是 |
+| department | reorganize | confirmer | 是 |
 | department | revise | confirmer | 是 |
 | department | set_parent | confirmer | 是 |
 | external_code | assign | confirmer | 是 |

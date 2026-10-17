@@ -145,6 +145,7 @@ stateDiagram-v2
 | 0009 | 结束单条分类赋值：`department.classification_close`、`service_unit.classification_close` 的确认规则（剧本走查发现可多选方案无法结束一条分类） |
 | 0010 | 院区“对外名称” `campus_version.public_name`；节点角色停用（表单不再维护，历史取值保留） |
 | 0011 | 未生效版本可更正：四张版本表的期间检查允许结束日 = 开始日 - 1（空期间 = 生效前已更正、从未生效）；排他约束改用等价的半开区间 `daterange(valid_from, valid_to + 1)` |
+| 0012 | 部门组织变更第一期：`department_change_event`（类型、生效日、正式依据必填、承接说明、需其他系统办理事项）与 `department_change_participant`（原部门 / 结果部门，存续 / 退出 / 新设）；两表只追加。确认规则 `department.reorganize` |
 
 ### 新增一类对象或变更的检查单
 

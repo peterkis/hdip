@@ -29,6 +29,7 @@ Dataset = Literal[
     "department-relations",
     "external-codes",
     "classifications",
+    "department-lineage",
 ]
 
 OPERATING_STATUS = {
@@ -53,6 +54,9 @@ DEPT_RELATION = {
 }
 RELATION_TYPE = {"OPERATE": "运营", "REGISTER": "登记", "MANAGE": "管理", "CHARGE": "收费"}
 LINEAGE_TYPE = {"SPLIT": "拆分", "MERGE": "合并"}
+REORG_TYPE = {"SPLIT": "整体拆分", "SPLIT_OFF": "分设", "ABSORB": "吸收合并", "MERGE": "合并新设"}
+REORG_ROLE = {"SOURCE": "原部门", "RESULT": "结果部门"}
+REORG_OUTCOME = {"CONTINUES": "存续", "EXITS": "退出", "NEW": "新设"}
 TARGET_TYPE = {"department": "部门", "service_unit": "服务单元", "unmodeled": "对象未建模"}
 
 
@@ -232,6 +236,43 @@ def _lineage(s: Session, day: date) -> Iterable[dict]:
         }
 
 
+def _department_lineage(s: Session, day: date) -> Iterable[dict]:
+    """查看日期及之前已生效的部门组织变更，一行一个参与部门（沿革是累积的历史事实）。"""
+    from hdip_api.models import Department, DepartmentChangeEvent, DepartmentChangeParticipant
+
+    rows = s.execute(
+        select(DepartmentChangeEvent, DepartmentChangeParticipant, Department.code)
+        .join(
+            DepartmentChangeParticipant,
+            DepartmentChangeParticipant.event_id == DepartmentChangeEvent.id,
+        )
+        .join(Department, Department.id == DepartmentChangeParticipant.department_id)
+        .where(DepartmentChangeEvent.effective_date <= day)
+        .order_by(
+            DepartmentChangeEvent.effective_date,
+            DepartmentChangeEvent.id,
+            DepartmentChangeParticipant.id,
+        )
+    ).all()
+    names = {d.code: d.version.name for d in queries.list_departments(s, day)} if rows else {}
+    for e, p, code in rows:
+        yield {
+            "event_id": e.id,
+            "event_type": e.event_type,
+            "event_type_name": REORG_TYPE[e.event_type],
+            "effective_date": e.effective_date,
+            "department_code": code,
+            "department_name": names.get(code),
+            "role": p.role,
+            "role_name": REORG_ROLE[p.role],
+            "outcome": p.outcome,
+            "outcome_name": REORG_OUTCOME[p.outcome],
+            "scope_note": p.scope_note,
+            "basis_note": e.basis_note,
+            "change_id": e.change_id,
+        }
+
+
 def _external_codes(s: Session, day: date) -> Iterable[dict]:
     """当天有效、指向平台对象的解释。
 
@@ -350,6 +391,11 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
     "service-unit-lineage": (_lineage, [
         "lineage_type", "lineage_type_name", "effective_date",
         "predecessor_code", "predecessor_name", "successor_code", "successor_name", "change_id",
+    ]),
+    "department-lineage": (_department_lineage, [
+        "event_id", "event_type", "event_type_name", "effective_date",
+        "department_code", "department_name", "role", "role_name", "outcome", "outcome_name",
+        "scope_note", "basis_note", "change_id",
     ]),
     "external-codes": (_external_codes, [
         "system_code", "namespace_code", "external_code", "source_name",

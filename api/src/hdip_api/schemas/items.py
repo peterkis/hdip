@@ -326,6 +326,56 @@ class DepartmentRelationClose(_Item):
     valid_to: date
 
 
+ReorgType = Literal["SPLIT", "SPLIT_OFF", "ABSORB", "MERGE"]
+REORG_LABELS = {"SPLIT": "整体拆分", "SPLIT_OFF": "分设", "ABSORB": "吸收合并", "MERGE": "合并新设"}
+
+
+class ReorgParticipant(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: Code
+    # 该部门承接 / 移出的职责范围（文字说明）
+    scope_note: Text | None = None
+
+
+class DepartmentReorganize(_Item):
+    """部门组织变更（docs/部门组织变更-评估与分期.md）：先定身份，再逐项处置依赖。
+
+    - 整体拆分 SPLIT：1 个原部门退出（被替代），≥2 个结果部门新设
+    - 分设 SPLIT_OFF：1 个原部门存续（可同申请改名），≥1 个结果部门新设
+    - 吸收合并 ABSORB：≥1 个原部门退出，并入 1 个已有部门（身份不变）
+    - 合并新设 MERGE：≥2 个原部门退出，1 个结果部门新设
+
+    新设部门须在同一张申请里先用 department.create 建好，开始日 = 生效日、正式履职。
+    受影响的单元、下级部门、外部编码解释由同一申请里的其他变更项逐项处置，缺一则不能确认。
+    """
+
+    kind: Literal["department.reorganize"]
+    event_type: ReorgType
+    effective_date: date
+    basis_note: Name
+    scope_note: Text | None = None
+    other_matters: Text | None = None
+    sources: list[ReorgParticipant] = Field(min_length=1)
+    results: list[ReorgParticipant] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _shape(self):
+        n_src, n_res = len(self.sources), len(self.results)
+        rule = {
+            "SPLIT": (n_src == 1 and n_res >= 2, "整体拆分：1 个原部门，至少 2 个新设部门"),
+            "SPLIT_OFF": (n_src == 1 and n_res >= 1, "分设：1 个存续的原部门，至少 1 个新设部门"),
+            "ABSORB": (n_src >= 1 and n_res == 1, "吸收合并：并入 1 个已有部门"),
+            "MERGE": (n_src >= 2 and n_res == 1, "合并新设：至少 2 个原部门，1 个新设部门"),
+        }[self.event_type]
+        if not rule[0]:
+            raise ValueError(rule[1])
+        codes = [p.code for p in self.sources + self.results]
+        if len(set(codes)) != len(codes):
+            raise ValueError("同一部门不能重复出现，原部门也不能同时列为结果部门")
+        return self
+
+
 class DepartmentRename(_Item):
     """已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。"""
 
@@ -578,6 +628,7 @@ ChangeItem = Annotated[
     | DepartmentSetParent
     | DepartmentRelationCreate
     | DepartmentRelationClose
+    | DepartmentReorganize
     | DepartmentRename
     | DepartmentChangeStatus
     | ServiceUnitCreate
@@ -617,6 +668,7 @@ KIND_LABELS: dict[str, str] = {
     "department.set_parent": "调整行政隶属",
     "department.relation_create": "建立部门管理关系",
     "department.relation_close": "结束部门管理关系",
+    "department.reorganize": "部门组织变更",
     "department.rename": "部门改名（旧）",
     "department.change_status": "停用/恢复部门（旧）",
     "service_unit.create": "新建服务单元",

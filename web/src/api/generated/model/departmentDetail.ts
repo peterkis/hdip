@@ -12,6 +12,7 @@ import type { DepartmentRelationOut } from './departmentRelationOut';
 import type { DepartmentVersionOut } from './departmentVersionOut';
 import type { DeptRef } from './deptRef';
 import type { ExternalCodeLink } from './externalCodeLink';
+import type { ReorgEventOut } from './reorgEventOut';
 import type { ServiceUnitRow } from './serviceUnitRow';
 
 export interface DepartmentDetail {
@@ -32,4 +33,5 @@ export interface DepartmentDetail {
   change_ids: number[];
   external_codes: ExternalCodeLink[];
   unit_external_codes: ExternalCodeLink[];
+  reorganizations: ReorgEventOut[];
 }

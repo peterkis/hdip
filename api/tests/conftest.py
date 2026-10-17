@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
+    "department_change_participant, department_change_event, "
     "external_code_assignment, external_code, service_unit_classification, "
     "service_unit_lineage, service_unit_version, service_unit, "
     "department_hierarchy, department_relation, "

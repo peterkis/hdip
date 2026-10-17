@@ -18,6 +18,7 @@ import type { DepartmentCreate } from './departmentCreate';
 import type { DepartmentRelationClose } from './departmentRelationClose';
 import type { DepartmentRelationCreate } from './departmentRelationCreate';
 import type { DepartmentRename } from './departmentRename';
+import type { DepartmentReorganize } from './departmentReorganize';
 import type { DepartmentRevise } from './departmentRevise';
 import type { DepartmentSetParent } from './departmentSetParent';
 import type { ExternalCodeAssign } from './externalCodeAssign';
@@ -39,6 +40,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
   note?: string | null;
 }

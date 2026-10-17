@@ -935,6 +935,105 @@
         }
       }
     },
+    "/api/departments/{department_id}/dependencies": {
+      "get": {
+        "tags": [
+          "master"
+        ],
+        "summary": "Get Department Dependencies",
+        "description": "承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、\n分类与管理关系。组织变更向导据此逐项处置。",
+        "operationId": "getDepartmentDependencies",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "day",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "Day"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentDependencies"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/service-units": {
       "get": {
         "tags": [
@@ -3388,7 +3487,8 @@
                 "department-hierarchy",
                 "department-relations",
                 "external-codes",
-                "classifications"
+                "classifications",
+                "department-lineage"
               ],
               "type": "string",
               "title": "Dataset"
@@ -4204,6 +4304,9 @@
                   "$ref": "#/components/schemas/DepartmentRelationClose"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentReorganize"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -4269,6 +4372,7 @@
                   "department.relation_close": "#/components/schemas/DepartmentRelationClose",
                   "department.relation_create": "#/components/schemas/DepartmentRelationCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
+                  "department.reorganize": "#/components/schemas/DepartmentReorganize",
                   "department.revise": "#/components/schemas/DepartmentRevise",
                   "department.set_parent": "#/components/schemas/DepartmentSetParent",
                   "external_code.assign": "#/components/schemas/ExternalCodeAssign",
@@ -4625,6 +4729,9 @@
                   "$ref": "#/components/schemas/DepartmentRelationClose"
                 },
                 {
+                  "$ref": "#/components/schemas/DepartmentReorganize"
+                },
+                {
                   "$ref": "#/components/schemas/DepartmentRename"
                 },
                 {
@@ -4690,6 +4797,7 @@
                   "department.relation_close": "#/components/schemas/DepartmentRelationClose",
                   "department.relation_create": "#/components/schemas/DepartmentRelationCreate",
                   "department.rename": "#/components/schemas/DepartmentRename",
+                  "department.reorganize": "#/components/schemas/DepartmentReorganize",
                   "department.revise": "#/components/schemas/DepartmentRevise",
                   "department.set_parent": "#/components/schemas/DepartmentSetParent",
                   "external_code.assign": "#/components/schemas/ExternalCodeAssign",
@@ -5715,6 +5823,61 @@
         ],
         "title": "DepartmentCreate"
       },
+      "DepartmentDependencies": {
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "title": "Day"
+          },
+          "units": {
+            "items": {
+              "$ref": "#/components/schemas/ServiceUnitRow"
+            },
+            "type": "array",
+            "title": "Units"
+          },
+          "children": {
+            "items": {
+              "$ref": "#/components/schemas/DeptRef"
+            },
+            "type": "array",
+            "title": "Children"
+          },
+          "code_links": {
+            "items": {
+              "$ref": "#/components/schemas/ExternalCodeLink"
+            },
+            "type": "array",
+            "title": "Code Links"
+          },
+          "classifications": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentClassificationOut"
+            },
+            "type": "array",
+            "title": "Classifications"
+          },
+          "relations": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentRelationOut"
+            },
+            "type": "array",
+            "title": "Relations"
+          }
+        },
+        "type": "object",
+        "required": [
+          "day",
+          "units",
+          "children",
+          "code_links",
+          "classifications",
+          "relations"
+        ],
+        "title": "DepartmentDependencies",
+        "description": "承接清单的原始数据：某部门在某日及以后仍有效的依赖。"
+      },
       "DepartmentDetail": {
         "properties": {
           "id": {
@@ -5821,6 +5984,13 @@
             },
             "type": "array",
             "title": "Unit External Codes"
+          },
+          "reorganizations": {
+            "items": {
+              "$ref": "#/components/schemas/ReorgEventOut"
+            },
+            "type": "array",
+            "title": "Reorganizations"
           }
         },
         "type": "object",
@@ -5841,7 +6011,8 @@
           "relations",
           "change_ids",
           "external_codes",
-          "unit_external_codes"
+          "unit_external_codes",
+          "reorganizations"
         ],
         "title": "DepartmentDetail"
       },
@@ -6259,6 +6430,88 @@
         ],
         "title": "DepartmentRename",
         "description": "已停用的旧变更类型（部门有版本后改用 department.revise）。保留以便读取历史申请。"
+      },
+      "DepartmentReorganize": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "department.reorganize",
+            "title": "Kind"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "SPLIT",
+              "SPLIT_OFF",
+              "ABSORB",
+              "MERGE"
+            ],
+            "title": "Event Type"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "basis_note": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Basis Note"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          },
+          "other_matters": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Matters"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/ReorgParticipant"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Sources"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ReorgParticipant"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Results"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "event_type",
+          "effective_date",
+          "basis_note",
+          "sources",
+          "results"
+        ],
+        "title": "DepartmentReorganize",
+        "description": "部门组织变更（docs/部门组织变更-评估与分期.md）：先定身份，再逐项处置依赖。\n\n- 整体拆分 SPLIT：1 个原部门退出（被替代），≥2 个结果部门新设\n- 分设 SPLIT_OFF：1 个原部门存续（可同申请改名），≥1 个结果部门新设\n- 吸收合并 ABSORB：≥1 个原部门退出，并入 1 个已有部门（身份不变）\n- 合并新设 MERGE：≥2 个原部门退出，1 个结果部门新设\n\n新设部门须在同一张申请里先用 department.create 建好，开始日 = 生效日、正式履职。\n受影响的单元、下级部门、外部编码解释由同一申请里的其他变更项逐项处置，缺一则不能确认。"
       },
       "DepartmentRevise": {
         "properties": {
@@ -8208,6 +8461,155 @@
           "effective_on_as_of"
         ],
         "title": "RelationOut"
+      },
+      "ReorgEventOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "SPLIT",
+              "SPLIT_OFF",
+              "ABSORB",
+              "MERGE"
+            ],
+            "title": "Event Type"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "basis_note": {
+            "type": "string",
+            "title": "Basis Note"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          },
+          "other_matters": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Matters"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ReorgParticipantOut"
+            },
+            "type": "array",
+            "title": "Participants"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "effective_date",
+          "basis_note",
+          "scope_note",
+          "other_matters",
+          "change_id",
+          "recorded_at",
+          "participants"
+        ],
+        "title": "ReorgEventOut",
+        "description": "一次组织变更：类型、生效日、依据，以及参与部门的身份结论与承接范围。"
+      },
+      "ReorgParticipant": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "ReorgParticipant"
+      },
+      "ReorgParticipantOut": {
+        "properties": {
+          "department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "SOURCE",
+              "RESULT"
+            ],
+            "title": "Role"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "CONTINUES",
+              "EXITS",
+              "NEW"
+            ],
+            "title": "Outcome"
+          },
+          "scope_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "department",
+          "role",
+          "outcome",
+          "scope_note"
+        ],
+        "title": "ReorgParticipantOut"
       },
       "ReturnBody": {
         "properties": {

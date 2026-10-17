@@ -22,7 +22,7 @@ import { useMutation } from '@tanstack/react-query'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
-import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
+import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut, ReorgEventOut } from '@/api/generated/model'
 import {
   DepartmentAffiliateDialog,
   DepartmentAliasCloseDialog,
@@ -35,7 +35,9 @@ import {
   DepartmentRelationDialog,
   DepartmentReviseDialog,
 } from '@/components/forms/department-forms'
+import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
+import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip, type DbColumn } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
@@ -328,7 +330,7 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
   'basis_note',
 ]
 
-type Dialog = 'revise' | 'lifecycle' | 'classify' | 'otherClass' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation'
+type Dialog = 'revise' | 'lifecycle' | 'classify' | 'otherClass' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation' | 'reorg'
 type TabKey = 'props' | 'class' | 'org' | 'units' | 'history' | 'codes'
 
 export function DepartmentDetailPage() {
@@ -376,6 +378,9 @@ export function DepartmentDetailPage() {
           isMaintainer &&
           !terminal && (
             <>
+              <Button variant="outline" onClick={() => setDialog('reorg')}>
+                组织变更
+              </Button>
               <Button variant="outline" onClick={() => setDialog('lifecycle')}>
                 变更生命周期
               </Button>
@@ -689,6 +694,11 @@ export function DepartmentDetailPage() {
           </>
         )}
 
+        {tab === 'history' && data.reorganizations.length > 0 && (
+          <Section title="沿革（组织变更）">
+            <ReorgHistory events={data.reorganizations} selfCode={data.code} />
+          </Section>
+        )}
         {tab === 'history' && (
           <Section title="版本时间线">
             <VersionTimeline versions={data.versions} fields={VERSION_FIELDS} asOf={asOf} />
@@ -731,6 +741,20 @@ export function DepartmentDetailPage() {
         />
       )}
       {dialog === 'relation' && <DepartmentRelationDialog open onOpenChange={close} code={data.code} name={latest.name} />}
+      {dialog === 'reorg' && (
+        <DepartmentReorgWizard
+          open
+          onOpenChange={close}
+          source={{
+            id: data.id,
+            code: data.code,
+            name: latest.name,
+            institutionCode: affiliation?.institution_code ?? null,
+            parentCode: data.path.length > 1 ? data.path[data.path.length - 2].code : null,
+            mainClass: mainClass?.code ?? null,
+          }}
+        />
+      )}
       {closingRelation && (
         <DepartmentRelationCloseDialog open relation={closingRelation} onOpenChange={(o) => !o && setClosingRelation(null)} />
       )}
@@ -799,6 +823,51 @@ function RelationsTable({
     </DbTable>
   )
 }
+/** 沿革：每个组织变更事件一张图，写明依据、身份结论与承接范围；点部门跳到它 */
+function ReorgHistory({ events, selfCode }: { events: ReorgEventOut[]; selfCode: string }) {
+  const OUTCOME = { EXITS: '退出', NEW: '新设', CONTINUES: '存续' } as const
+  return (
+    <div className="grid gap-4">
+      {events.map((e) => {
+        const last = dayBefore(e.effective_date)
+        const card = (p: ReorgEventOut['participants'][number]): FlowUnit => ({
+          name: p.department.name,
+          code: p.department.code,
+          subtitle: p.scope_note ?? undefined,
+          footer: p.outcome === 'EXITS' ? `最后有效日 ${last}` : p.outcome === 'NEW' ? `自 ${e.effective_date} 起` : '身份不变',
+          tag: {
+            label: p.department.code === selfCode ? `本部门 · ${OUTCOME[p.outcome]}` : OUTCOME[p.outcome],
+            tone: p.outcome === 'EXITS' ? 'retire' : p.outcome === 'NEW' ? 'new' : 'current',
+          },
+          href: p.department.code === selfCode ? undefined : `/departments/${p.department.id}`,
+        })
+        const sources = e.participants.filter((p) => p.role === 'SOURCE')
+        return (
+          <div key={e.id} className="grid gap-1.5">
+            <EvolveFlow
+              kind={sources.length > 1 ? 'merge' : 'split'}
+              day={e.effective_date}
+              label={REORG_TITLE[e.event_type]}
+              before={sources.map(card)}
+              after={e.participants.filter((p) => p.role === 'RESULT').map(card)}
+            />
+            <p className="text-fg-muted text-caption">
+              依据：{e.basis_note}；来源申请 <ChangeLink id={e.change_id} />
+              {e.other_matters && <>；需其他系统办理：{e.other_matters}</>}。演变关系不是行政上下级。
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="grid gap-2">

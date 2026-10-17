@@ -313,6 +313,45 @@ class DepartmentDetail(BaseModel):
     """解释指向本部门的外部代码（含已结束的），新到旧。"""
     unit_external_codes: list["ExternalCodeLink"]
     """查看日期当天经本部门的服务单元得到的代码：只读，不是本部门的身份标识。"""
+    reorganizations: list["ReorgEventOut"]
+    """本部门参与的组织变更事件（沿革），新到旧。演变关系不是行政上下级。"""
+
+
+class ReorgParticipantOut(BaseModel):
+    department: DeptRef
+    role: Literal["SOURCE", "RESULT"]
+    outcome: Literal["CONTINUES", "EXITS", "NEW"]
+    scope_note: str | None
+
+
+class ReorgEventOut(BaseModel):
+    """一次组织变更：类型、生效日、依据，以及参与部门的身份结论与承接范围。"""
+
+    id: int
+    event_type: Literal["SPLIT", "SPLIT_OFF", "ABSORB", "MERGE"]
+    effective_date: date
+    basis_note: str
+    scope_note: str | None
+    other_matters: str | None
+    change_id: int
+    recorded_at: datetime
+    participants: list[ReorgParticipantOut]
+
+
+class DepartmentDependencies(BaseModel):
+    """承接清单的原始数据：某部门在某日及以后仍有效的依赖。"""
+
+    day: date
+    units: list["ServiceUnitRow"]
+    """该日及以后挂在本部门的服务单元（含计划中的）：须逐个改挂或退出。"""
+    children: list[DeptRef]
+    """该日及以后仍隶属本部门的下级部门（行政视图）：须逐个改挂。"""
+    code_links: list["ExternalCodeLink"]
+    """该日及以后仍指向本部门的外部编码解释：退出时须结束。"""
+    classifications: list[DepartmentClassificationOut]
+    """该日仍有效的分类赋值：退出时自动结束，结果部门的分类另行确认（可作候选）。"""
+    relations: list[DepartmentRelationOut]
+    """该日仍有效的管理关系：退出时自动结束，需要的为结果部门重建。"""
 
 
 class ClassificationCodeOut(BaseModel):

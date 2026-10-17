@@ -23,11 +23,13 @@ import type {
   CampusDetail,
   CampusRow,
   ClassificationSchemeOut,
+  DepartmentDependencies,
   DepartmentDetail,
   DepartmentRow,
   ExternalCodeDetail,
   ExternalCodePage,
   GetCampusParams,
+  GetDepartmentDependenciesParams,
   GetDepartmentParams,
   GetExternalCodeParams,
   GetInstitutionParams,
@@ -837,6 +839,123 @@ export function useGetDepartment<TData = Awaited<ReturnType<typeof getDepartment
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetDepartmentQueryOptions(departmentId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetDepartmentDependenciesUrl = (departmentId: number,
+    params: GetDepartmentDependenciesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/departments/${departmentId}/dependencies?${stringifiedParams}` : `/api/departments/${departmentId}/dependencies`
+}
+
+/**
+ * 承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、
+ * 分类与管理关系。组织变更向导据此逐项处置。
+ * @summary Get Department Dependencies
+ */
+export const getDepartmentDependencies = async (departmentId: number,
+    params: GetDepartmentDependenciesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DepartmentDependencies> => {
+
+  return hdipFetch<DepartmentDependencies>(getGetDepartmentDependenciesUrl(departmentId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetDepartmentDependenciesQueryKey = (departmentId: number,
+    params?: GetDepartmentDependenciesParams,) => {
+    return [
+    `/api/departments/${departmentId}/dependencies`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetDepartmentDependenciesQueryOptions = <TData = Awaited<ReturnType<typeof getDepartmentDependencies>>, TError = Problem>(departmentId: number,
+    params: GetDepartmentDependenciesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetDepartmentDependenciesQueryKey(departmentId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getDepartmentDependencies>>> = ({ signal }) => getDepartmentDependencies(departmentId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: departmentId !== null && departmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetDepartmentDependenciesQueryResult = NonNullable<Awaited<ReturnType<typeof getDepartmentDependencies>>>
+export type GetDepartmentDependenciesQueryError = Problem
+
+
+export function useGetDepartmentDependencies<TData = Awaited<ReturnType<typeof getDepartmentDependencies>>, TError = Problem>(
+ departmentId: number,
+    params: GetDepartmentDependenciesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDepartmentDependencies>>,
+          TError,
+          Awaited<ReturnType<typeof getDepartmentDependencies>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDepartmentDependencies<TData = Awaited<ReturnType<typeof getDepartmentDependencies>>, TError = Problem>(
+ departmentId: number,
+    params: GetDepartmentDependenciesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getDepartmentDependencies>>,
+          TError,
+          Awaited<ReturnType<typeof getDepartmentDependencies>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetDepartmentDependencies<TData = Awaited<ReturnType<typeof getDepartmentDependencies>>, TError = Problem>(
+ departmentId: number,
+    params: GetDepartmentDependenciesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Department Dependencies
+ */
+
+export function useGetDepartmentDependencies<TData = Awaited<ReturnType<typeof getDepartmentDependencies>>, TError = Problem>(
+ departmentId: number,
+    params: GetDepartmentDependenciesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getDepartmentDependencies>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetDepartmentDependenciesQueryOptions(departmentId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

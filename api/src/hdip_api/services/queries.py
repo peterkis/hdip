@@ -19,6 +19,8 @@ from hdip_api.models import (
     CodeNamespace,
     Department,
     DepartmentAlias,
+    DepartmentChangeEvent,
+    DepartmentChangeParticipant,
     DepartmentClassification,
     DepartmentHierarchy,
     DepartmentInstitution,
@@ -50,6 +52,7 @@ from hdip_api.schemas.read import (
     DepartmentAffiliationOut,
     DepartmentAliasOut,
     DepartmentClassificationOut,
+    DepartmentDependencies,
     DepartmentDetail,
     DepartmentEdgeOut,
     DepartmentRelationOut,
@@ -70,6 +73,8 @@ from hdip_api.schemas.read import (
     Permissions,
     PrimaryOperator,
     RelationOut,
+    ReorgEventOut,
+    ReorgParticipantOut,
     ServiceUnitDetail,
     ServiceUnitRow,
     ServiceUnitVersionOut,
@@ -665,6 +670,117 @@ def get_department(s: Session, department_id: int, as_of: date) -> DepartmentDet
             lambda a: a.target_type == "service_unit" and a.service_unit_id in unit_ids,
             current_only=True,
         ),
+        reorganizations=_reorganizations(s, org, d.id),
+    )
+
+
+def _reorganizations(s: Session, org: "_Org", dept_id: int) -> list[ReorgEventOut]:
+    """部门参与过的组织变更事件，新到旧；参与部门的名称取查看日期当天（或最近）的名称。"""
+    event_ids = s.scalars(
+        select(DepartmentChangeParticipant.event_id)
+        .where(DepartmentChangeParticipant.department_id == dept_id)
+        .distinct()
+    ).all()
+    if not event_ids:
+        return []
+    events = s.scalars(
+        select(DepartmentChangeEvent)
+        .where(DepartmentChangeEvent.id.in_(event_ids))
+        .order_by(DepartmentChangeEvent.effective_date.desc(), DepartmentChangeEvent.id.desc())
+    ).all()
+    parts = s.scalars(
+        select(DepartmentChangeParticipant)
+        .where(DepartmentChangeParticipant.event_id.in_(event_ids))
+        .order_by(DepartmentChangeParticipant.id)
+    ).all()
+    return [
+        ReorgEventOut(
+            id=e.id,
+            event_type=e.event_type,
+            effective_date=e.effective_date,
+            basis_note=e.basis_note,
+            scope_note=e.scope_note,
+            other_matters=e.other_matters,
+            change_id=e.change_id,
+            recorded_at=e.recorded_at,
+            participants=[
+                ReorgParticipantOut(
+                    department=org.ref(p.department_id),
+                    role=p.role,
+                    outcome=p.outcome,
+                    scope_note=p.scope_note,
+                )
+                for p in parts
+                if p.event_id == e.id
+            ],
+        )
+        for e in events
+    ]
+
+
+def department_dependencies(s: Session, department_id: int, day: date) -> DepartmentDependencies:
+    """承接清单：部门在 day 及以后仍有效的依赖（组织变更向导据此逐项处置）。"""
+    d = s.get(Department, department_id)
+    if d is None:
+        raise NotFound("部门不存在")
+    open_on = lambda m: (m.valid_to.is_(None)) | (m.valid_to >= day)  # noqa: E731
+    org = _Org(s, day)
+    children = sorted(
+        {
+            e.child_department_id
+            for e in s.scalars(
+                select(DepartmentHierarchy).where(
+                    DepartmentHierarchy.parent_department_id == d.id,
+                    DepartmentHierarchy.view_id == org.view.id,
+                    open_on(DepartmentHierarchy),
+                )
+            )
+        }
+    )
+    classes = s.scalars(
+        select(DepartmentClassification).where(
+            DepartmentClassification.department_id == d.id,
+            DepartmentClassification.valid_from <= day,
+            open_on(DepartmentClassification),
+        )
+    ).all()
+    relations = s.scalars(
+        select(DepartmentRelation).where(
+            (DepartmentRelation.from_department_id == d.id)
+            | (DepartmentRelation.to_department_id == d.id),
+            open_on(DepartmentRelation),
+        )
+    ).all()
+    campus_v = _versions_by(s, CampusVersion, "campus_id")
+    codes = _Codes(s, day)
+    return DepartmentDependencies(
+        day=day,
+        units=list_service_units(s, day, department_id=d.id),
+        children=[org.ref(c) for c in children],
+        code_links=codes.links(
+            lambda a: (
+                a.target_type == "department"
+                and a.department_id == d.id
+                and (a.valid_to is None or a.valid_to >= day)
+            )
+        ),
+        classifications=_classifications_out(s, classes),
+        relations=[
+            DepartmentRelationOut(
+                id=r.id,
+                kind=r.kind,
+                from_department=org.ref(r.from_department_id),
+                to_department=org.ref(r.to_department_id) if r.to_department_id else None,
+                campus_id=r.campus_id,
+                campus_name=_name_on(campus_v[r.campus_id], day) if r.campus_id else None,
+                scope=r.scope,
+                valid_from=r.valid_from,
+                valid_to=r.valid_to,
+                change_id=r.change_id,
+                closed_change_id=r.closed_change_id,
+            )
+            for r in relations
+        ],
     )
 
 
