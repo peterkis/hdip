@@ -29,8 +29,8 @@ import { useCurrentUsername } from '@/lib/session'
 
 export type ChangeItemInput = ChangeRequestWrite['items'][number]
 
-/** 返回 item 表示校验通过；FieldErrors 表示逐个字段标红；字符串表示整体提示。 */
-export type BuildItem = () => ChangeItemInput | FieldErrors | string
+/** 返回 item（或批量操作的多个 item）表示校验通过；FieldErrors 表示逐个字段标红；字符串表示整体提示。 */
+export type BuildItem = () => ChangeItemInput | ChangeItemInput[] | FieldErrors | string
 
 /** 当前要加入的草稿里已有的变更项（新建申请时为空）。下拉选项据此补上“本申请新建”的对象 */
 const DraftItemsContext = createContext<ChangeItemInput[]>([])
@@ -43,13 +43,15 @@ export function useAddItem() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   return useMutation({
-    mutationFn: async ({ item, target }: { item: ChangeItemInput; target: number | 'new' }) => {
-      if (target === 'new') return createChangeRequest({ items: [item] })
+    mutationFn: async ({ item, target, note }: { item: ChangeItemInput | ChangeItemInput[]; target: number | 'new'; note?: string }) => {
+      const items = Array.isArray(item) ? item : [item]
+      if (target === 'new') return createChangeRequest({ items, note: note ?? null })
       const cr = await getChangeRequest(target)
-      return updateChangeRequest(target, { items: [...cr.items, item], note: cr.note })
+      return updateChangeRequest(target, { items: [...cr.items, ...items], note: cr.note })
     },
-    onSuccess: async (cr, { target }) => {
-      notify.success(target === 'new' ? `已保存到新草稿 #${cr.id}` : `已加入草稿 #${cr.id}`)
+    onSuccess: async (cr, { target, item }) => {
+      const n = Array.isArray(item) ? `（${item.length} 项）` : ''
+      notify.success(target === 'new' ? `已保存到新草稿 #${cr.id}${n}` : `已加入草稿 #${cr.id}${n}`)
       await qc.invalidateQueries()
       navigate(`/changes/${cr.id}`)
     },
@@ -64,6 +66,8 @@ export function ItemDialog({
   build,
   fixedTarget,
   wide,
+  note,
+  submitLabel,
   children,
 }: {
   open: boolean
@@ -75,6 +79,10 @@ export function ItemDialog({
   fixedTarget?: number
   /** 带图示的表单（拆分、合并）用宽弹窗 */
   wide?: boolean
+  /** 新建草稿时的变更说明（批量操作用来写明来源） */
+  note?: string
+  /** 保存按钮文字，默认“保存到申请” */
+  submitLabel?: string
   children: ReactNode
 }) {
   const username = useCurrentUsername()
@@ -112,7 +120,11 @@ export function ItemDialog({
     }
     setFormError(null)
     setFieldErrors({})
-    add.mutate({ item: result, target: targetId ?? 'new' }, { onSuccess: () => onOpenChange(false) })
+    if (Array.isArray(result) && result.length === 0) {
+      setFormError('没有可保存的变更项')
+      return
+    }
+    add.mutate({ item: result, target: targetId ?? 'new', note }, { onSuccess: () => onOpenChange(false) })
   }
 
   const error = formError ?? (add.error ? add.error.message : null)
@@ -162,7 +174,7 @@ export function ItemDialog({
               取消
             </Button>
             <Button type="submit" disabled={add.isPending}>
-              {add.isPending ? '保存中…' : '保存到申请'}
+              {add.isPending ? '保存中…' : (submitLabel ?? '保存到申请')}
             </Button>
           </DialogFooter>
           <p className="text-muted-foreground text-xs">保存后为草稿，需在申请页“提交”，再由确认人“确认”后才生效。</p>

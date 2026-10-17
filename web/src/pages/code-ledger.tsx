@@ -10,6 +10,7 @@ import { useGetExternalCode, useListExternalCodes, useListSourceSystems } from '
 import type { AssignmentOut, ExternalCodeRow, SourceSystemOut } from '@/api/generated/model'
 import { AssignmentCloseDialog, assignmentTarget, ExternalCodeAssignDialog, ExternalCodeRegisterDialog } from '@/components/forms/code-forms'
 import { FormErrorsContext, requireFields, SelectField, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
+import { BatchAdjudicate } from '@/components/batch-adjudicate'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
@@ -35,6 +36,7 @@ export function CodeLedgerPage() {
   const ns = params.get('ns') ?? ''
   const status = (params.get('status') ?? '') as CodeStatus | ''
   const openId = Number(params.get('code')) || null
+  const batch = params.get('batch') === '1'
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query.trim())
   const [limit, setLimit] = useState(PAGE)
@@ -115,12 +117,16 @@ export function CodeLedgerPage() {
           options={systems.flatMap((s) => s.namespaces.map((n) => ({ value: String(n.id), label: `${s.name} · ${n.name}` })))}
         />
         <ToggleChip label={`全部 ${all}`} checked={!status} onChange={() => set('status', '')} />
-        {(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => (
-          <ToggleChip key={k} label={`${CODE_STATUS[k]} ${counts[k]}`} checked={status === k} onChange={(on) => set('status', on ? k : '')} />
-        ))}
+        {!batch &&
+          (Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => (
+            <ToggleChip key={k} label={`${CODE_STATUS[k]} ${counts[k]}`} checked={status === k} onChange={(on) => set('status', on ? k : '')} />
+          ))}
+        {isMaintainer && <ToggleChip label="批量裁决待裁决代码" checked={batch} onChange={(on) => set('batch', on ? '1' : '')} />}
       </DbToolbar>
 
-      {!isPending && rows.length === 0 ? (
+      {batch ? (
+        <BatchAdjudicate namespaceId={ns ? Number(ns) : undefined} q={q || undefined} />
+      ) : !isPending && rows.length === 0 ? (
         <DbEmpty
           title={all === 0 && !q ? '台账里还没有代码' : '没有符合条件的代码'}
           hint={all === 0 && !q ? '登记代码后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
@@ -141,17 +147,19 @@ export function CodeLedgerPage() {
         </DbTable>
       )}
 
-      <DbFooter>
-        <span>
-          显示 <span className="text-fg-secondary">{rows.length}</span> / {page?.total ?? 0} 条
-        </span>
-        {page && rows.length < page.total && (
-          <Button variant="ghost" size="sm" onClick={() => setLimit(limit + PAGE)}>
-            再显示 {Math.min(PAGE, page.total - rows.length)} 条
-          </Button>
-        )}
-        <span>同一字典同一代码、同一院区条件、同一时点只有一个解释；要汇总到部门，沿服务单元的所属部门往上走</span>
-      </DbFooter>
+      {!batch && (
+        <DbFooter>
+          <span>
+            显示 <span className="text-fg-secondary">{rows.length}</span> / {page?.total ?? 0} 条
+          </span>
+          {page && rows.length < page.total && (
+            <Button variant="ghost" size="sm" onClick={() => setLimit(limit + PAGE)}>
+              再显示 {Math.min(PAGE, page.total - rows.length)} 条
+            </Button>
+          )}
+          <span>同一字典同一代码、同一院区条件、同一时点只有一个解释；要汇总到部门，沿服务单元的所属部门往上走</span>
+        </DbFooter>
+      )}
 
       {openId && <CodeDetailDialog id={openId} onClose={() => set('code', '')} />}
       {dialog === 'register' && (

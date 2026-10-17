@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { AssignmentOut } from './assignmentOut';
+import type { CodeSuggestion } from './codeSuggestion';
 
 export interface ExternalCodeRow {
   id: number;
@@ -18,4 +19,5 @@ export interface ExternalCodeRow {
   status: string;
   current: AssignmentOut[];
   assignment_count: number;
+  suggestions?: CodeSuggestion[];
 }

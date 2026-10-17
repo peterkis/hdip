@@ -182,6 +182,9 @@ def list_external_codes(
     q: Annotated[str | None, Query(description="按代码或源名称搜索")] = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
+    suggest: Annotated[
+        bool, Query(description="为待裁决的代码按源名称给出候选对象（批量裁决用）")
+    ] = False,
 ):
     """编码映射台账。某日没有任何解释覆盖的源记录，当天即待裁决。"""
     return queries.list_external_codes(
@@ -192,6 +195,7 @@ def list_external_codes(
         q=q,
         limit=limit,
         offset=offset,
+        suggest=suggest,
     )
 
 

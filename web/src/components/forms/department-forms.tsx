@@ -510,3 +510,91 @@ export function DepartmentRelationCloseDialog({ relation, ...props }: DialogProp
     </ItemDialog>
   )
 }
+
+// ------------------------------------------------------------------ 批量操作（部门列表里勾选多个部门）
+/** 批量设置部门管理主分类：每个部门一项 department.classify；已经是该分类、或已撤销 / 被替代的部门跳过 */
+export function DepartmentBatchClassifyDialog({ rows, ...props }: DialogProps & { rows: DepartmentRow[] }) {
+  const { data: schemes = [] } = useListClassificationSchemes()
+  const codes = (schemes.find((s) => s.code === MAIN_SCHEME)?.codes ?? []).filter((c) => c.is_active)
+  const [value, setValue] = useState('')
+  const [day, setDay] = useEffectiveDate()
+  const terminal = (d: DepartmentRow) => d.version.lifecycle === 'REVOKED' || d.version.lifecycle === 'SUPERSEDED'
+  const todo = rows.filter((d) => !terminal(d) && d.main_class?.code !== value)
+  const skipped = rows.length - todo.length
+  return (
+    <ItemDialog
+      {...props}
+      title={`批量设置部门管理主分类（${rows.length} 个部门）`}
+      description="每个部门同一时点只有一个主分类；调整 = 旧分类止于生效日前一天、新分类自生效日起，历史保留。每个部门生成一项，整张申请一起确认。"
+      note={`批量设置部门管理主分类 ${todo.length} 个`}
+      submitLabel={`生成 ${todo.length} 项`}
+      build={() =>
+        requireFields([
+          ['class_code', !!value, '请选择主分类'],
+          ['effective_date', !!day, '请选择生效日期'],
+        ]) ??
+        todo.map((d) => ({ kind: 'department.classify' as const, code: d.code, scheme_code: MAIN_SCHEME, class_code: value, effective_date: day }))
+      }
+    >
+      <p className="text-fg-secondary text-xs">
+        {rows.slice(0, 8).map((d) => d.version.name).join('、')}
+        {rows.length > 8 && ` 等 ${rows.length} 个`}
+        {value && skipped > 0 && `；其中 ${skipped} 个已是该分类或已退出，跳过`}
+      </p>
+      <SelectField
+        label="主分类"
+        name="class_code"
+        required
+        placeholder="请选择主分类"
+        value={value}
+        onChange={setValue}
+        options={codes.map((c) => ({ value: c.code, label: c.name }))}
+      />
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} hint="生效日须晚于各部门当前分类的开始日；不满足的会在提交前逐项列出" />
+    </ItemDialog>
+  )
+}
+
+/** 批量调整行政上级：把所选部门都改为某部门的下级（或都改为一级部门）。成环在提交时检查 */
+export function DepartmentBatchParentDialog({ rows, ...props }: DialogProps & { rows: DepartmentRow[] }) {
+  const [parent, setParent] = useState('')
+  const [top, setTop] = useState(false)
+  const [day, setDay] = useEffectiveDate()
+  const todo = rows.filter((d) => d.code !== parent && (top ? d.parent !== null : d.parent?.code !== parent))
+  return (
+    <ItemDialog
+      {...props}
+      title={`批量调整行政隶属（${rows.length} 个部门）`}
+      description="在行政视图里把所选部门挂到同一个上级下（或都改为一级部门）。旧隶属止于生效日前一天，历史保留；成环会在提交前被拒并列出。"
+      note={`批量调整行政隶属 ${todo.length} 个`}
+      submitLabel={`生成 ${todo.length} 项`}
+      build={() =>
+        requireFields([
+          ['parent', top || !!parent, '请选择上级部门，或勾选“改为一级部门”'],
+          ['effective_date', !!day, '请选择生效日期'],
+        ]) ??
+        todo.map((d) => ({
+          kind: 'department.set_parent' as const,
+          code: d.code,
+          view_code: 'ADMIN',
+          parent_code: top ? null : parent,
+          effective_date: day,
+        }))
+      }
+    >
+      <p className="text-fg-secondary text-xs">
+        {rows.slice(0, 8).map((d) => d.version.name).join('、')}
+        {rows.length > 8 && ` 等 ${rows.length} 个`}
+        {rows.length > todo.length && `；其中 ${rows.length - todo.length} 个已在目标位置，跳过`}
+      </p>
+      <label className="text-fg flex items-center gap-2 text-xs">
+        <input type="checkbox" className="accent-brand size-3.5" checked={top} onChange={(e) => setTop(e.target.checked)} />
+        改为一级部门（没有上级）
+      </label>
+      {!top && (
+        <DepartmentSelect label="上级部门" name="parent" required value={parent} onChange={setParent} exclude={rows.map((d) => d.code)} />
+      )}
+      <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
+    </ItemDialog>
+  )
+}

@@ -142,6 +142,8 @@ stateDiagram-v2
 - 名称显示：主体、院区、部门都取当日版本的名称（部门自 D1 起有版本）。
 - 部门数口径：查看日期当天已设立且组织生命周期为“正式履职”的部门。
 - 运营关系列表 `GET /api/operator-relations?include_future=true` 另含查看日期之后才开始的关系（主体—院区关系图用它画出筹建院区）。
+- 编码映射台账 `GET /api/external-codes?suggest=true`：为待裁决代码按源名称给出候选对象（`queries._Suggester`）。可信度从高到低：与单元 / 部门名称相同（`exact`）、与部门简称或别名相同（`alias`）、与曾用名相同（`former_name`）、源名称包含部门或单元名称（`contains`，取最长）、去掉“科、门诊、专家、病区”等后缀后相近（`similar`）。只是建议，不写库；批量裁决仍是一张含多个 `external_code.assign` 的申请。
+- **批量操作 = 一张申请里的多个变更项**，不另设批量接口：整体预演、整体确认；任何一项不通过则整张不能提交，提示指出第几项（`problems[].item_index`）。
 - 承接清单 `GET /api/departments/{id}/dependencies?day=`：部门在某日及以后仍有效的服务单元、下级部门、外部编码解释、分类与管理关系（组织变更向导用）。
 - 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`）、部门（`departments`）、院区（`campuses`，末尾加了 `public_name`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）。列名和列顺序是对外契约，新增列只能加在末尾。
 

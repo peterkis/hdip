@@ -1696,6 +1696,18 @@
             }
           },
           {
+            "name": "suggest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "为待裁决的代码按源名称给出候选对象（批量裁决用）",
+              "default": false,
+              "title": "Suggest"
+            },
+            "description": "为待裁决的代码按源名称给出候选对象（批量裁决用）"
+          },
+          {
             "name": "x-hdip-user",
             "in": "header",
             "required": false,
@@ -5293,6 +5305,57 @@
         "type": "object",
         "title": "ClassificationSchemeWrite"
       },
+      "CodeSuggestion": {
+        "properties": {
+          "target_type": {
+            "type": "string",
+            "enum": [
+              "department",
+              "service_unit"
+            ],
+            "title": "Target Type"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "campus_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campus Name"
+          },
+          "match": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "alias",
+              "former_name",
+              "contains",
+              "similar"
+            ],
+            "title": "Match"
+          }
+        },
+        "type": "object",
+        "required": [
+          "target_type",
+          "code",
+          "name",
+          "match"
+        ],
+        "title": "CodeSuggestion",
+        "description": "按源名称找到的候选：只是建议，裁决仍由人勾选确认、经变更申请生效。"
+      },
       "DepartmentAffiliate": {
         "properties": {
           "kind": {
@@ -7090,6 +7153,14 @@
             "type": "integer",
             "title": "Assignment Count"
           },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/CodeSuggestion"
+            },
+            "type": "array",
+            "title": "Suggestions",
+            "default": []
+          },
           "created_change_id": {
             "type": "integer",
             "title": "Created Change Id"
@@ -7402,6 +7473,14 @@
           "assignment_count": {
             "type": "integer",
             "title": "Assignment Count"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/CodeSuggestion"
+            },
+            "type": "array",
+            "title": "Suggestions",
+            "default": []
           }
         },
         "type": "object",

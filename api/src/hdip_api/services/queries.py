@@ -1,6 +1,7 @@
 """只读查询。MVP 数据量小（几十个主体/院区），按对象取全量版本后在内存里挑选，代码直白。
 数据量上来后再换成按日期过滤的 SQL。"""
 
+import re
 from collections import defaultdict
 from datetime import date
 
@@ -49,6 +50,7 @@ from hdip_api.schemas.read import (
     ClassificationCodeOut,
     ClassificationSchemeOut,
     ClassRef,
+    CodeSuggestion,
     DepartmentAffiliationOut,
     DepartmentAliasOut,
     DepartmentClassificationOut,
@@ -996,6 +998,110 @@ def list_source_systems(s: Session, as_of: date) -> list[SourceSystemOut]:
     return out
 
 
+# 号别、病区等后缀：比对“名称相近”时先去掉（顺序：长的在前）
+_SUFFIXES = re.compile(
+    r"(专家门诊|专病门诊|便民门诊|特需\d*|一级专家|二级专家|专家|专科|专病|普通|门诊\d*|病区|随访|功能|mdt|\d+)+$"
+)
+_DEPT_SUFFIXES = re.compile(r"(医学科|科|部|中心|室)$")
+
+
+def _core(text: str) -> str:
+    """名称主干：去掉号别后缀与末尾的“科 / 部 / 中心 / 室”。"""
+    t = _SUFFIXES.sub("", text)
+    return _DEPT_SUFFIXES.sub("", t)
+
+
+def _norm(text: str | None) -> str:
+    """比对名称用：去空白，全角括号转半角，英文小写。"""
+    t = "".join((text or "").split())
+    return t.replace("（", "(").replace("）", ")").lower()
+
+
+class _Suggester:
+    """待裁决代码的候选对象：按源名称与查看日期当天的部门、服务单元名称比对。
+
+    可信度从高到低：与单元名称相同 / 与部门名称相同 > 与部门简称、别名相同 > 与部门曾用名相同 >
+    源名称包含部门或单元名称（取最长的）。只是建议，不自动写入。
+    """
+
+    def __init__(self, s: Session, as_of: date) -> None:
+        dept_v = _versions_by(s, DepartmentVersion, "department_id")
+        codes = {d.id: d.code for d in s.scalars(select(Department))}
+        self.exact: dict[str, list[CodeSuggestion]] = defaultdict(list)
+        self.alias: dict[str, list[CodeSuggestion]] = defaultdict(list)
+        self.former: dict[str, list[CodeSuggestion]] = defaultdict(list)
+        self.contains: list[tuple[str, CodeSuggestion]] = []
+        self.similar: list[tuple[str, str, CodeSuggestion]] = []
+        for dept_id, versions in dept_v.items():
+            v, _, _ = _pick(versions, as_of)
+            if v is None or v.lifecycle in ("REVOKED", "SUPERSEDED"):
+                continue
+
+            def sug(match, code=codes[dept_id], name=v.name):
+                return CodeSuggestion(target_type="department", code=code, name=name, match=match)
+
+            self.exact[_norm(v.name)].append(sug("exact"))
+            self.contains.append((_norm(v.name), sug("contains")))
+            self.similar.append((_core(_norm(v.name)), _norm(v.name), sug("similar")))
+            if v.short_name:
+                self.alias[_norm(v.short_name)].append(sug("alias"))
+            for old in {x.name for x in versions if x.name != v.name}:
+                self.former[_norm(old)].append(sug("former_name"))
+        for a in s.scalars(
+            select(DepartmentAlias).where(
+                DepartmentAlias.valid_from <= as_of,
+                (DepartmentAlias.valid_to.is_(None)) | (DepartmentAlias.valid_to >= as_of),
+            )
+        ):
+            v, _, _ = _pick(dept_v[a.department_id], as_of)
+            if v is not None:
+                self.alias[_norm(a.value)].append(
+                    CodeSuggestion(
+                        target_type="department",
+                        code=codes[a.department_id],
+                        name=v.name,
+                        match="alias",
+                    )
+                )
+        for u in list_service_units(s, as_of, include_future=False):
+            sug = CodeSuggestion(
+                target_type="service_unit",
+                code=u.code,
+                name=u.version.name,
+                campus_name=u.version.campus_name,
+                match="exact",
+            )
+            self.exact[_norm(u.version.name)].append(sug)
+            self.contains.append(
+                (_norm(u.version.name), sug.model_copy(update={"match": "contains"}))
+            )
+        # 包含匹配取最长的名称：“心内科门诊专家”先匹配“心内科门诊”（单元）再匹配“心内科”（部门）
+        self.contains.sort(key=lambda x: -len(x[0]))
+
+    def suggest(self, source_name: str | None, limit: int = 3) -> list[CodeSuggestion]:
+        key = _norm(source_name)
+        if not key:
+            return []
+        out = [*self.exact.get(key, []), *self.alias.get(key, []), *self.former.get(key, [])]
+        if not out:
+            out = [sug for name, sug in self.contains if len(name) >= 2 and name in key]
+        if not out:
+            core = _core(key)
+            out = [
+                sug
+                for dcore, name, sug in self.similar
+                if len(dcore) >= 2 and len(core) >= 2 and (dcore in core or core in name)
+            ]
+            out.sort(key=lambda x: -len(x.name))
+        seen: set[tuple[str, str]] = set()
+        unique = []
+        for x in out:
+            if (x.target_type, x.code) not in seen:
+                seen.add((x.target_type, x.code))
+                unique.append(x)
+        return unique[:limit]
+
+
 def list_external_codes(
     s: Session,
     as_of: date,
@@ -1005,6 +1111,7 @@ def list_external_codes(
     q: str | None = None,
     limit: int = 100,
     offset: int = 0,
+    suggest: bool = False,
 ) -> ExternalCodePage:
     codes = _Codes(s, as_of)
     needle = (q or "").strip().lower()
@@ -1026,11 +1133,14 @@ def list_external_codes(
         counts[st] += 1
         if status is None or st == status:
             filtered.append(ec)
-    return ExternalCodePage(
-        total=len(filtered),
-        counts=counts,
-        rows=[ExternalCodeRow(**codes.row(ec)) for ec in filtered[offset : offset + limit]],
-    )
+    suggester = _Suggester(s, as_of) if suggest else None
+    rows = []
+    for ec in filtered[offset : offset + limit]:
+        row = ExternalCodeRow(**codes.row(ec))
+        if suggester and row.status == "pending":
+            row.suggestions = suggester.suggest(ec.source_name)
+        rows.append(row)
+    return ExternalCodePage(total=len(filtered), counts=counts, rows=rows)
 
 
 def get_external_code(s: Session, code_id: int, as_of: date) -> ExternalCodeDetail:

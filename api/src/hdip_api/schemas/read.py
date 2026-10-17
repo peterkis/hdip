@@ -555,6 +555,20 @@ class ExternalCodeRow(BaseModel):
     current: list[AssignmentOut]
     """查看日期当天有效的解释（按院区条件可有多条）。"""
     assignment_count: int
+    suggestions: list["CodeSuggestion"] = []
+    """批量裁决用：待裁决代码按源名称给出的候选对象（suggest=true 时才计算），按可信度排序。"""
+
+
+class CodeSuggestion(BaseModel):
+    """按源名称找到的候选：只是建议，裁决仍由人勾选确认、经变更申请生效。"""
+
+    target_type: Literal["department", "service_unit"]
+    code: str
+    name: str
+    campus_name: str | None = None
+    match: Literal["exact", "alias", "former_name", "contains", "similar"]
+    """exact 名称相同；alias 与别名 / 简称相同；former_name 与曾用名相同；
+    contains 源名称包含该对象名称；similar 去掉“科、门诊、专家、病区”等后缀后名称相近（最弱）。"""
 
 
 class ExternalCodePage(BaseModel):

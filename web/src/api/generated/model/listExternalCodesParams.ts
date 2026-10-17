@@ -29,4 +29,8 @@ limit?: number;
  * @minimum 0
  */
 offset?: number;
+/**
+ * 为待裁决的代码按源名称给出候选对象（批量裁决用）
+ */
+suggest?: boolean;
 };

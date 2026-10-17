@@ -35,6 +35,8 @@ import {
   DepartmentRelationCloseDialog,
   DepartmentRelationDialog,
   DepartmentReviseDialog,
+  DepartmentBatchClassifyDialog,
+  DepartmentBatchParentDialog,
 } from '@/components/forms/department-forms'
 import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
@@ -109,6 +111,16 @@ export function DepartmentsPage() {
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query.trim())
   const [creating, setCreating] = useState(false)
+  // 批量操作：勾选的部门 id；切换筛选不清空，便于分几次挑选
+  const [checked, setChecked] = useState<Set<number>>(new Set())
+  const [batch, setBatch] = useState<'classify' | 'parent' | null>(null)
+  const toggleCheck = (id: number) =>
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   const { data: all = [], isPending } = useListDepartments({ as_of: asOf, ...(q && { q }) })
   const { data: schemes = [] } = useListClassificationSchemes()
@@ -199,9 +211,35 @@ export function DepartmentsPage() {
           hint={all.length === 0 && !q ? '新建部门后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
         />
       ) : (
-        <DbTable columns={COLUMNS}>
+        <DbTable columns={isMaintainer ? [{ label: '', className: 'w-8' }, ...COLUMNS] : COLUMNS}>
+          {isMaintainer && (
+            <tr className="border-line-subtle border-b">
+              <td className="px-2 py-1.5" colSpan={COLUMNS.length + 1}>
+                <label className="text-fg-muted flex items-center gap-2 text-caption">
+                  <input
+                    type="checkbox"
+                    className="accent-brand size-3.5"
+                    checked={ordered.length > 0 && ordered.every((d) => checked.has(d.id))}
+                    onChange={(e) => setChecked(e.target.checked ? new Set([...checked, ...ordered.map((d) => d.id)]) : new Set())}
+                  />
+                  全选当前列出的 {ordered.length} 个部门（可先用上方筛选缩小范围，再批量设置主分类或行政上级）
+                </label>
+              </td>
+            </tr>
+          )}
           {ordered.map((d) => (
-            <DbRow key={d.id}>
+            <DbRow key={d.id} className={cn(checked.has(d.id) && 'bg-surface-selected')}>
+              {isMaintainer && (
+                <DbCell>
+                  <input
+                    type="checkbox"
+                    aria-label={`选择 ${d.version.name}`}
+                    className="accent-brand size-3.5"
+                    checked={checked.has(d.id)}
+                    onChange={() => toggleCheck(d.id)}
+                  />
+                </DbCell>
+              )}
               <DbCell className={cn(d.tree && 'relative')}>
                 {d.tree && <TreeGuides meta={d.tree} />}
                 <span
@@ -270,7 +308,31 @@ export function DepartmentsPage() {
         </span>
         <span>部门数只计查看日期当天“正式履职”的部门；筹备、暂停履职、撤销不计入</span>
       </DbFooter>
+      {checked.size > 0 && (
+        <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 shadow-md">
+          <span className="text-fg-secondary text-xs">
+            已选 <span className="text-fg-strong font-medium">{checked.size}</span> 个部门
+          </span>
+          <span className="ml-auto flex flex-wrap gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set())}>
+              清除选择
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setBatch('parent')}>
+              调整行政上级…
+            </Button>
+            <Button size="sm" onClick={() => setBatch('classify')}>
+              设置主分类…
+            </Button>
+          </span>
+        </div>
+      )}
       {creating && <DepartmentCreateDialog open onOpenChange={setCreating} />}
+      {batch === 'classify' && (
+        <DepartmentBatchClassifyDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      )}
+      {batch === 'parent' && (
+        <DepartmentBatchParentDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      )}
     </>
   )
 }
