@@ -28,6 +28,7 @@ import {
   UnitStatusDialog,
 } from '@/components/forms/unit-forms'
 import { Callout } from '@/components/kit/callout'
+import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
@@ -111,7 +112,7 @@ export function ServiceUnitDetailPage() {
             value: (
               <>
                 <Tag tone={UNIT_STATUS_TONE[statusKey]}>{gone ? '已退出' : UNIT_STATUS[shown.status as UnitStatus]}</Tag>
-                {canEdit && <Action onClick={() => setDialog('status')}>{latest.status === 'ACTIVE' ? '暂停' : '恢复'}</Action>}
+                {canEdit && <InlineAction onClick={() => setDialog('status')}>{latest.status === 'ACTIVE' ? '暂停' : '恢复'}</InlineAction>}
               </>
             ),
           },
@@ -128,7 +129,7 @@ export function ServiceUnitDetailPage() {
                     部门非正式履职
                   </Tag>
                 )}
-                {canEdit && <Action onClick={() => setDialog('department')}>更换</Action>}
+                {canEdit && <InlineAction onClick={() => setDialog('department')}>更换</InlineAction>}
               </>
             ),
           },
@@ -140,7 +141,7 @@ export function ServiceUnitDetailPage() {
                 <Link className="hover:underline" to={`/campuses/${shown.campus_id}`}>
                   {shown.campus_name}
                 </Link>
-                {canEdit && <Action onClick={() => setDialog('rebind')}>重新绑定</Action>}
+                {canEdit && <InlineAction onClick={() => setDialog('rebind')}>重新绑定</InlineAction>}
               </>
             ),
           },
@@ -183,7 +184,7 @@ export function ServiceUnitDetailPage() {
           </p>
         </Section>
 
-        <Section title="分类" action={canEdit ? <Action onClick={() => setDialog('classify')}>设置分类</Action> : null}>
+        <Section title="分类" action={canEdit ? <InlineAction onClick={() => setDialog('classify')}>设置分类</InlineAction> : null}>
           {data.classifications.length === 0 ? (
             <p className="text-fg-disabled text-xs">没有分类。所属部门的分类不会自动下发给单元。</p>
           ) : (
@@ -264,33 +265,8 @@ export function ServiceUnitDetailPage() {
 }
 
 // ------------------------------------------------------------------ 小件
-function Action({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button type="button" className="text-fg-muted hover:text-fg ml-2 text-caption hover:underline" onClick={onClick}>
-      {children}
-    </button>
-  )
-}
 
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-2">
-      <h2 className="text-fg-strong flex items-center text-sm font-semibold">
-        {title}
-        {action && <span className="ml-auto">{action}</span>}
-      </h2>
-      {children}
-    </section>
-  )
-}
 
-function ChangeLink({ id }: { id: number }) {
-  return (
-    <Link to={`/changes/${id}`} className="text-fg-secondary hover:underline">
-      #{id}
-    </Link>
-  )
-}
 
 const LINEAGE_LABEL = { SPLIT: '拆分', MERGE: '合并' } as const
 

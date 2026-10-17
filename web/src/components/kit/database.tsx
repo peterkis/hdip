@@ -9,7 +9,8 @@ export function DbToolbar({ children, right }: { children?: ReactNode; right?: R
   return (
     <div className="border-line-subtle flex min-h-10 flex-wrap items-center gap-1.5 border-b pb-2">
       <div className="flex flex-wrap items-center gap-1.5">{children}</div>
-      {right && <div className="ml-auto flex items-center gap-1.5">{right}</div>}
+      {/* 窄屏时搜索框独占一行，不被挤出屏幕 */}
+      {right && <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">{right}</div>}
     </div>
   )
 }
@@ -86,11 +87,11 @@ export function ToggleChip({ label, checked, onChange }: { label: string; checke
 
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)">
+    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
       <Icon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
       <input
         type="search"
-        className="placeholder:text-fg-disabled w-40 bg-transparent text-xs outline-none"
+        className="placeholder:text-fg-disabled w-full min-w-0 bg-transparent text-xs outline-none sm:w-40"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}

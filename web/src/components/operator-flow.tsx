@@ -21,11 +21,15 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  useReactFlow,
+  useStore,
 } from '@xyflow/react'
+import { useEffect } from 'react'
 import { Link } from 'react-router'
 import type { CampusRow, RelationOut } from '@/api/generated/model'
 import { Icon, type AppIcon } from '@/components/kit/icon'
 import { OPERATING_STATUS, RELATION_TYPE, type OperatingStatus, type RelationType } from '@/lib/format'
+import { useFlowHeight } from '@/components/flow-size'
 import { cn } from '@/lib/utils'
 
 type Pill = { label: string; tone: 'success' | 'info' | 'danger' | 'neutral'; icon: AppIcon }
@@ -213,11 +217,11 @@ export function OperatorFlow({
   })
 
   const rows = Math.max(institutions.length, shownCampuses.length, 1)
-  const height = Math.max(220, rows * (H + GAP) + 60)
+  const { ref, height } = useFlowHeight(W * 2 + 160, rows * (H + GAP), 180)
 
   return (
     <div className="grid gap-2">
-      <div className="hd-flow hd-flow-dots bg-surface-sidebar border-line-subtle rounded-md border" style={{ height }}>
+      <div ref={ref} className="hd-flow hd-flow-dots bg-surface-sidebar border-line-subtle rounded-md border" style={{ height }}>
         <ReactFlow
           // 节点变化（数据加载完、增删后继）时重新挂载，让 fitView 按新内容适配
           key={nodes.map((n) => n.id).join(',')}
@@ -225,7 +229,8 @@ export function OperatorFlow({
           edges={edges}
           nodeTypes={nodeTypes}
           fitView
-          fitViewOptions={{ padding: 0.12, maxZoom: 1 }}
+          fitViewOptions={FIT}
+          minZoom={0.2}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
@@ -236,6 +241,7 @@ export function OperatorFlow({
           preventScrolling={false}
         >
           <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+          <AutoFit />
         </ReactFlow>
       </div>
       <p className="text-fg-muted flex flex-wrap items-center gap-x-4 gap-y-1 text-caption">
@@ -249,4 +255,17 @@ export function OperatorFlow({
       </p>
     </div>
   )
+}
+
+const FIT = { padding: 0.1, maxZoom: 1 }
+
+/** 容器尺寸变化（窄屏、侧栏收起、弹窗展开）时重新适配，整张图始终完整可见 */
+function AutoFit() {
+  const { fitView } = useReactFlow()
+  const width = useStore((s) => s.width)
+  const height = useStore((s) => s.height)
+  useEffect(() => {
+    if (width && height) fitView(FIT)
+  }, [width, height, fitView])
+  return null
 }

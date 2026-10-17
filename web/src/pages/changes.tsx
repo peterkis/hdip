@@ -23,16 +23,15 @@ import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { Callout } from '@/components/kit/callout'
-import { DbCell, DbRow, DbTable } from '@/components/kit/database'
+import { DbCell, DbEmpty, DbRow, DbTable, DbToolbar, ToggleChip } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
+import { Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { Steps, type StepItem } from '@/components/kit/steps'
-import { QuoteDownIcon } from '@hugeicons/core-free-icons'
+import { FileEditIcon, QuoteDownIcon } from '@hugeicons/core-free-icons'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardAction, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Dialog,
   DialogContent,
@@ -41,9 +40,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { CHANGE_STATUS, FIELD_LABELS, formatValue, stamp } from '@/lib/format'
@@ -57,24 +53,16 @@ export function ChangesPage() {
     status === 'all' ? undefined : { status: status as ListChangeRequestsStatus },
   )
   return (
-    <>
-      <PageHeader title="变更申请" description="所有写入都经变更申请：草稿 → 提交 → 确认后生效。" />
-      <Tabs value={status} onValueChange={(v) => setStatus(String(v))} className="mb-3">
-        <TabsList>
-          <TabsTrigger value="all">全部</TabsTrigger>
-          {Object.entries(CHANGE_STATUS).map(([k, label]) => (
-            <TabsTrigger key={k} value={k}>
-              {label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    <div className="max-w-(--hd-page-max-width)">
+      <PageHeader icon={FileEditIcon} title="变更申请" description="所有写入都经变更申请：草稿 → 提交 → 确认后生效。" />
+      <DbToolbar>
+        <ToggleChip label="全部" checked={status === 'all'} onChange={() => setStatus('all')} />
+        {Object.entries(CHANGE_STATUS).map(([k, label]) => (
+          <ToggleChip key={k} label={label} checked={status === k} onChange={(on) => setStatus(on ? k : 'all')} />
+        ))}
+      </DbToolbar>
       {rows.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyTitle>没有变更申请</EmptyTitle>
-          </EmptyHeader>
-        </Empty>
+        <DbEmpty title="没有变更申请" hint="在各对象页面上发起变更，保存后会出现在这里。" />
       ) : (
         <DbTable
           columns={[
@@ -110,7 +98,7 @@ export function ChangesPage() {
           ))}
         </DbTable>
       )}
-    </>
+    </div>
   )
 }
 
@@ -199,10 +187,11 @@ export function ChangeDetailPage() {
   const closeAdd = (o: boolean) => !o && setAdding(null)
 
   return (
-    <>
+    <div className="max-w-(--hd-page-max-width)">
       <PageHeader
+        icon={FileEditIcon}
         title={
-          <span className="flex items-center gap-2">
+          <span className="flex flex-wrap items-center gap-2">
             变更申请 #{cr.id} <ChangeStatusBadge status={cr.status} />
           </span>
         }
@@ -250,39 +239,36 @@ export function ChangeDetailPage() {
 
       <div className="grid gap-4">
         {action.error && (
-          <Alert variant="destructive">
-            <AlertTitle>操作未成功</AlertTitle>
-            <AlertDescription>{action.error.message}</AlertDescription>
-          </Alert>
+          <Callout tone="danger" title="操作未成功">
+            {action.error.message}
+          </Callout>
         )}
         {cr.problem_message && (
-          <Alert variant="destructive">
-            <AlertTitle>按当前数据校验未通过，{cr.status === 'draft' ? '暂不能提交' : '暂不能确认'}</AlertTitle>
-            <AlertDescription>{cr.problem_message}</AlertDescription>
-          </Alert>
+          <Callout tone="danger" title={`按当前数据校验未通过，${cr.status === 'draft' ? '暂不能提交' : '暂不能确认'}`}>
+            {cr.problem_message}
+          </Callout>
         )}
 
-        <div className="rounded-md border px-4 py-4">
+        <div className="border-line-subtle rounded-md border px-2 py-4 sm:px-4">
           <Steps steps={progress(cr)} />
         </div>
 
         {p.can_edit ? (
-          <Card>
-            <CardHeader>
-              <CardTitle>
+          <Section
+            title={
+              <>
                 变更说明
-                <span className="text-muted-foreground ml-2 font-normal">选填；提交后确认人会在页面上方看到</span>
-              </CardTitle>
-              <CardAction>
-                <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
-                  保存说明
-                </Button>
-              </CardAction>
-            </CardHeader>
-            <CardContent>
-              <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
-            </CardContent>
-          </Card>
+                <span className="text-fg-muted text-caption font-normal">选填；提交后确认人会在页面上方看到</span>
+              </>
+            }
+            action={
+              <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
+                保存说明
+              </Button>
+            }
+          >
+            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
+          </Section>
         ) : (
           cr.note && (
             <Callout
@@ -304,52 +290,53 @@ export function ChangeDetailPage() {
           )
         )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle>
+        <Section
+          title={
+            <>
               变更项（{cr.items.length}）
-              <span className="text-muted-foreground ml-2 font-normal">
+              <span className="text-fg-muted text-caption font-normal">
                 {cr.status === 'confirmed' ? '确认时记录的前后内容' : '按当前数据预演，确认时会重新校验'}
               </span>
-            </CardTitle>
-            {p.can_edit && (
-              <CardAction className="flex flex-wrap justify-end gap-1">
-                <Button size="sm" variant="outline" onClick={() => setAdding('institution')}>
-                  + 新建主体
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setAdding('campus')}>
-                  + 新建院区
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setAdding('relation')}>
-                  + 建立运营关系
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setAdding('department')}>
-                  + 新建部门
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setAdding('unit')}>
-                  + 新建服务单元
-                </Button>
-              </CardAction>
-            )}
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            {cr.items.length === 0 && <p className="text-muted-foreground text-xs">没有变更项</p>}
+            </>
+          }
+          action={
+            p.can_edit && (
+              <>
+                {(
+                  [
+                    ['institution', '新建主体'],
+                    ['campus', '新建院区'],
+                    ['relation', '建立运营关系'],
+                    ['department', '新建部门'],
+                    ['unit', '新建服务单元'],
+                  ] as const
+                ).map(([k, label]) => (
+                  <Button key={k} size="xs" variant="outline" onClick={() => setAdding(k)}>
+                    + {label}
+                  </Button>
+                ))}
+              </>
+            )
+          }
+        >
+          <div className="grid gap-3">
+            {cr.items.length === 0 && <p className="text-fg-disabled text-xs">没有变更项</p>}
             {cr.items.slice(0, itemLimit).map((item, i) => {
               const outcome = cr.outcomes?.find((o) => o.index === i)
               const problem = cr.problems.find((x) => x.item_index === i)
               return (
-                <div key={i} className={cn('rounded-md border p-3', problem && 'border-destructive')}>
-                  <div className="mb-2 flex items-center gap-2 text-xs">
-                    <span className="text-muted-foreground">第 {i + 1} 项</span>
-                    <span className="font-medium">{cr.item_labels[i]}</span>
-                    <span>{outcome?.target ?? describeItem(item)}</span>
+                <div key={i} className={cn('bg-surface-raised min-w-0 rounded-md border p-3', problem ? 'border-danger' : 'border-line-subtle')}>
+                  <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span className="text-fg-muted">第 {i + 1} 项</span>
+                    <Tag tone="gray">{cr.item_labels[i]}</Tag>
+                    <span className="text-fg-strong min-w-0 break-words">{outcome?.target ?? describeItem(item)}</span>
                     {p.can_edit && (
                       <Button size="xs" variant="ghost" className="ml-auto" onClick={() => removeItem(i)}>
                         移除
                       </Button>
                     )}
                   </div>
-                  {problem && <p className="text-destructive mb-2 text-xs">{problem.message}</p>}
+                  {problem && <p className="text-danger-text mb-2 text-xs">{problem.message}</p>}
                   {outcome && <OutcomeDiff outcome={outcome} />}
                 </div>
               )
@@ -368,8 +355,8 @@ export function ChangeDetailPage() {
                 </Button>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
       </div>
 
       <ReturnDialog
@@ -406,7 +393,7 @@ export function ChangeDetailPage() {
           institutionCode={lastCode(cr, 'institution.create')}
         />
       )}
-    </>
+    </div>
   )
 }
 
@@ -474,32 +461,20 @@ function EvolveDiff({ outcome }: { outcome: ItemOutcome }) {
       <p className="text-xs">
         前身最后有效日 {dayBefore(day)}，次日起退出；后继自 {day} 起，是新身份、新代码，不继承前身历史。
       </p>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-16"></TableHead>
-            <TableHead>单元</TableHead>
-            <TableHead>类型</TableHead>
-            <TableHead>所属部门</TableHead>
-            <TableHead>院区</TableHead>
-            <TableHead>运营主体</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map(({ role, u }, i) => (
-            <TableRow key={i} className={cn(role === '后继' && 'font-medium')}>
-              <TableCell className="text-muted-foreground">{role}</TableCell>
-              <TableCell>
-                {String(u.name)} <span className="text-muted-foreground font-mono text-caption">{String(u.code ?? '')}</span>
-              </TableCell>
-              <TableCell>{formatValue('unit_type', u.unit_type, optionLabels)}</TableCell>
-              <TableCell>{formatValue('department', u.department)}</TableCell>
-              <TableCell>{formatValue('campus', u.campus)}</TableCell>
-              <TableCell>{formatValue('institution', u.institution)}</TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+      <DbTable columns={[{ label: '', className: 'w-12' }, { label: '单元' }, { label: '类型' }, { label: '所属部门' }, { label: '院区' }, { label: '运营主体' }]}>
+        {rows.map(({ role, u }, i) => (
+          <DbRow key={i} className={cn(role === '后继' && 'font-medium')}>
+            <DbCell className="text-fg-muted">{role}</DbCell>
+            <DbCell>
+              {String(u.name)} <span className="text-fg-muted font-mono text-caption">{String(u.code ?? '')}</span>
+            </DbCell>
+            <DbCell className="whitespace-nowrap">{formatValue('unit_type', u.unit_type, optionLabels)}</DbCell>
+            <DbCell className="whitespace-nowrap">{formatValue('department', u.department)}</DbCell>
+            <DbCell className="whitespace-nowrap">{formatValue('campus', u.campus)}</DbCell>
+            <DbCell className="whitespace-nowrap">{formatValue('institution', u.institution)}</DbCell>
+          </DbRow>
+        ))}
+      </DbTable>
     </div>
   )
 }
@@ -579,29 +554,20 @@ function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
         </p>
       )}
       {versioned && !before && <p className="text-xs">新建，自 {String(after.valid_from)} 起生效。</p>}
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-40">字段</TableHead>
-            {before && <TableHead>变更前</TableHead>}
-            <TableHead>{before ? '变更后' : '内容'}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((k) => {
-            const changed = before && before[k] !== after[k]
-            return (
-              <TableRow key={k} className={cn(changed && 'bg-muted/60 font-medium')}>
-                <TableCell className="text-muted-foreground">{FIELD_LABELS[k]}</TableCell>
-                {before && <TableCell>{formatValue(k, before[k], optionLabels)}</TableCell>}
-                <TableCell>{formatValue(k, after[k], optionLabels)}</TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+      <DbTable columns={[{ label: '字段', className: 'w-36' }, ...(before ? [{ label: '变更前' }] : []), { label: before ? '变更后' : '内容' }]}>
+        {rows.map((k) => {
+          const changed = before && before[k] !== after[k]
+          return (
+            <DbRow key={k} className={cn(changed && 'bg-surface-subtle font-medium')}>
+              <DbCell className="text-fg-muted whitespace-nowrap">{FIELD_LABELS[k]}</DbCell>
+              {before && <DbCell className="text-fg-secondary">{formatValue(k, before[k], optionLabels)}</DbCell>}
+              <DbCell>{formatValue(k, after[k], optionLabels)}</DbCell>
+            </DbRow>
+          )
+        })}
+      </DbTable>
       {before && keys.length > changedKeys.length && (
-        <button className="text-muted-foreground justify-self-start text-xs hover:underline" onClick={() => setShowAll(!showAll)}>
+        <button className="text-fg-muted hover:text-fg justify-self-start text-xs hover:underline" onClick={() => setShowAll(!showAll)}>
           {showAll ? '只看改动的字段' : `显示全部 ${keys.length} 个字段`}
         </button>
       )}

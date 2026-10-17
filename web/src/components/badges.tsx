@@ -1,4 +1,5 @@
-import { Badge } from '@/components/ui/badge'
+// 业务状态标签：统一用 Tag，颜色取 lib/tones.ts，任何页面同一状态同一颜色。
+import { Tag } from '@/components/kit/tag'
 import {
   CHANGE_STATUS,
   OPERATING_STATUS,
@@ -7,27 +8,16 @@ import {
   type OperatingStatus,
   type UnitStatus,
 } from '@/lib/format'
+import { CHANGE_STATUS_TONE, OPERATING_STATUS_TONE, UNIT_STATUS_TONE } from '@/lib/tones'
 
 export function OperatingStatusBadge({ status }: { status: string }) {
-  const variant =
-    status === 'RUNNING' ? 'default' : status === 'SUSPENDED' ? 'destructive' : status === 'TRIAL_RUNNING' ? 'secondary' : 'outline'
-  return <Badge variant={variant}>{OPERATING_STATUS[status as OperatingStatus] ?? status}</Badge>
+  return <Tag tone={OPERATING_STATUS_TONE[status] ?? 'gray'}>{OPERATING_STATUS[status as OperatingStatus] ?? status}</Tag>
 }
 
 export function ChangeStatusBadge({ status }: { status: string }) {
-  const variant =
-    status === 'confirmed'
-      ? 'default'
-      : status === 'submitted'
-        ? 'secondary'
-        : status === 'returned'
-          ? 'destructive'
-          : 'outline'
-  return <Badge variant={variant}>{CHANGE_STATUS[status as ChangeStatus] ?? status}</Badge>
+  return <Tag tone={CHANGE_STATUS_TONE[status] ?? 'gray'}>{CHANGE_STATUS[status as ChangeStatus] ?? status}</Tag>
 }
 
 export function UnitStatusBadge({ status }: { status: string }) {
-  return (
-    <Badge variant={status === 'ACTIVE' ? 'default' : 'secondary'}>{UNIT_STATUS[status as UnitStatus] ?? status}</Badge>
-  )
+  return <Tag tone={UNIT_STATUS_TONE[status] ?? 'gray'}>{UNIT_STATUS[status as UnitStatus] ?? status}</Tag>
 }

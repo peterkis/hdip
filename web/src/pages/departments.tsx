@@ -42,6 +42,7 @@ import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wiz
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { Callout } from '@/components/kit/callout'
+import { ChangeLink, Section } from '@/components/kit/section'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip, type DbColumn } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
@@ -599,7 +600,7 @@ export function DepartmentDetailPage() {
       />
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="mt-6">
-        <TabsList variant="line">
+        <TabsList variant="line" className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="props">名称与说明</TabsTrigger>
           <TabsTrigger value="class">分类与归属</TabsTrigger>
           <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
@@ -1036,25 +1037,7 @@ function dayBefore(day: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-2">
-      <h2 className="text-fg-strong flex items-center text-sm font-semibold">
-        {title}
-        {action && <span className="ml-auto">{action}</span>}
-      </h2>
-      {children}
-    </section>
-  )
-}
 
-function ChangeLink({ id, className }: { id: number; className?: string }) {
-  return (
-    <Link to={`/changes/${id}`} className={cn('text-fg-secondary hover:underline', className)}>
-      #{id}
-    </Link>
-  )
-}
 
 function PeriodTable({
   head,

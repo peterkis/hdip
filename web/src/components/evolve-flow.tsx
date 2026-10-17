@@ -10,10 +10,14 @@ import {
   type Edge,
   type Node,
   type NodeProps,
+  useReactFlow,
+  useStore,
 } from '@xyflow/react'
 import { Add01Icon, GitForkIcon, GitMergeIcon } from '@hugeicons/core-free-icons'
+import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Icon } from '@/components/kit/icon'
+import { useFlowHeight } from '@/components/flow-size'
 import { cn } from '@/lib/utils'
 
 export type FlowUnit = {
@@ -202,10 +206,10 @@ export function EvolveFlow({
   const edges = [...before.map((_, i) => edge(`b${i}`, 'hub')), ...after.map((_, i) => edge('hub', `a${i}`))]
 
   const rows = Math.max(before.length + (addSide === 'b' && onAdd ? 0.5 : 0), after.length + (addSide === 'a' && onAdd ? 0.5 : 0))
-  const height = Math.max(160, rows * (H + GAP_Y) + 48)
+  const { ref, height } = useFlowHeight(rightX + W, rows * (H + GAP_Y), 150)
 
   return (
-    <div className={cn('hd-flow bg-surface-sidebar border-line-subtle rounded-md border', className)} style={{ height }}>
+    <div ref={ref} className={cn('hd-flow bg-surface-sidebar border-line-subtle rounded-md border', className)} style={{ height }}>
       <ReactFlow
         // 节点变化（数据加载完、增删后继）时重新挂载，让 fitView 按新内容适配
         key={nodes.map((n) => n.id).join(',')}
@@ -213,7 +217,8 @@ export function EvolveFlow({
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.08, maxZoom: 1 }}
+        fitViewOptions={FIT}
+        minZoom={0.2}
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
@@ -224,7 +229,21 @@ export function EvolveFlow({
         preventScrolling={false}
       >
         <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
+        <AutoFit />
       </ReactFlow>
     </div>
   )
+}
+
+const FIT = { padding: 0.1, maxZoom: 1 }
+
+/** 容器尺寸变化（窄屏、侧栏收起、弹窗展开）时重新适配，整张图始终完整可见 */
+function AutoFit() {
+  const { fitView } = useReactFlow()
+  const width = useStore((s) => s.width)
+  const height = useStore((s) => s.height)
+  useEffect(() => {
+    if (width && height) fitView(FIT)
+  }, [width, height, fitView])
+  return null
 }

@@ -12,7 +12,7 @@ import {
 } from '@/api/generated/changes/changes'
 import type { ChangeRequestWrite } from '@/api/generated/model'
 import { FormErrorsContext, isFieldErrors, type FieldErrors } from '@/components/forms/fields'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Callout } from '@/components/kit/callout'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -165,9 +165,7 @@ export function ItemDialog({
             </Field>
           )}
           {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
+            <Callout tone="danger">{error}</Callout>
           )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -177,7 +175,7 @@ export function ItemDialog({
               {add.isPending ? '保存中…' : (submitLabel ?? '保存到申请')}
             </Button>
           </DialogFooter>
-          <p className="text-muted-foreground text-xs">保存后为草稿，需在申请页“提交”，再由确认人“确认”后才生效。</p>
+          <p className="text-fg-muted text-xs">保存后为草稿，需在申请页“提交”，再由确认人“确认”后才生效。</p>
         </form>
       </DialogContent>
     </Dialog>

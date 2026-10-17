@@ -217,28 +217,31 @@ function Topbar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => v
           <Icon icon={SidebarLeftIcon} />
         </Button>
       )}
-      <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5">
-        {found && <span className="text-fg-muted px-1.5 py-0.5">{found.group.label}</span>}
+      <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
+        {/* 窄屏只留当前页面与当前对象，分组名省略 */}
+        {found && <span className="text-fg-muted hidden px-1.5 py-0.5 sm:inline">{found.group.label}</span>}
         {found?.item && (
           <>
-            <Sep />
+            <span className="hidden sm:inline">
+              <Sep />
+            </span>
             <Link
               to={itemPath(found.item)}
               className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
             >
               <Icon icon={found.item.icon} />
-              <span className={cn(!crumb && 'text-fg')}>{found.item.label}</span>
+              <span className={cn(!crumb && 'text-fg', crumb && 'hidden sm:inline')}>{found.item.label}</span>
             </Link>
           </>
         )}
         {crumb && (
           <>
             <Sep />
-            <span className="text-fg truncate rounded-sm px-1.5 py-0.5">{crumb}</span>
+            <span className="text-fg min-w-0 truncate rounded-sm px-1.5 py-0.5">{crumb}</span>
           </>
         )}
       </nav>
-      <div className="ml-auto">
+      <div className="ml-auto shrink-0">
         <AsOfPicker />
       </div>
     </header>
@@ -269,7 +272,7 @@ function AsOfPicker() {
         title="按这一天查看各对象当时有效的版本"
       >
         <Icon icon={Calendar03Icon} className={cn(isToday && 'text-fg-muted')} />
-        <span className={cn(isToday && 'text-fg-muted')}>查看日期</span>
+        <span className={cn('hidden whitespace-nowrap sm:inline', isToday && 'text-fg-muted')}>查看日期</span>
         <input
           type="date"
           className={cn('w-28 bg-transparent outline-none', isToday && 'text-fg')}

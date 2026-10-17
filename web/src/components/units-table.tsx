@@ -1,76 +1,67 @@
+// 服务单元列表（院区详情、部门详情里嵌入）：Notion 数据库视图样式，每行是查看日期当天有效的版本。
 import { Link } from 'react-router'
 import type { ServiceUnitRow } from '@/api/generated/model'
 import { UnitStatusBadge } from '@/components/badges'
-import { Badge } from '@/components/ui/badge'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { DbCell, DbEmpty, DbRow, DbTable } from '@/components/kit/database'
+import { Tag } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period } from '@/lib/format'
 
-/** 服务单元列表：每行是查看日期当天有效的版本。 */
 export function UnitsTable({ rows, hide = [] }: { rows: ServiceUnitRow[]; hide?: ('department' | 'campus')[] }) {
   const { optionLabels } = useApp()
-  if (rows.length === 0) return <p className="text-muted-foreground py-4 text-xs">没有服务单元</p>
+  if (rows.length === 0) return <DbEmpty title="没有服务单元" hint="查看日期当天没有有效或计划中的单元。" />
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>代码</TableHead>
-          <TableHead>名称</TableHead>
-          <TableHead>类型</TableHead>
-          {!hide.includes('department') && <TableHead>所属部门</TableHead>}
-          {!hide.includes('campus') && <TableHead>院区</TableHead>}
-          <TableHead>运营主体</TableHead>
-          <TableHead>状态</TableHead>
-          <TableHead>版本期间</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {rows.map((r) => (
-          <TableRow key={r.id}>
-            <TableCell className="font-mono">{r.code}</TableCell>
-            <TableCell>
-              <Link className="font-medium hover:underline" to={`/service-units/${r.id}`}>
+    <DbTable
+      columns={[
+        { label: '名称', className: 'min-w-40' },
+        { label: '代码' },
+        { label: '类型' },
+        ...(hide.includes('department') ? [] : [{ label: '所属部门' }]),
+        ...(hide.includes('campus') ? [] : [{ label: '院区' }]),
+        { label: '运营主体' },
+        { label: '状态' },
+        { label: '版本期间' },
+      ]}
+    >
+      {rows.map((r) => (
+        <DbRow key={r.id}>
+          <DbCell>
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/service-units/${r.id}`}>
                 {r.version.name}
               </Link>
-              {r.not_yet_effective && (
-                <Badge variant="outline" className="ml-2">
-                  未生效
-                </Badge>
+              {r.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+              {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
+            </span>
+          </DbCell>
+          <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{r.code}</DbCell>
+          <DbCell className="whitespace-nowrap">{formatValue('unit_type', r.unit_type, optionLabels)}</DbCell>
+          {!hide.includes('department') && (
+            <DbCell className="whitespace-nowrap">
+              <Link className="hover:underline" to={`/departments/${r.version.department_id}`}>
+                {r.version.department_name}
+              </Link>
+              {r.version.department_lifecycle !== 'ACTIVE' && (
+                <Tag tone="red" className="ml-1.5">
+                  部门非正式履职
+                </Tag>
               )}
-              {r.has_later_versions && (
-                <Badge variant="outline" className="ml-2">
-                  有后续版本
-                </Badge>
-              )}
-            </TableCell>
-            <TableCell>{formatValue('unit_type', r.unit_type, optionLabels)}</TableCell>
-            {!hide.includes('department') && (
-              <TableCell>
-                <Link className="hover:underline" to={`/departments/${r.version.department_id}`}>
-                  {r.version.department_name}
-                </Link>
-                {r.version.department_lifecycle !== 'ACTIVE' && (
-                  <Badge variant="destructive" className="ml-2">
-                    所属部门非正式履职
-                  </Badge>
-                )}
-              </TableCell>
-            )}
-            {!hide.includes('campus') && (
-              <TableCell>
-                <Link className="hover:underline" to={`/campuses/${r.version.campus_id}`}>
-                  {r.version.campus_name}
-                </Link>
-              </TableCell>
-            )}
-            <TableCell>{r.version.institution_name}</TableCell>
-            <TableCell>
-              <UnitStatusBadge status={r.version.status} />
-            </TableCell>
-            <TableCell className="whitespace-nowrap">{period(r.version.valid_from, r.version.valid_to)}</TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+            </DbCell>
+          )}
+          {!hide.includes('campus') && (
+            <DbCell className="whitespace-nowrap">
+              <Link className="hover:underline" to={`/campuses/${r.version.campus_id}`}>
+                {r.version.campus_name}
+              </Link>
+            </DbCell>
+          )}
+          <DbCell className="text-fg-secondary whitespace-nowrap">{r.version.institution_name}</DbCell>
+          <DbCell>
+            <UnitStatusBadge status={r.version.status} />
+          </DbCell>
+          <DbCell className="text-fg-secondary whitespace-nowrap">{period(r.version.valid_from, r.version.valid_to)}</DbCell>
+        </DbRow>
+      ))}
+    </DbTable>
   )
 }
