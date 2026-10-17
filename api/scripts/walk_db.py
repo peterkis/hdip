@@ -1,7 +1,8 @@
 """重建剧本走查用的独立数据库（原库名加 _walk），并放入走查的起点数据。
 
 在浏览器里走验收剧本会留下真实记录，而业务表没有物理删除，所以走查不在开发库里做。
-用法（在项目根目录）：先停掉 make api-walk，再 make walk-db，然后 make api-walk、make web-walk，打开 http://localhost:5174。
+用法（在项目根目录）：先停掉 make api-walk，再 make walk-db，
+然后 make api-walk、make web-walk，打开 http://localhost:5174。
 
 起点数据（经一张申请确认）：主体成都市第三人民医院、本部院区（运行）及其运营关系、
 部门心血管内科，都自 2020-01-01 起。其余全部在页面上按剧本操作。
@@ -22,7 +23,7 @@ from hdip_api.core.config import Settings, get_settings
 base = Settings()
 owner = make_url(base.migration_database_url)
 app = make_url(base.database_url)
-WALK = f"{owner.database}_walk"
+WALK = os.environ.get("HDIP_WALK_DB", f"{owner.database}_walk")  # 另建临时库验证时可改名
 
 if "--url" in sys.argv:  # 供 make api-walk 取应用连接串
     print(app.set(database=WALK).render_as_string(False))

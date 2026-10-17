@@ -8,7 +8,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`、`make api-walk`、`make web-walk`）。拆分、合并表单在服务单元详情页。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`、`make api-walk`、`make web-walk`）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），外壳与服务单元列表已按新规范完成，其余页面待迁移。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
 - 业务尚不明确、随时可能调整：优先小而可改的实现，不做提前抽象。
@@ -50,6 +50,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 运营关系：每行自带期间，端点（主体、院区）不可改；调整 = 关闭旧行 + 新建行。同一院区在重叠期间最多一个主要运营方，且只有“运营”类型可为主要运营方。关系类型码：`OPERATE/REGISTER/MANAGE/CHARGE`。
 - 院区运营状态码沿用旧仓库：`PLANNING`（筹建）→ `TRIAL_RUNNING`（试运行）→ `RUNNING`（运行）→ `SUSPENDED`（停用），只能前进，停用后不可恢复。节点角色在 `option_item`（`campus_node_role`：`HEADQUARTERS/HIGH_TECH/CITY_CENTER`）。
 - 修订只作用于最新版本，生效日须晚于其开始日；内容无变化的修订被拒绝。修订项只写改动的字段，写 `null` 表示清空。
+- 登记时间与业务生效日分开：未来才开始的院区、部门现在就能挂单元、建关系，只是开始日不能早于它们的开始日（表单自动推后并说明）。院区的开始日是它在主数据里开始存在的日子（筹建期也算），开诊用运营状态表达。
 - 版本表、身份表、运营关系由触发器 `hdip_guard_update` 保护：只允许把 `valid_to` 从空设为某日（关系另可在同一次 UPDATE 里写关闭信息），结束后整行不可再改。
 - 服务单元每个版本须满足：所属部门在单元整个期间内为“正式履职”；院区非停用；运营主体与该院区有覆盖整个单元期间的“运营”关系（可由多段运营关系首尾相接覆盖）。部门改为暂停履职、撤销时，若仍有依赖它的单元，阻止确认并列出（可在同一张申请里先改挂）。
 - 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。中文名（门诊单元、住院单元…）在 `option_item`。“医技单元”与码值的映射未定，不要自行推断。
@@ -105,7 +106,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/api/generated/          orval 生成，禁止手改
   src/styles/tokens.css       设计令牌（原始 → 语义）；index.css 桥接到 Tailwind 与 shadcn 变量
   src/components/ui/          shadcn 组件（Base UI，base-mira），按 shadcn 生成，尽量不手改（新加组件若写死任意字号，改成令牌类）
-  src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、database（列表页的数据库视图）、toaster（轻提示）
+  src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、Steps（多步骤进度节点）、database（列表页的数据库视图）、toaster（轻提示）
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
   src/pages/                  各页面；service-unit-list.tsx 是第一个按新规范做的列表页（其余页面待迁移）；design.tsx 为 /design 视觉规范页

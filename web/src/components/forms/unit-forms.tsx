@@ -1,11 +1,13 @@
 // 服务单元的变更表单（部门的在 department-forms.tsx）。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
 // 引用其他对象一律“按名称选择”（ref-selects.tsx），代码由选择带出，操作人员不需要记代码。
-import { useState } from 'react'
+import { useContext, useState } from 'react'
+import { useListCampuses, useListDepartments, useListServiceUnits } from '@/api/generated/master/master'
 import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
+import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
-import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
-import { ItemDialog } from '@/components/forms/item-dialog'
-import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect } from '@/components/forms/ref-selects'
+import { diffPatch, FormErrorsContext, orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
+import { ItemDialog, useDraftItems } from '@/components/forms/item-dialog'
+import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect, useStartFloor } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
 import { UNIT_STATUS, type UnitStatus } from '@/lib/format'
 
@@ -25,6 +27,7 @@ export function UnitCreateDialog({
   const [phone, setPhone] = useState('')
   const [scope, setScope] = useState('')
   const [validFrom, setValidFrom] = useEffectiveDate()
+  const startHint = useStartFloor(validFrom, setValidFrom, { campus, department: dept, institution: inst })
 
   return (
     <ItemDialog
@@ -90,7 +93,7 @@ export function UnitCreateDialog({
       />
       <div className="grid grid-cols-2 gap-3">
         <TextField label="电话" value={phone} onChange={setPhone} />
-        <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
+        <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} hint={startHint} />
       </div>
       <TextField label="范围说明" value={scope} onChange={setScope} />
     </ItemDialog>
@@ -368,10 +371,21 @@ function SuccessorFields({
 export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialogProps & { unitType: string }) {
   const [day, setDay] = useEffectiveDate()
   const [succ, setSucc] = useState<Successor[]>([successorFrom(current, unitType), successorFrom(current, unitType)])
+  // 图中点选哪个后继，下方就只显示它的字段，避免一屏堆满
+  const [sel, setSel] = useState(0)
   const update = (i: number) => (s: Successor) => setSucc(succ.map((x, j) => (j === i ? s : x)))
+  const add = () => {
+    setSucc([...succ, successorFrom(current, unitType)])
+    setSel(succ.length)
+  }
+  const remove = (i: number) => {
+    setSucc(succ.filter((_, j) => j !== i))
+    setSel(Math.max(0, Math.min(sel, succ.length - 2)))
+  }
   return (
     <ItemDialog
       {...props}
+      wide
       title={`拆分服务单元：${current.name}`}
       description="把一个单元拆成至少两个。前身在生效日前一天退出，后继自生效日起；后继是新身份、新代码，不继承前身的历史，引用也不自动迁移。"
       build={() => {
@@ -386,6 +400,9 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
             '后继单元代码不能重复',
           ]),
         ])
+        // 出错的后继不在下方时，切到第一个出错的后继，让标红的字段可见
+        const bad = firstInvalid(missing, 's')
+        if (bad !== null && !Object.keys(missing!.fieldErrors).some((k) => k.startsWith(`s${sel}.`))) setSel(bad)
         return missing ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map(successorItem) }
       }}
     >
@@ -398,25 +415,104 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
         onChange={setDay}
         hint={day ? `${current.name} 的最后有效日为 ${dayBefore(day)}，后继自 ${day} 起` : undefined}
       />
-      {succ.map((s, i) => (
-        <SuccessorFields
-          key={i}
-          value={s}
-          onChange={update(i)}
-          fieldKey={`s${i}`}
-          title={`后继单元 ${i + 1}`}
-          onRemove={succ.length > 2 ? () => setSucc(succ.filter((_, j) => j !== i)) : undefined}
-        />
-      ))}
-      <button
-        type="button"
-        className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline"
-        onClick={() => setSucc([...succ, successorFrom(current, unitType)])}
-      >
-        + 再加一个后继单元
-      </button>
+      <SplitMergeFlow
+        kind="split"
+        day={day}
+        before={[predecessorCard(current, code, unitType)]}
+        after={succ}
+        selected={`a${sel}`}
+        onSelect={(k) => setSel(Number(k.slice(1)))}
+        onAdd={add}
+        addLabel="再加一个后继单元"
+      />
+      <SuccessorFields
+        key={sel}
+        value={succ[sel]}
+        onChange={update(sel)}
+        fieldKey={`s${sel}`}
+        title={`后继单元 ${sel + 1}（在上图点选其他后继）`}
+        onRemove={succ.length > 2 ? () => remove(sel) : undefined}
+      />
     </ItemDialog>
   )
+}
+
+/** 第一个出错的后继序号（字段名形如 s1.name） */
+function firstInvalid(missing: FieldErrors | null, prefix: string): number | null {
+  if (!missing) return null
+  const hit = Object.keys(missing.fieldErrors)
+    .map((k) => new RegExp(`^${prefix}(\\d+)\\.`).exec(k))
+    .find(Boolean)
+  return hit ? Number(hit[1]) : null
+}
+
+/** 代码 → 名称，用于图示（含本申请新建的部门、院区） */
+function useNames() {
+  const { asOf, unitTypeOptions } = useApp()
+  const draft = useDraftItems()
+  const { data: depts = [] } = useListDepartments({ as_of: asOf })
+  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
+  const dept = new Map<string, string>(depts.map((d) => [d.code, d.version.name]))
+  const campus = new Map<string, string>(campuses.map((c) => [c.code, c.version.name]))
+  for (const i of draft) {
+    if (i.kind === 'department.create') dept.set(i.code, i.name)
+    if (i.kind === 'campus.create') campus.set(i.code, i.fields.name)
+  }
+  const type = new Map(unitTypeOptions.map((o) => [o.code, o.name]))
+  return (s: { unit_type: string; dept: string; campus: string }) =>
+    [type.get(s.unit_type), dept.get(s.dept), campus.get(s.campus)].filter(Boolean).join(' · ')
+}
+
+function predecessorCard(v: ServiceUnitVersionOut, code: string, unitType: string): PredecessorCard {
+  return { name: v.name, code, unit_type: unitType, dept: v.department_code, campus: v.campus_code }
+}
+
+interface PredecessorCard {
+  name: string
+  code: string
+  unit_type: string
+  dept: string
+  campus: string
+}
+
+/** 拆分、合并表单里的图示：前身 → 生效日 → 后继；出错的节点标红 */
+function SplitMergeFlow({
+  kind,
+  day,
+  before,
+  after,
+  ...rest
+}: {
+  kind: 'split' | 'merge'
+  day: string
+  before: (PredecessorCard | null)[]
+  after: Successor[]
+  selected?: string
+  onSelect?: (key: string) => void
+  onAdd?: () => void
+  addLabel?: string
+}) {
+  const describe = useNames()
+  const { errors } = useContext(FormErrorsContext)
+  const prefix = kind === 'split' ? 's' : 'succ'
+  const invalid = (key: string) => Object.keys(errors).some((k) => k.startsWith(`${key}.`) || k === key)
+  const retire = day ? `最后有效日 ${dayBefore(day)}` : '最后有效日待定'
+  const left: FlowUnit[] = before.map((p, i) =>
+    p
+      ? { name: p.name, code: p.code, subtitle: describe(p), footer: retire, tag: { label: '退出', tone: 'retire' } }
+      : { name: '', placeholder: '待选择前身单元', footer: retire, tag: { label: '退出', tone: 'retire' }, invalid: invalid(`p${i - 1}`) },
+  )
+  const right: FlowUnit[] = after.map((s, i) => ({
+    name: s.name.trim(),
+    placeholder: kind === 'split' ? `后继单元 ${i + 1}（未命名）` : '合并后的单元（未命名）',
+    code: s.code.trim() || undefined,
+    subtitle: describe(s),
+    footer: day ? `自 ${day} 起` : '开始日待定',
+    tag: { label: '新建', tone: 'new' },
+    invalid: invalid(kind === 'split' ? `${prefix}${i}` : prefix),
+    selectable: kind === 'split',
+  }))
+  return <EvolveFlow kind={kind} day={day} before={left} after={right} {...rest} />
 }
 
 export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialogProps & { unitType: string }) {
@@ -424,9 +520,20 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
   const [others, setOthers] = useState<string[]>([''])
   const [succ, setSucc] = useState<Successor>(successorFrom(current, unitType, current.name))
   const chosen = [code, ...others.filter(Boolean)]
+  const { data: candidates = [] } = useListServiceUnits(
+    { as_of: day ? dayBefore(day) : current.valid_from, include_future: false },
+    { query: { enabled: others.some(Boolean) } },
+  )
+  const picked = others.map((o): PredecessorCard | null => {
+    const u = candidates.find((c) => c.code === o)
+    return u
+      ? { name: u.version.name, code: u.code, unit_type: u.unit_type, dept: u.version.department_code, campus: u.version.campus_code }
+      : null
+  })
   return (
     <ItemDialog
       {...props}
+      wide
       title={`合并服务单元：${current.name}`}
       description="把至少两个单元合并成一个新单元。全部前身在生效日前一天退出，后继自生效日起；后继是新身份、新代码，不继承前身的历史。"
       build={() => {
@@ -447,6 +554,14 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
         value={day}
         onChange={setDay}
         hint={day ? `前身的最后有效日为 ${dayBefore(day)}，后继自 ${day} 起` : undefined}
+      />
+      <SplitMergeFlow
+        kind="merge"
+        day={day}
+        before={[predecessorCard(current, code, unitType), ...picked]}
+        after={[succ]}
+        onAdd={() => setOthers([...others, ''])}
+        addLabel="再选一个前身单元"
       />
       <p className="text-xs">
         前身：<span className="text-fg-strong">{current.name}</span>（{code}），以及：
@@ -474,13 +589,6 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
           )}
         </div>
       ))}
-      <button
-        type="button"
-        className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline"
-        onClick={() => setOthers([...others, ''])}
-      >
-        + 再选一个前身单元
-      </button>
       <SuccessorFields value={succ} onChange={setSucc} fieldKey="succ" title="合并后的单元" />
     </ItemDialog>
   )

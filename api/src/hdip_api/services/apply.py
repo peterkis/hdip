@@ -394,10 +394,15 @@ def _relation_create(ctx: Ctx, item: OperatorRelationCreate) -> dict:
         s, InstitutionVersion, InstitutionVersion.institution_id, inst.id, item.valid_from
     )
     if inst_v is None:
-        raise ItemError(f"主体 {inst.code} 在 {item.valid_from} 尚未生效", "valid_from")
+        raise ItemError(
+            _not_started(s, InstitutionVersion, "institution_id", inst, "主体", "关系"),
+            "valid_from",
+        )
     campus_v = _version_on(s, CampusVersion, CampusVersion.campus_id, campus.id, item.valid_from)
     if campus_v is None:
-        raise ItemError(f"院区 {campus.code} 在 {item.valid_from} 尚未生效", "valid_from")
+        raise ItemError(
+            _not_started(s, CampusVersion, "campus_id", campus, "院区", "关系"), "valid_from"
+        )
     if campus_v.operating_status == "SUSPENDED":
         raise ItemError(f"院区 {campus.code} 在 {item.valid_from} 已停用", "valid_from")
 
@@ -1580,6 +1585,22 @@ def _uncovered_from(relations: list[OperatorRelation], start: date, end: date | 
     return cursor
 
 
+def _not_started(s: Session, model, owner_col: str, obj, what: str, subject: str) -> str:
+    """对象最早版本晚于所填开始日时的提示：说清是哪个对象、最早可以从哪天开始。
+
+    未来生效的对象现在就能挂单元、建关系，只要开始日不早于它的开始日。
+    """
+    first = s.scalars(
+        select(model).where(getattr(model, owner_col) == obj.id).order_by(model.valid_from)
+    ).first()
+    if first is None:  # 同一张申请里尚未建成，按理不会走到
+        return f"{what} {obj.code} 还没有版本"
+    return (
+        f"{what}“{first.name}”（{obj.code}）自 {first.valid_from.isoformat()} 起才有记录，"
+        f"{subject}的开始日不能早于这天；现在就可以登记，到日自动生效"
+    )
+
+
 def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
     """单元版本须满足：院区在整个期间存在且非停用；运营主体与该院区有覆盖整个期间的“运营”关系。"""
     campus = s.get(Campus, v.campus_id)
@@ -1594,7 +1615,7 @@ def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
         select(CampusVersion).where(CampusVersion.campus_id == campus.id)
     ).all()
     if not any(cv.valid_from <= v.valid_from for cv in campus_versions):
-        return f"院区 {campus.code} 在 {v.valid_from.isoformat()} 尚未生效"
+        return _not_started(s, CampusVersion, "campus_id", campus, "院区", "单元")
     for cv in sorted(campus_versions, key=lambda x: x.valid_from):
         if cv.operating_status == "SUSPENDED" and overlaps(cv):
             return f"院区 {campus.code} 自 {cv.valid_from.isoformat()} 起停用"
@@ -1615,7 +1636,7 @@ def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
         key=lambda x: x.valid_from,
     )
     if not any(dv.valid_from <= v.valid_from for dv in dept_versions):
-        return f"部门 {dept.code} 在 {v.valid_from.isoformat()} 尚未设立"
+        return _not_started(s, DepartmentVersion, "department_id", dept, "部门", "单元")
     for dv in dept_versions:
         if overlaps(dv) and dv.lifecycle != "ACTIVE":
             return (

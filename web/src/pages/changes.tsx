@@ -20,7 +20,11 @@ import {
 } from '@/components/forms/change-forms'
 import { DepartmentCreateDialog } from '@/components/forms/department-forms'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
+import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
+import { Callout } from '@/components/kit/callout'
 import { Missing } from '@/components/kit/missing'
+import { Steps, type StepItem } from '@/components/kit/steps'
+import { QuoteDownIcon } from '@hugeicons/core-free-icons'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -117,6 +121,13 @@ export function ChangeDetailPage() {
   const [returning, setReturning] = useState(false)
   const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
+  const [note, setNote] = useState('')
+  const [noteFor, setNoteFor] = useState<number | null>(null)
+  if (cr && noteFor !== cr.id) {
+    // 换到另一张申请时，用它保存的说明重置输入框
+    setNoteFor(cr.id)
+    setNote(cr.note ?? '')
+  }
 
   const action = useMutation({
     mutationFn: (fn: () => Promise<ChangeRequestOut>) => fn(),
@@ -133,6 +144,8 @@ export function ChangeDetailPage() {
     action.mutate(fn, { onSuccess: () => done && notify.success(done) })
   const removeItem = (index: number) =>
     run(() => updateChangeRequest(id, { items: cr.items.filter((_, i) => i !== index), note: cr.note }))
+  const noteDirty = (note.trim() || null) !== (cr.note ?? null)
+  const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
   const closeAdd = (o: boolean) => !o && setAdding(null)
 
   return (
@@ -162,7 +175,13 @@ export function ChangeDetailPage() {
               </Button>
             )}
             {p.can_submit && (
-              <Button disabled={action.isPending} onClick={() => run(() => submitChangeRequest(id), `申请 #${id} 已提交，等待确认`)}>
+              <Button disabled={action.isPending} onClick={() =>
+                  run(async () => {
+                    // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
+                    if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null })
+                    return submitChangeRequest(id)
+                  }, `申请 #${id} 已提交，等待确认`)
+                }>
                 提交
               </Button>
             )}
@@ -192,28 +211,48 @@ export function ChangeDetailPage() {
             <AlertDescription>{cr.problem_message}</AlertDescription>
           </Alert>
         )}
-        {cr.status === 'submitted' && p.confirm_hint && !cr.problem_message && (
-          <Alert>
-            <AlertDescription>{p.confirm_hint}</AlertDescription>
-          </Alert>
+
+        <div className="rounded-md border px-4 py-4">
+          <Steps steps={progress(cr)} />
+        </div>
+
+        {p.can_edit ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                变更说明
+                <span className="text-muted-foreground ml-2 font-normal">选填；提交后确认人会在页面上方看到</span>
+              </CardTitle>
+              <CardAction>
+                <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
+                  保存说明
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardContent>
+              <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
+            </CardContent>
+          </Card>
+        ) : (
+          cr.note && (
+            <Callout
+              tone="info"
+              icon={QuoteDownIcon}
+              title={
+                <span className="flex items-center gap-2">
+                  变更说明
+                  <span className="text-fg-muted font-normal">
+                    {cr.created_by.display_name}
+                    {cr.submitted_at && ` · 提交于 ${stamp(cr.submitted_at)}`}
+                  </span>
+                </span>
+              }
+              className="border-l-2 border-brand"
+            >
+              <p className="text-fg text-sm whitespace-pre-wrap">{cr.note}</p>
+            </Callout>
+          )
         )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>流程记录</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-1 text-xs">
-            <Step label="创建" who={cr.created_by.display_name} at={cr.created_at} />
-            <Step label="提交" who={cr.submitted_by?.display_name} at={cr.submitted_at} />
-            <Step label="确认" who={cr.confirmed_by?.display_name} at={cr.confirmed_at} />
-            {cr.returned_at && (
-              <Step label="退回" who={cr.returned_by?.display_name} at={cr.returned_at} extra={`原因：${cr.return_reason}`} />
-            )}
-            {cr.cancelled_at && <Step label="撤销" who={cr.cancelled_by?.display_name} at={cr.cancelled_at} />}
-          </CardContent>
-        </Card>
-
-        <NoteCard cr={cr} onSave={(note) => run(() => updateChangeRequest(id, { items: cr.items, note }), '变更说明已保存')} />
 
         <Card>
           <CardHeader>
@@ -307,48 +346,38 @@ export function ChangeDetailPage() {
   )
 }
 
-function Step({ label, who, at, extra }: { label: string; who?: string; at?: string | null; extra?: string }) {
-  return (
-    <div className="flex gap-3">
-      <span className="text-muted-foreground w-10">{label}</span>
-      {at ? (
-        <span>
-          {who} · {stamp(at)} {extra && <span className="ml-2">{extra}</span>}
-        </span>
-      ) : (
-        <span className="text-muted-foreground">—</span>
-      )}
-    </div>
-  )
-}
-
-function NoteCard({ cr, onSave }: { cr: ChangeRequestOut; onSave: (note: string | null) => void }) {
-  const [note, setNote] = useState(cr.note ?? '')
-  if (!cr.permissions.can_edit) {
-    return cr.note ? (
-      <Card>
-        <CardHeader>
-          <CardTitle>变更说明</CardTitle>
-        </CardHeader>
-        <CardContent className="text-xs whitespace-pre-wrap">{cr.note}</CardContent>
-      </Card>
-    ) : null
+/** 申请的三步：起草 → 提交 → 确认生效；退回、撤销停在发生的那一步 */
+function progress(cr: ChangeRequestOut): StepItem[] {
+  const by = (who?: { display_name: string } | null, at?: string | null) =>
+    at ? (
+      <>
+        {who?.display_name}
+        <br />
+        {stamp(at)}
+      </>
+    ) : undefined
+  const cancelled = by(cr.cancelled_by, cr.cancelled_at)
+  const draft: StepItem = { label: '起草', state: 'done', detail: by(cr.created_by, cr.created_at) }
+  let submit: StepItem
+  let confirm: StepItem
+  if (cr.status === 'draft') {
+    submit = { label: '提交', state: 'current', detail: '补齐变更项后提交' }
+    confirm = { label: '确认生效', state: 'upcoming' }
+  } else if (cr.status === 'cancelled' && !cr.submitted_at) {
+    submit = { label: '提交', state: 'stopped', detail: <>未提交即撤销：{cancelled}</> }
+    confirm = { label: '确认生效', state: 'skipped' }
+  } else {
+    submit = { label: '提交', state: 'done', detail: by(cr.submitted_by, cr.submitted_at) }
+    confirm =
+      cr.status === 'confirmed'
+        ? { label: '确认生效', state: 'done', detail: by(cr.confirmed_by, cr.confirmed_at) }
+        : cr.status === 'returned'
+          ? { label: '已退回', state: 'stopped', detail: <>{by(cr.returned_by, cr.returned_at)}<br />原因：{cr.return_reason}</> }
+          : cr.status === 'cancelled'
+            ? { label: '已撤销', state: 'stopped', detail: cancelled }
+            : { label: '确认生效', state: 'current', detail: cr.permissions.confirm_hint ?? '等待确认人确认' }
   }
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>变更说明（可选）</CardTitle>
-        <CardAction>
-          <Button size="sm" variant="outline" disabled={note === (cr.note ?? '')} onClick={() => onSave(note || null)}>
-            保存说明
-          </Button>
-        </CardAction>
-      </CardHeader>
-      <CardContent>
-        <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更" />
-      </CardContent>
-    </Card>
-  )
+  return [draft, submit, confirm]
 }
 
 /** 拆分 / 合并：前身与后继各列一行，确认人一眼看清“谁变成了谁” */
@@ -361,8 +390,23 @@ function EvolveDiff({ outcome }: { outcome: ItemOutcome }) {
     ...(before.predecessors ?? []).map((u) => ({ role: '前身', u })),
     ...(after.successors ?? []).map((u) => ({ role: '后继', u })),
   ]
+  // 快照里的部门、院区是“代码 名称”，图上只显示名称
+  const nameOf = (v: unknown) => String(v ?? '').replace(/^\S+\s/, '')
+  const card = (u: Record<string, unknown>, tone: 'retire' | 'new'): FlowUnit => ({
+    name: String(u.name),
+    code: String(u.code ?? ''),
+    subtitle: [formatValue('unit_type', u.unit_type, optionLabels), nameOf(u.department), nameOf(u.campus)].join(' · '),
+    footer: tone === 'retire' ? `最后有效日 ${dayBefore(day)}` : `自 ${day} 起`,
+    tag: tone === 'retire' ? { label: '退出', tone } : { label: '新建', tone },
+  })
   return (
     <div className="grid gap-2">
+      <EvolveFlow
+        kind={(before.predecessors ?? []).length > 1 ? 'merge' : 'split'}
+        day={day}
+        before={(before.predecessors ?? []).map((u) => card(u, 'retire'))}
+        after={(after.successors ?? []).map((u) => card(u, 'new'))}
+      />
       <p className="text-xs">
         前身最后有效日 {dayBefore(day)}，次日起退出；后继自 {day} 起，是新身份、新代码，不继承前身历史。
       </p>

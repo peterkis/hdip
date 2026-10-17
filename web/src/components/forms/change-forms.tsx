@@ -8,7 +8,7 @@ import type {
 } from '@/api/generated/model'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
-import { CampusSelect, InstitutionSelect } from '@/components/forms/ref-selects'
+import { CampusSelect, InstitutionSelect, useStartFloor } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
 import {
   OPERATING_STATUS,
@@ -231,7 +231,15 @@ export function CampusCreateDialog(props: DialogProps) {
         onChange={(v) => setStatus(v as CampusCreateOperatingStatus)}
         options={statusOptions().slice(0, 3)}
       />
-      <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
+      <TextField
+        label="生效日期"
+        name="valid_from"
+        type="date"
+        required
+        value={validFrom}
+        onChange={setValidFrom}
+        hint="院区在主数据里开始存在的日子，筹建期也算——通常就是决定筹建、开始准备数据的那天。开诊那天改运营状态为运行，不必等到那时才建院区"
+      />
     </ItemDialog>
   )
 }
@@ -312,6 +320,7 @@ export function RelationCreateDialog({
   const [primary, setPrimary] = useState('true')
   const [validFrom, setValidFrom] = useEffectiveDate()
   const [validTo, setValidTo] = useState('')
+  const startHint = useStartFloor(validFrom, setValidFrom, { campus, institution: inst })
   return (
     <ItemDialog
       {...props}
@@ -370,7 +379,7 @@ export function RelationCreateDialog({
         />
       )}
       <div className="grid grid-cols-2 gap-3">
-        <TextField label="开始日" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
+        <TextField label="开始日" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} hint={startHint} />
         <TextField label="结束日" name="valid_to" type="date" value={validTo} onChange={setValidTo} hint="不填为长期" />
       </div>
     </ItemDialog>

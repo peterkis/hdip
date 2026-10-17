@@ -133,7 +133,7 @@ def test_switch_primary_operator_by_close_then_create(api):
 def test_relation_requires_campus_effective(api):
     api.apply(inst_create(), campus_create(valid_from="2026-10-01"))
     cr = api.draft(relation_create(valid_from="2026-09-01"))
-    assert "尚未生效" in _problem(api.submit(cr["id"]))
+    assert "才有记录" in _problem(api.submit(cr["id"]))
 
 
 # ------------------------------------------------------------------ 运营状态

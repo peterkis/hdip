@@ -68,7 +68,7 @@ def test_unit_needs_operate_relation_covering_whole_period(api):
     cr = api.draft(unit_create(code="U1", valid_from="2026-09-01"))
     r = api.submit(cr["id"])
     assert r.status_code == 422
-    assert "尚未生效" in r.json()["message"]
+    assert "才有记录" in r.json()["message"]
 
 
 def test_unit_and_its_relation_can_come_in_one_request(api):

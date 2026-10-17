@@ -185,3 +185,18 @@
     background: var(--hd-accent-soft);
   }
 }
+
+/* 拆分 / 合并图示（components/evolve-flow.tsx）：React Flow 的连线、点阵按语义令牌着色，连接点隐藏 */
+.hd-flow .react-flow {
+  --xy-edge-stroke-default: var(--hd-border-strong);
+  --xy-edge-stroke-width-default: 1.25;
+  --xy-background-pattern-dots-color-default: var(--hd-border-default);
+  --xy-background-color-default: transparent;
+}
+.hd-flow .react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+.hd-flow .react-flow__node {
+  cursor: default;
+}

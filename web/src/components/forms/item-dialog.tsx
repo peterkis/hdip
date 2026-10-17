@@ -63,6 +63,7 @@ export function ItemDialog({
   description,
   build,
   fixedTarget,
+  wide,
   children,
 }: {
   open: boolean
@@ -72,6 +73,8 @@ export function ItemDialog({
   build: BuildItem
   /** 在申请详情页“添加变更项”时固定加入该草稿 */
   fixedTarget?: number
+  /** 带图示的表单（拆分、合并）用宽弹窗 */
+  wide?: boolean
   children: ReactNode
 }) {
   const username = useCurrentUsername()
@@ -125,7 +128,7 @@ export function ItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className={wide ? 'sm:max-w-3xl' : 'sm:max-w-lg'}>
         <form ref={formRef} onSubmit={onSubmit} noValidate className="grid gap-4">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>

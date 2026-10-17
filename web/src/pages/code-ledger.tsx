@@ -98,6 +98,8 @@ export function CodeLedgerPage() {
         }
       />
 
+      <LedgerGuide empty={!isPending && all === 0 && !q && !status && !ns} />
+
       {systemsLoaded && systems.length === 0 && (
         <Callout className="mb-4" title="还没有登记来源系统">
           先登记来源系统实例（如某 HIS 实例、病案系统）及其字典，再登记字典里的代码。来源系统与字典是配置，维护人直接维护；代码与解释是业务数据，经变更申请确认。
@@ -424,5 +426,73 @@ function SourceSystemsDialog({ systems, onClose }: { systems: SourceSystemOut[];
         </form>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// ------------------------------------------------------------------ 使用说明
+const GUIDE_STEPS = [
+  { title: '登记来源系统与字典', who: '配置 · 维护人直接维护', text: '如“HIS（本部实例）”下的“科室字典”。一个字典可以同时装部门、单元和其他对象的代码。' },
+  { title: '登记代码', who: '变更申请', text: '把字典里的一条记录原样抄进来：代码、源名称、语义备注。登记后不可改，只记录“它存在”。' },
+  { title: '解释代码', who: '变更申请', text: '判断这条代码标识的是哪个部门、哪个服务单元，或是还没建模的对象（如护理单元）；带开始日，可限定院区。' },
+  { title: '确认后生效', who: '确认人', text: '确认后按查看日期显示状态；只有指向部门、服务单元的解释会进入导出。' },
+]
+
+const GUIDE_EXAMPLES: { code: string; source: string; status: CodeStatus; meaning: string }[] = [
+  { code: '0301', source: '心内科', status: 'mapped', meaning: '部门：心血管内科' },
+  { code: '0301-MZ', source: '心内科门诊', status: 'mapped', meaning: '服务单元：心血管内科门诊（本部院区）' },
+  { code: 'HL05', source: '五病区护理单元', status: 'unmodeled', meaning: '对象未建模：护理单元（不进导出）' },
+  { code: '1288', source: '体检中心', status: 'pending', meaning: '还没人判断 → 点开代码“新增解释”' },
+]
+
+/** 台账为空时展开，有数据后收起成一行入口 */
+function LedgerGuide({ empty }: { empty: boolean }) {
+  const [open, setOpen] = useState<boolean | null>(null)
+  const shown = open ?? empty
+  return (
+    <div className="border-line-subtle mb-4 rounded-md border">
+      <button
+        type="button"
+        className="text-fg-secondary hover:bg-surface-hover flex w-full items-center gap-2 rounded-md px-4 py-2 text-left text-xs"
+        onClick={() => setOpen(!shown)}
+      >
+        <span className="text-fg-strong font-medium">这张台账怎么用？</span>
+        <span className="text-fg-muted">外部系统的代码各自代表什么：哪个部门、哪个服务单元，还是尚未建模的对象</span>
+        <span className="text-fg-muted ml-auto">{shown ? '收起' : '展开'}</span>
+      </button>
+      {shown && (
+        <div className="grid gap-4 px-4 pt-1 pb-4">
+          <ol className="grid gap-2 sm:grid-cols-4">
+            {GUIDE_STEPS.map((st, i) => (
+              <li key={st.title} className="bg-surface-subtle grid content-start gap-1 rounded-md p-3 text-xs">
+                <span className="text-fg-strong flex items-center gap-1.5 font-medium">
+                  <span className="bg-brand text-fg-on-brand flex size-5 items-center justify-center rounded-full text-caption">{i + 1}</span>
+                  {st.title}
+                </span>
+                <span className="text-fg-muted text-caption">{st.who}</span>
+                <span className="text-fg-secondary">{st.text}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="grid gap-1.5">
+            <span className="text-fg-muted text-caption">示例（不是真实数据）：同一个 HIS 科室字典里的四条代码，判断结果各不相同</span>
+            <DbTable columns={[{ label: '代码' }, { label: '源名称' }, { label: '状态' }, { label: '解释为' }]}>
+              {GUIDE_EXAMPLES.map((e) => (
+                <DbRow key={e.code}>
+                  <DbCell className="font-mono">{e.code}</DbCell>
+                  <DbCell>{e.source}</DbCell>
+                  <DbCell>
+                    <Tag tone={CODE_STATUS_TONE[e.status]}>{CODE_STATUS[e.status]}</Tag>
+                  </DbCell>
+                  <DbCell className="text-fg-secondary">{e.meaning}</DbCell>
+                </DbRow>
+              ))}
+            </DbTable>
+            <span className="text-fg-muted text-caption">
+              要点：代码跟着它标识的对象走——同一字典里“心内科”指部门、“心内科门诊”指服务单元，逐条判断，不按系统名一刀切；某天没有任何解释的代码即“待裁决”。
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

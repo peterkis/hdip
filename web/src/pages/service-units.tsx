@@ -15,6 +15,7 @@ import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useGetServiceUnit } from '@/api/generated/master/master'
 import type { DepartmentClassificationOut, LineageOut, ServiceUnitVersionOut } from '@/api/generated/model'
+import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { ExternalCodeLinks } from '@/components/external-code-links'
 import { ClassificationCloseDialog, ClassifyDialog } from '@/components/forms/code-forms'
 import {
@@ -37,7 +38,7 @@ import { Button } from '@/components/ui/button'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, stamp, UNIT_STATUS, type UnitStatus } from '@/lib/format'
-import { DEPARTMENT_LIFECYCLE_TONE, LINEAGE_TONE, UNIT_STATUS_TONE } from '@/lib/tones'
+import { DEPARTMENT_LIFECYCLE_TONE, UNIT_STATUS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -167,8 +168,16 @@ export function ServiceUnitDetailPage() {
         )}
 
         <Section title="演变关系">
-          <LineageTable rows={data.predecessors} side="predecessor" empty="不是由拆分或合并产生的" />
-          <LineageTable rows={data.successors} side="successor" empty="没有拆分或合并成其他单元" />
+          {data.predecessors.length > 0 ? (
+            <LineageFlow rows={data.predecessors} side="predecessor" self={{ name: latest.name, code: data.code }} />
+          ) : (
+            <p className="text-fg-disabled text-xs">前身：不是由拆分或合并产生的</p>
+          )}
+          {data.successors.length > 0 ? (
+            <LineageFlow rows={data.successors} side="successor" self={{ name: latest.name, code: data.code }} />
+          ) : (
+            <p className="text-fg-disabled text-xs">后继：没有拆分或合并成其他单元</p>
+          )}
           <p className="text-fg-muted text-caption">
             拆分、合并只填一个生效日：前身最后有效日为其前一日，后继自生效日起。后继是新身份、新代码，不继承前身的版本历史，也不自动迁移引用（如外部代码）。
           </p>
@@ -277,39 +286,48 @@ function ChangeLink({ id }: { id: number }) {
 
 const LINEAGE_LABEL = { SPLIT: '拆分', MERGE: '合并' } as const
 
-function LineageTable({ rows, side, empty }: { rows: LineageOut[]; side: 'predecessor' | 'successor'; empty: string }) {
-  const label = side === 'predecessor' ? '前身（本单元由它们而来）' : '后继（本单元变成了它们）'
-  if (rows.length === 0)
-    return (
-      <p className="text-fg-disabled text-xs">
-        {side === 'predecessor' ? '前身' : '后继'}：{empty}
-      </p>
-    )
-  return (
-    <DbTable columns={[{ label }, { label: '方式' }, { label: '生效日', icon: Calendar03Icon }, { label: '来源申请' }]}>
-      {rows.map((l) => {
-        const other =
-          side === 'predecessor'
-            ? { id: l.predecessor_id, code: l.predecessor_code, name: l.predecessor_name }
-            : { id: l.successor_id, code: l.successor_code, name: l.successor_name }
-        return (
-          <DbRow key={l.id}>
-            <DbCell>
-              <Link to={`/service-units/${other.id}`} className="hover:underline">
-                {other.name}
-              </Link>
-              <span className="text-fg-muted ml-2 font-mono text-caption">{other.code}</span>
-            </DbCell>
-            <DbCell>
-              <Tag tone={LINEAGE_TONE[l.lineage_type]}>{LINEAGE_LABEL[l.lineage_type]}</Tag>
-            </DbCell>
-            <DbCell className="whitespace-nowrap">{l.effective_date}</DbCell>
-            <DbCell>
-              <ChangeLink id={l.change_id} />
-            </DbCell>
-          </DbRow>
-        )
-      })}
-    </DbTable>
+/** 演变关系图：前身 → 本单元，或本单元 → 后继；点节点跳到另一端单元 */
+function LineageFlow({
+  rows,
+  side,
+  self,
+}: {
+  rows: LineageOut[]
+  side: 'predecessor' | 'successor'
+  self: { name: string; code: string }
+}) {
+  const day = rows[0].effective_date
+  const kind = rows[0].lineage_type === 'MERGE' ? 'merge' : 'split'
+  const others: FlowUnit[] = rows.map((l) =>
+    side === 'predecessor'
+      ? { name: l.predecessor_name, code: l.predecessor_code, footer: `最后有效日 ${dayBefore(day)}`, tag: { label: '前身', tone: 'retire' }, href: `/service-units/${l.predecessor_id}` }
+      : { name: l.successor_name, code: l.successor_code, footer: `自 ${day} 起`, tag: { label: '后继', tone: 'new' }, href: `/service-units/${l.successor_id}` },
   )
+  const me: FlowUnit = {
+    ...self,
+    footer: side === 'predecessor' ? `自 ${day} 起` : `最后有效日 ${dayBefore(day)}`,
+    tag: { label: '本单元', tone: 'current' },
+  }
+  return (
+    <div className="grid gap-1">
+      <EvolveFlow
+        kind={kind}
+        day={day}
+        before={side === 'predecessor' ? others : [me]}
+        after={side === 'predecessor' ? [me] : others}
+      />
+      <p className="text-fg-muted text-caption">
+        {side === 'predecessor' ? '本单元由上图左侧单元' : '本单元'}
+        {LINEAGE_LABEL[rows[0].lineage_type]}
+        {side === 'predecessor' ? '而来' : '为上图右侧单元'}，来源申请 <ChangeLink id={rows[0].change_id} />
+        {side === 'predecessor' && kind === 'split' && '；同一次拆分的其他后继见前身单元页'}
+      </p>
+    </div>
+  )
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
 }
