@@ -175,6 +175,8 @@ export function today(): string {
 
 /** 期间显示：闭区间，结束为空即长期有效。 */
 export function period(from: string, to: string | null | undefined): string {
+  // 结束日早于开始日 = 生效前已被更正的版本，从未生效
+  if (to && to < from) return `${from} 起（生效前已更正，未生效）`
   return `${from} ~ ${to ?? '长期'}`
 }
 

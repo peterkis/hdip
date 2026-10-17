@@ -352,3 +352,47 @@ def test_draft_items_round_trip_keeps_only_written_fields(api):
     r = api.put(f"/api/change-requests/{cr['id']}", {"items": [*cr["items"], alias], "note": None})
     assert r.status_code == 200, r.text
     assert api.submit(cr["id"]).status_code == 200
+
+
+# ------------------------------------------------------------------ 未生效版本的更正
+def _campus_revise(code, day, **changes):
+    return {"kind": "campus.revise", "code": code, "effective_date": day, "changes": changes}
+
+
+def test_future_version_can_be_corrected_on_its_start_date(api):
+    """尚未生效的版本可在开始日当天更正：原版本成为空期间（保留），新版本自同一天起。"""
+    api.apply(inst_create(), campus_create(code="ZX", name="中心院区", valid_from="2030-01-01"))
+    api.apply(_campus_revise("ZX", "2030-01-01", public_name="成都市中心医院"))
+    rows = api.get("/api/campuses", params={"as_of": "2030-01-01"}).json()
+    zx = next(r for r in rows if r["code"] == "ZX")
+    assert zx["version"]["public_name"] == "成都市中心医院"
+    assert zx["version"]["version_no"] == 2
+    # 查看日期在开始日之前：仍以“计划版本”显示更正后的内容
+    early = api.get("/api/campuses", params={"as_of": "2029-06-01"}).json()
+    zx = next(r for r in early if r["code"] == "ZX")
+    assert zx["not_yet_effective"] and zx["version"]["public_name"] == "成都市中心医院"
+    detail = api.get(f"/api/campuses/{zx['id']}", params={"as_of": "2030-01-01"}).json()
+    void = next(v for v in detail["versions"] if v["version_no"] == 1)
+    assert void["valid_to"] == "2029-12-31"  # 空期间：从未生效
+
+
+def test_effective_version_cannot_be_corrected_on_its_start_date(api):
+    api.apply(inst_create(), campus_create(valid_from="2020-01-01"))
+    cr = api.draft(_campus_revise("GX", "2020-01-01", public_name="某某"))
+    assert "须晚于当前版本的开始日" in _problem(api.submit(cr["id"]))
+
+
+def test_corrected_campus_still_carries_units(api):
+    """更正院区的未生效版本后，挂在它上面的单元仍然成立（空期间不当作停用或断档）。"""
+    from factories import dept_create, unit_create
+
+    api.apply(
+        inst_create(),
+        campus_create(code="ZX", name="中心院区", valid_from="2030-01-01", status="PLANNING"),
+        relation_create(campus="ZX", valid_from="2030-01-01"),
+        dept_create(),
+        unit_create(code="ZX-OPD", campus="ZX", valid_from="2030-01-01"),
+    )
+    api.apply(_campus_revise("ZX", "2030-01-01", phone="028-1"))
+    units = api.get("/api/service-units", params={"as_of": "2030-02-01"}).json()
+    assert [u["code"] for u in units] == ["ZX-OPD"]

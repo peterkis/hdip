@@ -243,13 +243,30 @@ def _check_option(s: Session, category: str, code: str | None, field: str) -> No
         raise ItemError(f"选项 {code} 不在可选范围内", field)
 
 
+def today(s: Session) -> date:
+    """业务“今天”：数据库会话时区（HDIP_TIMEZONE）下的当前日期。"""
+    return s.scalar(select(func.current_date()))
+
+
+def is_void(v) -> bool:
+    """生效前已被更正的版本：期间为空（结束日 = 开始日前一日），从未生效。"""
+    return v.valid_to is not None and v.valid_to < v.valid_from
+
+
 def _next_version(ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date, content: dict):
-    """修订在 day 生效：旧版结束日 = day 前一日，新版从 day 开始（闭区间）。"""
+    """修订在 day 生效：旧版结束日 = day 前一日，新版从 day 开始（闭区间）。
+
+    最新版本尚未生效（开始日晚于今天）时，可以在它的开始日当天修订 = 更正：
+    旧版结束日为开始日前一日（空期间，从未生效，记录保留），新版自同一天起。
+    """
     if latest.valid_to is not None:
         raise ItemError("当前版本已结束，不能修订")
-    if day <= latest.valid_from:
+    correcting = day == latest.valid_from and latest.valid_from > today(ctx.session)
+    if day < latest.valid_from or (day == latest.valid_from and not correcting):
         raise ItemError(
-            f"生效日须晚于当前版本的开始日 {latest.valid_from.isoformat()}", "effective_date"
+            f"生效日须晚于当前版本的开始日 {latest.valid_from.isoformat()}"
+            "（尚未生效的版本可在开始日当天更正）",
+            "effective_date",
         )
     old = {k: getattr(latest, k) for k in model.CONTENT}
     if old == content:
@@ -1591,9 +1608,16 @@ def _not_started(s: Session, model, owner_col: str, obj, what: str, subject: str
 
     未来生效的对象现在就能挂单元、建关系，只要开始日不早于它的开始日。
     """
-    first = s.scalars(
-        select(model).where(getattr(model, owner_col) == obj.id).order_by(model.valid_from)
-    ).first()
+    first = next(
+        (
+            v
+            for v in s.scalars(
+                select(model).where(getattr(model, owner_col) == obj.id).order_by(model.valid_from)
+            )
+            if not is_void(v)
+        ),
+        None,
+    )
     if first is None:  # 同一张申请里尚未建成，按理不会走到
         return f"{what} {obj.code} 还没有版本"
     return (
@@ -1608,8 +1632,10 @@ def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
     inst = s.get(Institution, v.institution_id)
 
     def overlaps(x) -> bool:
-        return (v.valid_to is None or x.valid_from <= v.valid_to) and (
-            x.valid_to is None or x.valid_to >= v.valid_from
+        return (
+            not is_void(x)
+            and (v.valid_to is None or x.valid_from <= v.valid_to)
+            and (x.valid_to is None or x.valid_to >= v.valid_from)
         )
 
     campus_versions = s.scalars(

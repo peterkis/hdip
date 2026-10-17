@@ -4,7 +4,7 @@ import { useContext, useState } from 'react'
 import { useListCampuses, useListDepartments, useListServiceUnits } from '@/api/generated/master/master'
 import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
-import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
+import { CODE_HINT, CODE_RE, useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, FormErrorsContext, orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
 import { ItemDialog, useDraftItems } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect, useStartFloor } from '@/components/forms/ref-selects'
@@ -103,12 +103,12 @@ export function UnitCreateDialog({
 type UnitDialogProps = DialogProps & { code: string; current: ServiceUnitVersionOut }
 
 function currentDesc(current: ServiceUnitVersionOut) {
-  return `当前第 ${current.version_no} 版自 ${current.valid_from} 起。调整在生效日起成为新版本，身份与代码不变。`
+  return `${versionNote(current.valid_from)}调整在生效日起成为新版本，身份与代码不变。`
 }
 
 export function UnitReviseDialog({ code, current, ...props }: UnitDialogProps) {
   const [f, setF] = useState({ name: current.name, phone: current.phone ?? '', scope_note: current.scope_note ?? '' })
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   const bind = (k: keyof typeof f) => ({ value: f[k], onChange: (v: string) => setF({ ...f, [k]: v }) })
   return (
     <ItemDialog
@@ -141,7 +141,7 @@ export function UnitReviseDialog({ code, current, ...props }: UnitDialogProps) {
 export function UnitRebindDialog({ code, current, ...props }: UnitDialogProps) {
   const [campus, setCampus] = useState(current.campus_code)
   const [inst, setInst] = useState(current.institution_code)
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}
@@ -189,7 +189,7 @@ export function UnitRebindDialog({ code, current, ...props }: UnitDialogProps) {
 
 export function UnitChangeDepartmentDialog({ code, current, ...props }: UnitDialogProps) {
   const [dept, setDept] = useState('')
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}
@@ -218,7 +218,7 @@ export function UnitChangeDepartmentDialog({ code, current, ...props }: UnitDial
 
 export function UnitStatusDialog({ code, current, ...props }: UnitDialogProps) {
   const next: UnitStatus = current.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE'
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}

@@ -27,8 +27,19 @@ export interface DialogProps {
 export const CODE_HINT = '字母、数字、点、下划线、短横线；一经使用永久绑定，退出后也不复用'
 export const CODE_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
-export function useEffectiveDate() {
-  return useState(today)
+/**
+ * 生效日默认今天。给了当前版本的开始日且它尚未生效时，默认为该开始日：
+ * 在开始日当天修订 = 更正这一版（原版本保留为“生效前已更正”），不必等到生效后再改。
+ */
+export function useEffectiveDate(versionStart?: string) {
+  return useState(() => (versionStart && versionStart > today() ? versionStart : today()))
+}
+
+/** 修订表单的说明：当前版本尚未生效时，提示可直接更正 */
+export function versionNote(validFrom: string): string {
+  return validFrom > today()
+    ? `当前版本自 ${validFrom} 起，尚未生效：生效日填 ${validFrom} 即直接更正这一版；填更晚的日期则从那天起再变。`
+    : `当前版本自 ${validFrom} 起。`
 }
 
 // ------------------------------------------------------------------ 主体
@@ -114,12 +125,12 @@ export function InstitutionReviseDialog({
   ...props
 }: DialogProps & { code: string; current: InstitutionVersionOut }) {
   const [f, setF] = useState(toInstitutionForm(current))
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}
       title={`修订主体 ${code}`}
-      description={`当前版本自 ${current.valid_from} 起。修订在生效日起成为新版本，旧版本保留。`}
+      description={`${versionNote(current.valid_from)}修订在生效日起成为新版本，旧版本保留。`}
       build={() => {
         const missing = requireFields([
           ['name', !!f.name.trim(), '名称不能为空'],
@@ -247,12 +258,12 @@ export function CampusReviseDialog({
   ...props
 }: DialogProps & { code: string; current: CampusVersionOut }) {
   const [f, setF] = useState(toCampusForm(current))
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}
       title={`修订院区资料 ${code}`}
-      description={`当前版本自 ${current.valid_from} 起。运营状态请用“变更运营状态”。`}
+      description={`${versionNote(current.valid_from)}运营状态请用“变更运营状态”。`}
       build={() => {
         const missing = requireFields([
           ['name', !!f.name.trim(), '名称不能为空'],

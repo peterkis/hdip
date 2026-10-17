@@ -78,7 +78,7 @@ from hdip_api.schemas.read import (
     UserRef,
 )
 from hdip_api.services import workflow
-from hdip_api.services.apply import dry_run
+from hdip_api.services.apply import dry_run, is_void
 
 
 def covers(valid_from: date, valid_to: date | None, day: date) -> bool:
@@ -94,7 +94,8 @@ def _users(s: Session) -> dict[int, UserRef]:
 
 def _pick(versions: list, day: date):
     """返回 (当天有效版本或最早的计划版本, 是否尚未生效, 之后是否还有版本)。"""
-    ordered = sorted(versions, key=lambda v: v.version_no)
+    # 生效前已更正的版本（空期间）从未生效，不参与选择
+    ordered = sorted((v for v in versions if not is_void(v)), key=lambda v: v.version_no)
     for v in ordered:
         if covers(v.valid_from, v.valid_to, day):
             return v, False, v is not ordered[-1]
@@ -393,7 +394,8 @@ def list_lineage(
 
     def name(unit_id: int, last: bool) -> str:
         ordered = sorted(versions[unit_id], key=lambda v: v.version_no)
-        return (ordered[-1] if last else ordered[0]).name
+        live = [v for v in ordered if not is_void(v)] or ordered
+        return (live[-1] if last else live[0]).name
 
     return [
         LineageOut(

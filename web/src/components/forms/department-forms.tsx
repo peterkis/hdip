@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
 import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
-import { CODE_HINT, CODE_RE, useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
+import { CODE_HINT, CODE_RE, useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect } from '@/components/forms/ref-selects'
@@ -158,12 +158,12 @@ export function DepartmentCreateDialog(props: DialogProps) {
 // ------------------------------------------------------------------ 修订属性
 export function DepartmentReviseDialog({ code, current, ...props }: DialogProps & { code: string; current: DepartmentVersionOut }) {
   const [a, setA] = useState<Attrs>(toAttrs(current))
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}
       title={`修订部门属性：${current.name}`}
-      description={`当前第 ${current.version_no} 版自 ${current.valid_from} 起。修订在生效日起成为新版本；更名后旧名称即曾用名，身份与代码不变。`}
+      description={`${versionNote(current.valid_from)}修订在生效日起成为新版本；更名后旧名称即曾用名，身份与代码不变。`}
       build={() => {
         const missing = requireFields([...attrChecks(a), ['effective_date', !!day, '请选择生效日期']])
         if (missing) return missing
@@ -183,7 +183,7 @@ export function DepartmentReviseDialog({ code, current, ...props }: DialogProps 
 export function DepartmentLifecycleDialog({ code, current, ...props }: DialogProps & { code: string; current: DepartmentVersionOut }) {
   const next = LIFECYCLE_NEXT[current.lifecycle as DepartmentLifecycle]
   const [target, setTarget] = useState<string>(next[0] ?? '')
-  const [day, setDay] = useEffectiveDate()
+  const [day, setDay] = useEffectiveDate(current.valid_from)
   return (
     <ItemDialog
       {...props}

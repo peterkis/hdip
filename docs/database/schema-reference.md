@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0010**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0011**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -162,10 +162,10 @@
 
 - `institution_version_pkey`（主键）：`PRIMARY KEY (id)`
 - `institution_version_no_uniq`（唯一）：`UNIQUE (institution_id, version_no)`
-- `institution_version_no_overlap`（排他）：`EXCLUDE USING gist (institution_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `institution_version_no_overlap`（排他）：`EXCLUDE USING gist (institution_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `institution_version_license_check`（检查）：`CHECK (((license_valid_to IS NULL) OR (license_valid_from IS NULL) OR (license_valid_to >= license_valid_from)))`
 - `institution_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
-- `institution_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `institution_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
 
 触发器：
 
@@ -219,9 +219,9 @@
 
 - `campus_version_pkey`（主键）：`PRIMARY KEY (id)`
 - `campus_version_no_uniq`（唯一）：`UNIQUE (campus_id, version_no)`
-- `campus_version_no_overlap`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `campus_version_no_overlap`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `campus_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
-- `campus_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `campus_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
 - `campus_version_public_name_check`（检查）：`CHECK (((public_name IS NULL) OR (btrim(public_name) <> ''::text)))`
 - `campus_version_status_check`（检查）：`CHECK ((operating_status = ANY (ARRAY['PLANNING'::text, 'TRIAL_RUNNING'::text, 'RUNNING'::text, 'SUSPENDED'::text])))`
 
@@ -317,11 +317,11 @@
 
 - `department_version_pkey`（主键）：`PRIMARY KEY (id)`
 - `department_version_no_uniq`（唯一）：`UNIQUE (department_id, version_no)`
-- `department_version_no_overlap`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `department_version_no_overlap`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `department_version_form_check`（检查）：`CHECK ((establishment_form = ANY (ARRAY['STANDING'::text, 'TEMPORARY'::text])))`
 - `department_version_lifecycle_check`（检查）：`CHECK ((lifecycle = ANY (ARRAY['PREPARING'::text, 'ACTIVE'::text, 'SUSPENDED'::text, 'REVOKED'::text, 'SUPERSEDED'::text])))`
 - `department_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
-- `department_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `department_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
 - `department_version_temporary_check`（检查）：`CHECK (((establishment_form = 'TEMPORARY'::text) = (temporary_until IS NOT NULL)))`
 
 触发器：
@@ -621,9 +621,9 @@
 
 - `service_unit_version_pkey`（主键）：`PRIMARY KEY (id)`
 - `service_unit_version_no_uniq`（唯一）：`UNIQUE (service_unit_id, version_no)`
-- `service_unit_version_no_overlap`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `service_unit_version_no_overlap`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `service_unit_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
-- `service_unit_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
+- `service_unit_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
 - `service_unit_version_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'SUSPENDED'::text])))`
 
 索引：

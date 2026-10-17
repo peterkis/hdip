@@ -461,7 +461,13 @@ function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
 
   return (
     <div className="grid gap-2">
-      {versioned && before && (
+      {versioned && before && before.valid_from === after.valid_from && (
+        <p className="text-xs">
+          第 {String(before.version_no)} 版尚未生效，本次在其开始日 {String(after.valid_from)} 直接更正：原版本保留为“生效前已更正”（从未生效），新第{' '}
+          {String(after.version_no)} 版自 {String(after.valid_from)} 起{after.valid_to ? `至 ${after.valid_to}` : '长期有效'}。
+        </p>
+      )}
+      {versioned && before && before.valid_from !== after.valid_from && (
         <p className="text-xs">
           原第 {String(before.version_no)} 版期间变为 {String(before.valid_from)} ~ {dayBefore(String(after.valid_from))}；
           新第 {String(after.version_no)} 版自 {String(after.valid_from)} 起{after.valid_to ? `至 ${after.valid_to}` : '长期有效'}。
