@@ -1,7 +1,7 @@
 """重建剧本走查用的独立数据库（原库名加 _walk），并放入走查的起点数据。
 
 在浏览器里走验收剧本会留下真实记录，而业务表没有物理删除，所以走查不在开发库里做。
-用法：make walk-db，然后 make api-walk、make web-walk，打开 http://localhost:5174。
+用法（在项目根目录）：先停掉 make api-walk，再 make walk-db，然后 make api-walk、make web-walk，打开 http://localhost:5174。
 
 起点数据（经一张申请确认）：主体成都市第三人民医院、本部院区（运行）及其运营关系、
 部门心血管内科，都自 2020-01-01 起。其余全部在页面上按剧本操作。
@@ -15,6 +15,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ProgrammingError
 
 from hdip_api.core.config import Settings, get_settings
 
@@ -29,7 +30,10 @@ if "--url" in sys.argv:  # 供 make api-walk 取应用连接串
 
 admin = create_engine(owner, isolation_level="AUTOCOMMIT")
 with admin.connect() as c:
-    c.execute(text(f'DROP DATABASE IF EXISTS "{WALK}" WITH (FORCE)'))
+    try:
+        c.execute(text(f'DROP DATABASE IF EXISTS "{WALK}" WITH (FORCE)'))
+    except ProgrammingError:  # 迁移账号无权断开 hdip_app 的连接
+        sys.exit(f"{WALK} 仍有连接（多半是 make api-walk 还开着），请先停掉它再重建。")
     c.execute(text(f'CREATE DATABASE "{WALK}"'))
 admin.dispose()
 
