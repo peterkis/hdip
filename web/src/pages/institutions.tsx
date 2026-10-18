@@ -24,8 +24,6 @@ export function InstitutionsPage() {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListInstitutions({ as_of: asOf })
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
-  const { data: relations = [] } = useListOperatorRelations({ as_of: asOf, include_future: true })
   const [creating, setCreating] = useState(false)
 
   return (
@@ -84,19 +82,6 @@ export function InstitutionsPage() {
         <span>显示 {asOf} 当天有效的版本</span>
       </DbFooter>
 
-      {rows.length > 0 && (
-        <div className="mt-8">
-          <Section title={`主体—院区运营关系（${asOf}）`}>
-            <OperatorFlow
-              institutions={rows.map((r) => ({ id: r.id, code: r.code, name: r.version.name, subtitle: r.version.nature ?? undefined }))}
-              campuses={campuses}
-              relations={relations}
-              asOf={asOf}
-              allCampuses
-            />
-          </Section>
-        </div>
-      )}
       {creating && <InstitutionCreateDialog open onOpenChange={setCreating} />}
     </div>
   )

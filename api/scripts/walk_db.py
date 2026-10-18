@@ -206,6 +206,31 @@ PLUS = [
     _dept("YWB", "医务部"),
     _dept("NFM", "内分泌代谢病科"),
     _dept("XHNK", "消化内科"),
+    # 隶属与管理关系图：医务部管理呼吸内科、呼吸内科与心血管内科协作、医院办公室管理高新院区事务
+    {
+        "kind": "department.relation_create",
+        "relation_kind": "PROFESSIONAL_MGMT",
+        "from_code": "YWB",
+        "to_code": "HXNK",
+        "scope": "临床医疗质量",
+        "valid_from": "2020-01-01",
+    },
+    {
+        "kind": "department.relation_create",
+        "relation_kind": "COLLABORATION",
+        "from_code": "HXNK",
+        "to_code": "XNK",
+        "scope": "心肺联合门诊",
+        "valid_from": "2020-01-01",
+    },
+    {
+        "kind": "department.relation_create",
+        "relation_kind": "CAMPUS_MGMT",
+        "from_code": "YB",
+        "campus_code": "GX",
+        "scope": "高新院区事务",
+        "valid_from": "2026-10-01",
+    },
     # 编码映射台账：已解释的两条，其余待裁决（覆盖五档候选与无候选）
     _code("D010", "呼吸内科"),
     _assign("D010", target_type="department", department_code="HXNK"),

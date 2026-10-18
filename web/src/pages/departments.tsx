@@ -41,6 +41,7 @@ import {
 import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
+import { OrgFlow } from '@/components/org-flow'
 import { Callout } from '@/components/kit/callout'
 import { ChangeLink, Section } from '@/components/kit/section'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip, type DbColumn } from '@/components/kit/database'
@@ -733,6 +734,16 @@ export function DepartmentDetailPage() {
                 </Tag>
               ))}
             </div>
+            <Section title={`隶属与管理关系图（${asOf}）`}>
+              <OrgFlow
+                self={{ id: data.id, code: data.code, name: shown.name }}
+                level={data.level}
+                path={data.path}
+                children={data.children}
+                relations={data.relations}
+                asOf={asOf}
+              />
+            </Section>
             <Section title="行政隶属（行政视图）" action={edit('调整上级', 'parent')}>
               <PeriodTable
                 head={['直接上级', '期间', '来源申请']}
