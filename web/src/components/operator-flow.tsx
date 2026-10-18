@@ -101,16 +101,19 @@ export function OperatorFlow({
     const c = shownCampuses.find((x) => x.id === r.campus_id)
     if (!c || !institutions.some((i) => i.id === r.institution_id)) return []
     const status = c.version.operating_status as OperatingStatus
+    const sameTarget = relations.filter((x) => x.campus_id === r.campus_id)
     const running = r.effective_on_as_of && !c.not_yet_effective && status === 'RUNNING'
     const type = r.relation_type === 'OPERATE' ? '' : `${RELATION_TYPE[r.relation_type as RelationType]} · `
-    // 关系尚未开始：写开始日；运行中：不加标签（非“运营”类关系写类型）；其他状态：写状态
-    const label = !r.effective_on_as_of
-      ? `${type}${r.valid_from} 起`
-      : running
-        ? type
-          ? type.slice(0, -3)
-          : undefined
-        : `${type}${OPERATING_STATUS[status]}`
+    // 院区不在运行（筹建、试运行、停用）：写院区状态，开始日已在卡片上；
+    // 院区运行、关系尚未开始：写开始日；运行中：不加标签（非“运营”类关系写类型）
+    const label =
+      status !== 'RUNNING'
+        ? `${type}${OPERATING_STATUS[status]}`
+        : !r.effective_on_as_of
+          ? `${type}${r.valid_from} 起`
+          : type
+            ? type.slice(0, -3)
+            : undefined
     return [
       {
         id: `r${r.id}`,
@@ -121,7 +124,8 @@ export function OperatorFlow({
         type: 'labeled',
         animated: running,
         className: running ? 'hd-edge-running' : 'hd-edge-idle',
-        data: { label },
+        // 多条线连到同一院区时，标签上下错开，不重叠
+        data: { label, stack: sameTarget.findIndex((x) => x.id === r.id), stackOf: sameTarget.length },
         focusable: false,
       },
     ]
@@ -161,7 +165,7 @@ export function OperatorFlow({
           <span className="hd-legend-running" /> 流动虚线：{asOf} 正在运行
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="hd-legend-idle" /> 实线 + 标签：筹建、试运行、停用，或关系尚未开始（标签贴近对应院区）
+          <span className="hd-legend-idle" /> 实线 + 标签：筹建、试运行、停用，或运营关系尚未开始（标签贴近对应院区）
         </span>
         <span>点卡片查看主体或院区</span>
       </p>

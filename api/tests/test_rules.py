@@ -409,3 +409,30 @@ def test_operator_relations_include_future(api):
     assert api.get("/api/operator-relations", params=day).json() == []
     rows = api.get("/api/operator-relations", params=day | {"include_future": True}).json()
     assert [(r["campus_code"], r["effective_on_as_of"]) for r in rows] == [("ZX", False)]
+
+
+def test_one_relation_per_institution_campus_at_a_time(api):
+    """同一主体与同一院区同一时期只能有一条关系（不论类型）；换类型 = 关闭旧关系 + 新建。"""
+    api.apply(inst_create(), campus_create(), relation_create(valid_from="2026-10-01"))
+    charge = relation_create(valid_from="2026-10-18", type_="CHARGE", primary=False)
+    msg = _problem(api.submit(api.draft(charge)["id"]))
+    assert "同一时期只能有一条关系" in msg and "运营" in msg
+
+    rel_id = api.get("/api/operator-relations", params={"as_of": "2026-10-18"}).json()[0]["id"]
+    close = {"kind": "operator_relation.close", "relation_id": rel_id, "valid_to": "2026-10-17"}
+    api.apply(close, charge)
+    rows = api.get("/api/operator-relations", params={"as_of": "2026-10-18"}).json()
+    assert [r["relation_type"] for r in rows] == ["CHARGE"]
+
+
+def test_relation_pair_exclusion_in_database(api, owner_engine):
+    """数据库排他约束兜底：绕过应用层直接写入重叠关系也会被拒。"""
+    api.apply(inst_create(), campus_create(), relation_create(valid_from="2026-10-01"))
+    sql = text(
+        "INSERT INTO operator_relation (institution_id, campus_id, relation_type, is_primary, "
+        "valid_from, created_change_id, recorded_by) "
+        "SELECT institution_id, campus_id, 'CHARGE', false, '2026-11-01', "
+        "created_change_id, recorded_by FROM operator_relation LIMIT 1"
+    )
+    with owner_engine.connect() as c, pytest.raises(DBAPIError, match="pair_excl"):
+        c.execute(sql)

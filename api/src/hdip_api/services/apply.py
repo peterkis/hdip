@@ -119,6 +119,8 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "institution_version_license_check": "许可证有效期止不能早于起",
     "operator_relation_primary_excl": "该院区在这段期间已有主要运营方，须先关闭原主要运营关系",
     "operator_relation_dup_excl": "该主体与该院区在这段期间已有同类型关系",
+    "operator_relation_pair_excl": "该主体与该院区在这段期间已有一条关系；同一时期只能有一条，"
+    "要换类型请先关闭旧关系再新建",
     "operator_relation_primary_operate_check": "只有“运营”类型的关系可以作为主要运营方",
     "operator_relation_period_check": "结束日不能早于开始日",
     "hdip_history_immutable": "历史记录不可修改",
@@ -406,6 +408,23 @@ def _relation_create(ctx: Ctx, item: OperatorRelationCreate) -> dict:
         raise ItemError("只有“运营”类型的关系可以作为主要运营方", "is_primary")
     if item.valid_to is not None and item.valid_to < item.valid_from:
         raise ItemError("结束日不能早于开始日", "valid_to")
+    # 同一主体与同一院区，同一时期只能有一条关系（不论类型）；数据库另有排他约束兜底
+    clash = s.scalars(
+        select(OperatorRelation).where(
+            OperatorRelation.institution_id == inst.id,
+            OperatorRelation.campus_id == campus.id,
+            (OperatorRelation.valid_to.is_(None)) | (OperatorRelation.valid_to >= item.valid_from),
+            *([OperatorRelation.valid_from <= item.valid_to] if item.valid_to else []),
+        )
+    ).first()
+    if clash is not None:
+        raise ItemError(
+            f"{inst.code} 与院区 {campus.code} 在 {clash.valid_from.isoformat()} ~ "
+            f"{clash.valid_to.isoformat() if clash.valid_to else '长期'} 已有"
+            f"“{RELATION_LABELS[clash.relation_type]}”关系（#{clash.id}）。"
+            "同一主体与同一院区同一时期只能有一条关系；要换类型，先关闭旧关系（最后有效日为新关系开始日前一天）再新建",
+            "valid_from",
+        )
 
     inst_v = _version_on(
         s, InstitutionVersion, InstitutionVersion.institution_id, inst.id, item.valid_from

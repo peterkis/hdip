@@ -188,7 +188,7 @@
 
 /* 拆分 / 合并图示（components/evolve-flow.tsx）：React Flow 的连线、点阵按语义令牌着色，连接点隐藏 */
 .hd-flow .react-flow {
-  --xy-edge-stroke-default: var(--hd-border-strong);
+  --xy-edge-stroke-default: var(--hd-flow-edge);
   --xy-edge-stroke-width-default: 1.25;
   --xy-background-pattern-dots-color-default: var(--hd-border-default);
   --xy-background-color-default: transparent;
@@ -216,7 +216,7 @@
 }
 .hd-flow .hd-edge-running .react-flow__edge-path,
 .hd-flow .hd-edge-idle .react-flow__edge-path {
-  stroke: var(--hd-text-disabled);
+  stroke: var(--hd-flow-edge);
   stroke-width: 1;
 }
 .hd-flow .hd-edge-idle .react-flow__edge-path {
@@ -236,7 +236,7 @@
   display: inline-block;
   width: 1.5rem;
   border-top-width: 1px;
-  border-color: var(--hd-text-disabled);
+  border-color: var(--hd-flow-edge);
 }
 .hd-legend-running {
   border-top-style: dashed;

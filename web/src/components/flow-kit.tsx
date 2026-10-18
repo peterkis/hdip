@@ -121,7 +121,7 @@ export function FlowCard({ data }: NodeProps<CardNode>) {
 }
 
 // ------------------------------------------------------------------ 连线：直角折线，标签贴近目标卡片
-export type LabeledEdgeData = { label?: string; dashed?: boolean }
+export type LabeledEdgeData = { label?: string; dashed?: boolean; stack?: number; stackOf?: number }
 export type LabeledEdge = Edge<LabeledEdgeData, 'labeled'>
 
 /**
@@ -133,7 +133,9 @@ export function LabeledStepEdge({ sourceX, sourceY, targetX, targetY, sourcePosi
   const horizontal = targetPosition === Position.Left || targetPosition === Position.Right
   // 最后一段的中点：横向连线在“竖线 → 目标”之间；纵向连线在“横线 → 目标”之间
   const lx = horizontal ? (centerX + targetX) / 2 : targetX
-  const ly = horizontal ? targetY : (centerY + targetY) / 2
+  // 同一目标有多条线时，标签按序号上下错开 22px
+  const shift = data?.stackOf && data.stackOf > 1 ? ((data.stack ?? 0) - (data.stackOf - 1) / 2) * 22 : 0
+  const ly = (horizontal ? targetY : (centerY + targetY) / 2) + shift
   return (
     <>
       <BaseEdge path={path} style={data?.dashed ? { ...style, strokeDasharray: '4 4' } : style} markerEnd={markerEnd} />

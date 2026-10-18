@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0012**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0013**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -253,7 +253,7 @@
 约束：
 
 - `operator_relation_pkey`（主键）：`PRIMARY KEY (id)`
-- `operator_relation_dup_excl`（排他）：`EXCLUDE USING gist (institution_id WITH =, campus_id WITH =, relation_type WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
+- `operator_relation_pair_excl`（排他）：`EXCLUDE USING gist (institution_id WITH =, campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&)`
 - `operator_relation_primary_excl`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, valid_to, '[]'::text) WITH &&) WHERE (is_primary)`
 - `operator_relation_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= valid_from)))`
 - `operator_relation_primary_operate_check`（检查）：`CHECK (((NOT is_primary) OR (relation_type = 'OPERATE'::text)))`
