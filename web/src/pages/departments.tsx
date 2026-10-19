@@ -61,7 +61,7 @@ import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
-import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE } from '@/lib/tones'
+import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -283,7 +283,7 @@ export function DepartmentsPage() {
                 <LifecycleTag value={d.version.lifecycle} />
               </DbCell>
               <DbCell>
-                <Tag tone={d.level === 1 ? 'gray' : 'brown'}>{levelName(d.level)}</Tag>
+                <Tag tone={levelTone(d.level)}>{levelName(d.level)}</Tag>
               </DbCell>
               <DbCell className="whitespace-nowrap">
                 {d.parent ? (
@@ -585,7 +585,7 @@ export function DepartmentDetailPage() {
                     )}
                   </span>
                 ))}
-                <Tag tone={data.level === 1 ? 'gray' : 'brown'} className="ml-1">
+                <Tag tone={levelTone(data.level)} className="ml-1">
                   {levelName(data.level)}
                 </Tag>
                 {edit('调整', 'parent')}

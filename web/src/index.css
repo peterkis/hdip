@@ -16,6 +16,8 @@
   --font-mono: var(--hd-font-mono);
   --text-caption: var(--hd-type-caption-size);
   --text-caption--line-height: var(--hd-type-caption-leading);
+  --text-micro: var(--hd-type-micro-size);
+  --text-micro--line-height: var(--hd-type-micro-leading);
   --text-xs: var(--hd-type-ui-size);
   --text-xs--line-height: var(--hd-type-ui-leading);
   --text-sm: var(--hd-type-subtitle-size);

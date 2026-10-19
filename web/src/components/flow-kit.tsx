@@ -18,6 +18,7 @@ import { CancelCircleIcon, CheckmarkCircle02Icon, Clock01Icon, Loading03Icon } f
 import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Icon, type AppIcon } from '@/components/kit/icon'
+import { Tag, type Tone } from '@/components/kit/tag'
 import { cn } from '@/lib/utils'
 
 // ------------------------------------------------------------------ 状态胶囊
@@ -52,6 +53,8 @@ export type CardData = {
   title: string
   code?: string
   subtitle?: string
+  /** 右上角的着色角标（如部门层级“一级”） */
+  cornerTag?: { label: string; tone: Tone }
   footer?: string
   footerIcon: AppIcon
   pill?: Pill
@@ -94,6 +97,11 @@ export function FlowCard({ data }: NodeProps<CardNode>) {
           </span>
           <span className="text-fg-muted truncate text-caption">{data.subtitle || ' '}</span>
         </span>
+        {data.cornerTag && (
+          <Tag tone={data.cornerTag.tone} className="text-micro ml-auto h-4 shrink-0 self-start px-1">
+            {data.cornerTag.label}
+          </Tag>
+        )}
       </div>
       {/* 底部比标题小一号（12px），与参考区块的比例一致 */}
       {/* hd-card-foot：竖向关系图里换成浅灰底（index.css 的 .hd-flow-vertical） */}

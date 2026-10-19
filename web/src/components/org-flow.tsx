@@ -7,7 +7,8 @@ import { Background, BackgroundVariant, ReactFlow } from '@xyflow/react'
 import type { DepartmentRelationOut, DeptRef } from '@/api/generated/model'
 import { AutoFit, KEEP_CARDS_CLICKABLE, edgeTypes, FIT, nodeTypes, type CardNode, type LabeledEdge, type PillTone } from '@/components/flow-kit'
 import { useFlowHeight } from '@/components/flow-size'
-import { DEPT_RELATION, levelName, type DeptRelationKind } from '@/lib/format'
+import { DEPT_RELATION, levelShort, type DeptRelationKind } from '@/lib/format'
+import { levelTone } from '@/lib/tones'
 
 const W = 232
 const H = 84
@@ -65,7 +66,7 @@ export function OrgFlow({
         icon: UserGroupIcon,
         title: a.name,
         code: a.code,
-        subtitle: levelName(k + 1),
+        cornerTag: { label: levelShort(k + 1), tone: levelTone(k + 1) },
         footer: k === ancestors.length - 1 ? '直接上级' : '上级',
         footerIcon: Layers01Icon,
         href: `/departments/${a.id}`,
@@ -83,7 +84,8 @@ export function OrgFlow({
       icon: UserGroupIcon,
       title: self.name,
       code: self.code,
-      subtitle: `本部门 · ${levelName(level)}`,
+      subtitle: '本部门',
+      cornerTag: { label: levelShort(level), tone: levelTone(level) },
       footer: `下级 ${children.length} 个 · 管理关系 ${current.length} 条`,
       footerIcon: Layers01Icon,
       strong: true,
@@ -100,7 +102,7 @@ export function OrgFlow({
         icon: UserGroupIcon,
         title: c.name,
         code: c.code,
-        subtitle: levelName(level + 1),
+        cornerTag: { label: levelShort(level + 1), tone: levelTone(level + 1) },
         footer: '下级部门',
         footerIcon: Layers01Icon,
         href: `/departments/${c.id}`,
@@ -167,7 +169,7 @@ export function OrgFlow({
 
   return (
     <div className="grid gap-2">
-      <div ref={ref} className="hd-flow hd-flow-dots hd-flow-vertical bg-surface-page border-line-subtle rounded-md border" style={{ height: boxHeight }}>
+      <div ref={ref} className="hd-flow hd-flow-dots hd-flow-vertical bg-surface-sidebar border-line-subtle rounded-md border" style={{ height: boxHeight }}>
         <ReactFlow
           key={nodes.map((n) => n.id).join(',')}
           nodes={nodes}

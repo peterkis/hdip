@@ -63,3 +63,7 @@ export const CODE_STATUS_TONE: Record<string, Tone> = {
   mapped: 'green',
   unmodeled: 'gray',
 }
+
+/** 部门层级（行政视图）：层级是维度不是状态，不用绿 / 黄 / 红 / 棕（已表示生命周期）；四级及以下同色 */
+export const LEVEL_TONE: Record<number, Tone> = { 1: 'blue', 2: 'orange', 3: 'purple' }
+export const levelTone = (level: number): Tone => LEVEL_TONE[level] ?? 'pink'

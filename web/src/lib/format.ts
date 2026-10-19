@@ -58,6 +58,11 @@ export function levelName(level: number): string {
   return ['', '一级部门', '二级部门', '三级部门', '四级部门'][level] ?? `${level} 级部门`
 }
 
+/** 层级短名（关系图卡片角标用）：一级、二级… */
+export function levelShort(level: number): string {
+  return ['', '一级', '二级', '三级', '四级'][level] ?? `${level} 级`
+}
+
 export const ESTABLISHMENT_FORM = {
   STANDING: '常设部门',
   TEMPORARY: '经批准的临时部门',
