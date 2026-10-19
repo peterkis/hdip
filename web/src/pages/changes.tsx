@@ -253,8 +253,8 @@ export function ChangeDetailPage() {
       />
 
       <div className="grid gap-4">
-        <div className="border-line-subtle rounded-md border px-2 py-4 sm:px-4">
-          <Steps steps={progress(cr)} />
+        <div className="border-line-subtle rounded-lg border px-5 py-4">
+          <Steps steps={progress(cr, groups.length)} />
         </div>
         {action.error && (
           <Callout tone="danger" title="操作未成功">
@@ -390,36 +390,30 @@ function ReorgEditor({ cr, sourceCode, onClose }: { cr: ChangeRequestOut; source
   )
 }
 
-/** 申请的三步：起草 → 提交 → 确认生效；退回、撤销停在发生的那一步 */
-function progress(cr: ChangeRequestOut): StepItem[] {
-  const by = (who?: { display_name: string } | null, at?: string | null) =>
-    at ? (
-      <>
-        {who?.display_name}
-        <br />
-        {stamp(at)}
-      </>
-    ) : undefined
-  const cancelled = by(cr.cancelled_by, cr.cancelled_at)
-  const draft: StepItem = { label: '起草', state: 'done', detail: by(cr.created_by, cr.created_at) }
+/** 申请的三步：起草 → 提交 → 确认生效；节点名称后括号里是操作人，第二行是时间或提示。退回、撤销停在发生的那一步 */
+function progress(cr: ChangeRequestOut, groupCount: number): StepItem[] {
+  // 时间按原型写成“10-19 11:20”；悬停看完整时间
+  const at = (t?: string | null) => (t ? <span title={stamp(t)}>{stamp(t).slice(5)}</span> : undefined)
+  const name = (u?: { display_name: string } | null) => u?.display_name
+  const draft: StepItem = { label: '起草', state: 'done', who: name(cr.created_by), detail: at(cr.created_at) }
   let submit: StepItem
   let confirm: StepItem
   if (cr.status === 'draft') {
-    submit = { label: '提交', state: 'current', detail: '补齐变更项后提交' }
-    confirm = { label: '确认生效', state: 'upcoming' }
+    submit = { label: '提交', state: 'current', detail: groupCount > 1 ? `看完下面 ${groupCount} 组后提交` : '核对后提交' }
+    confirm = { label: '确认生效', state: 'upcoming', detail: '由确认人确认' }
   } else if (cr.status === 'cancelled' && !cr.submitted_at) {
-    submit = { label: '提交', state: 'stopped', detail: <>未提交即撤销：{cancelled}</> }
+    submit = { label: '已撤销', state: 'stopped', who: name(cr.cancelled_by), detail: <>未提交即撤销 · {at(cr.cancelled_at)}</> }
     confirm = { label: '确认生效', state: 'skipped' }
   } else {
-    submit = { label: '提交', state: 'done', detail: by(cr.submitted_by, cr.submitted_at) }
+    submit = { label: '提交', state: 'done', who: name(cr.submitted_by), detail: at(cr.submitted_at) }
     confirm =
       cr.status === 'confirmed'
-        ? { label: '确认生效', state: 'done', detail: by(cr.confirmed_by, cr.confirmed_at) }
+        ? { label: '确认生效', state: 'done', who: name(cr.confirmed_by), detail: at(cr.confirmed_at) }
         : cr.status === 'returned'
-          ? { label: '已退回', state: 'stopped', detail: <>{by(cr.returned_by, cr.returned_at)}<br />原因：{cr.return_reason}</> }
+          ? { label: '已退回', state: 'stopped', who: name(cr.returned_by), detail: <>{at(cr.returned_at)} · 原因：{cr.return_reason}</> }
           : cr.status === 'cancelled'
-            ? { label: '已撤销', state: 'stopped', detail: cancelled }
-            : { label: '确认生效', state: 'current', detail: cr.permissions.confirm_hint ?? '等待确认人确认' }
+            ? { label: '已撤销', state: 'stopped', who: name(cr.cancelled_by), detail: at(cr.cancelled_at) }
+            : { label: '确认生效', state: 'current', detail: cr.permissions.confirm_hint ?? (groupCount > 1 ? `看完下面 ${groupCount} 组后确认` : '等待确认人确认') }
   }
   return [draft, submit, confirm]
 }
