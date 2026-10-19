@@ -28,6 +28,7 @@ import type { ExternalCodeRegister } from './externalCodeRegister';
 import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { ItemOutcome } from './itemOutcome';
+import type { ItemView } from './itemView';
 import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
 import type { Permissions } from './permissions';
@@ -51,6 +52,7 @@ export interface ChangeRequestOut {
   items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
   item_labels: string[];
   item_summaries?: string[];
+  item_views?: ItemView[];
   outcomes: ItemOutcome[] | null;
   problems: ProblemItem[];
   problem_message: string | null;

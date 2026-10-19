@@ -4437,6 +4437,14 @@
             "title": "Item Summaries",
             "default": []
           },
+          "item_views": {
+            "items": {
+              "$ref": "#/components/schemas/ItemView"
+            },
+            "type": "array",
+            "title": "Item Views",
+            "default": []
+          },
           "outcomes": {
             "anyOf": [
               {
@@ -8067,6 +8075,82 @@
           "after"
         ],
         "title": "ItemOutcome"
+      },
+      "ItemPart": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text",
+              "chip",
+              "new",
+              "out",
+              "tag",
+              "arrow"
+            ],
+            "title": "Kind"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          },
+          "tone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "title": "ItemPart",
+        "description": "一行里的一个片段：text 文字；chip 名称；new 新设的名称；out 退出的名称；\ntag 状态标签；arrow 箭头。"
+      },
+      "ItemView": {
+        "properties": {
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/ItemPart"
+            },
+            "type": "array",
+            "title": "Parts"
+          },
+          "meta": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meta"
+          },
+          "covered_by": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covered By"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parts"
+        ],
+        "title": "ItemView"
       },
       "LineageOut": {
         "properties": {

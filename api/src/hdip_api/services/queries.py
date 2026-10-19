@@ -86,7 +86,7 @@ from hdip_api.schemas.read import (
 )
 from hdip_api.services import workflow
 from hdip_api.services.apply import dry_run, is_void
-from hdip_api.services.describe import describe_items
+from hdip_api.services.describe import describe_items, item_views
 
 
 def covers(valid_from: date, valid_to: date | None, day: date) -> bool:
@@ -1216,6 +1216,7 @@ def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
         items=items,
         item_labels=_labels(cr),
         item_summaries=describe_items(s, cr.items),
+        item_views=item_views(s, cr.items),
         outcomes=[ItemOutcome.model_validate(o) for o in outcomes] if outcomes else None,
         problems=problems,
         problem_message=problem_message,

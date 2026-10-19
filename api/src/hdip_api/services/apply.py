@@ -1088,6 +1088,70 @@ def _end_department_attachments(ctx: Ctx, d: Department, day: date) -> list[str]
     return ended
 
 
+def _ended_details(ctx: Ctx, d: Department, day: date) -> list[str]:
+    """部门退出时将随之结束的关联，逐条写成可读的一句（在结束之前调用）：
+    “行政隶属：信息中心”“医务部 专业管理：临床医疗质量”“部门管理主分类：临床诊疗类”……
+    """
+    s = ctx.session
+    open_on = lambda m: (m.valid_to.is_(None)) | (m.valid_to >= day)  # noqa: E731
+    name = lambda dept_id: _dept_latest(s, s.get(Department, dept_id)).name  # noqa: E731
+    out: list[str] = []
+    for e in s.scalars(
+        select(DepartmentHierarchy).where(
+            DepartmentHierarchy.child_department_id == d.id, open_on(DepartmentHierarchy)
+        )
+    ):
+        out.append(f"行政隶属：{name(e.parent_department_id)}")
+    for r in s.scalars(
+        select(DepartmentRelation).where(
+            (DepartmentRelation.from_department_id == d.id)
+            | (DepartmentRelation.to_department_id == d.id),
+            open_on(DepartmentRelation),
+        )
+    ):
+        kind = RELATION_LABELS_DEPT[r.kind]
+        if r.kind == "COLLABORATION":
+            other = r.to_department_id if r.from_department_id == d.id else r.from_department_id
+            out.append(f"与{name(other)}{kind}：{r.scope}")
+        elif r.kind == "CAMPUS_MGMT":
+            campus = (
+                _latest(s, CampusVersion, CampusVersion.campus_id, r.campus_id).name
+                if r.campus_id
+                else ""
+            )
+            out.append(f"{kind}（{campus}）：{r.scope}")
+        elif r.from_department_id == d.id:
+            out.append(f"{kind}{name(r.to_department_id)}：{r.scope}")
+        else:
+            out.append(f"{name(r.from_department_id)} {kind}：{r.scope}")
+    for c in s.scalars(
+        select(DepartmentClassification).where(
+            DepartmentClassification.department_id == d.id, open_on(DepartmentClassification)
+        )
+    ):
+        scheme = s.get(ClassificationScheme, c.scheme_id)
+        code = s.scalar(
+            select(ClassificationCode.name).where(
+                ClassificationCode.scheme_id == c.scheme_id, ClassificationCode.code == c.code
+            )
+        )
+        out.append(f"{scheme.name if scheme else '分类'}：{code or c.code}")
+    for a in s.scalars(
+        select(DepartmentAlias).where(
+            DepartmentAlias.department_id == d.id, open_on(DepartmentAlias)
+        )
+    ):
+        out.append(f"别名：{a.value}")
+    for a in s.scalars(
+        select(DepartmentInstitution).where(
+            DepartmentInstitution.department_id == d.id, open_on(DepartmentInstitution)
+        )
+    ):
+        inst = _latest(s, InstitutionVersion, InstitutionVersion.institution_id, a.institution_id)
+        out.append(f"主体归属：{inst.name}")
+    return out
+
+
 def _department_reorganize(ctx: Ctx, item: DepartmentReorganize) -> dict:
     s = ctx.session
     day = item.effective_date
@@ -1140,6 +1204,7 @@ def _department_reorganize(ctx: Ctx, item: DepartmentReorganize) -> dict:
 
     before = {"departments": [version_snapshot(v) | {"code": d.code} for d, v in sources]}
     ended_notes: list[str] = []
+    ended_items: list[str] = []
     if exits:
         for d, latest in sources:
             content = {k: getattr(latest, k) for k in DepartmentVersion.CONTENT}
@@ -1148,6 +1213,7 @@ def _department_reorganize(ctx: Ctx, item: DepartmentReorganize) -> dict:
             # 依赖它的单元、下级部门、外部编码解释在全部变更项应用后统一校验
             ctx.touched_departments[d.id] = ctx.index
             ctx.ended_departments[d.id] = (ctx.index, day)
+            ended_items += _ended_details(ctx, d, day)
             ended = _end_department_links(ctx, d, day) + _end_department_attachments(ctx, d, day)
             if ended:
                 ended_notes.append(f"{d.code}：{'、'.join(dict.fromkeys(ended))}")
@@ -1204,6 +1270,8 @@ def _department_reorganize(ctx: Ctx, item: DepartmentReorganize) -> dict:
             "other_matters": item.other_matters,
             "participants": participants,
             "ended_links": "；".join(ended_notes) or None,
+            # 随原部门结束的关联，逐条（申请页“随原部门自动结束”一组）
+            "ended_items": ended_items,
         },
     }
 

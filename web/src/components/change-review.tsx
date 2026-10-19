@@ -1,14 +1,13 @@
 // 变更申请的核对视图（方案 A 为框架，融合方案 B 的逐组核对）：
-// 先用一段“这张申请做什么”给结论，再按业务把变更项分组，每组一句规则说明、可逐组“我已核对”；
+// 按业务把变更项分组（版式按原型 A），每组一句规则说明、可逐组“我已核对”；每行是名称标签与状态标签；
 // 右侧电梯导航列出各组、问题标记与核对进度，全部核对后才能提交 / 确认。
 // 分组按变更项的类型推出，对任何申请都适用；组织变更另有“随原部门自动结束”“需其他系统办理”两组说明。
-import { ArrowDown01Icon, ArrowRight01Icon, CheckmarkCircle02Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, ArrowRight01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { useState, type ReactNode } from 'react'
-import type { ChangeRequestOut, ItemOutcome, ProblemItem } from '@/api/generated/model'
+import type { ChangeRequestOut, ItemOutcome } from '@/api/generated/model'
 import { Icon } from '@/components/kit/icon'
-import { Tag } from '@/components/kit/tag'
+import { Tag, type Tone } from '@/components/kit/tag'
 import { ProblemCard } from '@/components/problem-card'
-import { stamp } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 // ------------------------------------------------------------------ 分组
@@ -67,17 +66,41 @@ export interface ReviewGroup {
   indices: number[]
 }
 
+// 组织变更申请里，各组用更贴近业务的叫法（与原型一致）
+const REORG_TEXT: Record<string, { title?: string; rule: string }> = {
+  org: { rule: '谁退出、谁新设' },
+  units: { title: '服务单元去向', rule: '单元身份不变，只换所属部门' },
+  hierarchy: { title: '下级部门', rule: '上级退出，下级不跟着退出' },
+  codes: { rule: '历史仍指向原部门，不改指向' },
+}
+
 export function groupItems(cr: ChangeRequestOut): ReviewGroup[] {
-  const groups = GROUP_DEFS.map((g) => ({ key: g.key, title: g.title, rule: g.rule, indices: [] as number[] }))
+  const isReorg = cr.items.some((i) => i.kind === 'department.reorganize')
+  const groups = GROUP_DEFS.map((g) => ({
+    key: g.key,
+    title: (isReorg && REORG_TEXT[g.key]?.title) || g.title,
+    rule: (isReorg && REORG_TEXT[g.key]?.rule) || g.rule,
+    indices: [] as number[],
+  }))
   const other: ReviewGroup = { key: 'other', title: '其他', rule: '', indices: [] }
   cr.items.forEach((item, i) => {
+    // 并进另一行显示的项（新设部门的主分类、隶属）不单独成行
+    if (cr.item_views?.[i]?.covered_by != null) return
     const def = GROUP_DEFS.findIndex((g) => g.match(item.kind))
     ;(def >= 0 ? groups[def] : other).indices.push(i)
   })
+  // 组织结构里先说谁退出（组织变更事件），再说谁新设
+  const org = groups.find((g) => g.key === 'org')
+  if (org) org.indices.sort((a, b) => Number(cr.items[b].kind === 'department.reorganize') - Number(cr.items[a].kind === 'department.reorganize'))
   return [...groups, other].filter((g) => g.indices.length > 0)
 }
 
-type ReorgAfter = { event_type: string; basis_note: string; other_matters: string | null; ended_links: string | null }
+/** 某一行连同并进来的项（如新设部门的主分类）的序号 */
+function rowIndices(cr: ChangeRequestOut, index: number): number[] {
+  return [index, ...(cr.item_views ?? []).flatMap((v, i) => (v.covered_by === index ? [i] : []))]
+}
+
+type ReorgAfter = { event_type: string; basis_note: string; other_matters: string | null; ended_links: string | null; ended_items?: string[] }
 
 function reorgInfo(cr: ChangeRequestOut) {
   const index = cr.items.findIndex((i) => i.kind === 'department.reorganize')
@@ -88,7 +111,8 @@ function reorgInfo(cr: ChangeRequestOut) {
     index,
     basis: after?.basis_note ?? item.basis_note ?? '',
     otherMatters: after?.other_matters ?? item.other_matters ?? null,
-    ended: (after?.ended_links ?? '')
+    // 新申请有逐条明细（ended_items）；旧申请只有汇总文字，退回到按“、”拆分
+    ended: after?.ended_items ?? (after?.ended_links ?? '')
       .split('；')
       .map((x) => x.replace(/^\S+：/, ''))
       .flatMap((x) => x.split('、'))
@@ -127,61 +151,28 @@ export function useReviewChecks(storeKey: string | null, groups: ReviewGroup[]) 
   return { checked, toggle, done, total: groups.length, all: done === groups.length }
 }
 
-// ------------------------------------------------------------------ 概览：这张申请做什么
-export function ReviewOverview({ cr, groups }: { cr: ChangeRequestOut; groups: ReviewGroup[] }) {
-  const reorg = reorgInfo(cr)
-  const headline =
-    reorg !== null
-      ? cr.item_summaries?.[reorg.index]
-      : cr.items.length === 1
-        ? cr.item_summaries?.[0]
-        : `共 ${cr.items.length} 项变更：${groups.map((g) => `${g.title} ${g.indices.length}`).join('、')}`
-  const tiles = [
-    ...groups.map((g) => ({ n: g.indices.length, label: g.title })),
-    ...(reorg?.ended.length ? [{ n: reorg.ended.length, label: '自动结束，无需操作' }] : []),
-  ].slice(0, 4)
-  return (
-    <section id="review-overview" aria-labelledby="review-overview-h" className="border-line-subtle grid scroll-mt-6 gap-4 rounded-xl border p-5 sm:p-6">
-      <h2 id="review-overview-h" className="text-fg-muted text-xs font-medium">
-        这张申请做什么
-      </h2>
-      <p className="text-fg-strong text-lg leading-relaxed font-semibold break-words">{headline}</p>
-      {(reorg?.basis || cr.note) && (
-        <p className="text-fg-secondary text-xs">
-          {reorg?.basis && <>依据：{reorg.basis}。</>}
-          {!reorg && cr.note}
-        </p>
-      )}
-      {tiles.length > 1 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {tiles.map((t) => (
-            <div key={t.label} className="bg-surface-sidebar rounded-lg px-3.5 py-3">
-              <div className="text-fg-strong text-lg font-bold tabular-nums">{t.n}</div>
-              <div className="text-fg-muted text-caption">{t.label}</div>
-            </div>
-          ))}
-        </div>
-      )}
-      {cr.status === 'confirmed' ? (
-        <StatusLine tone="success">已于 {stamp(cr.confirmed_at)} 确认生效，下面是确认时记录的前后内容。</StatusLine>
-      ) : cr.problems.length === 0 && (cr.status === 'draft' || cr.status === 'submitted') ? (
-        <StatusLine tone="success">预演通过：{cr.items.length} 项都能按当前数据生效。</StatusLine>
-      ) : null}
-    </section>
-  )
-}
+// ------------------------------------------------------------------ 一组（样式按原型 A：黑色序号圆、17px 级标题、一句规则；行内是名称标签与状态标签）
+const PAGE = 50
 
-function StatusLine({ tone, children }: { tone: 'success'; children: ReactNode }) {
+const TAG_TONE: Record<string, Tone> = { green: 'green', brown: 'brown', yellow: 'yellow', blue: 'blue', gray: 'gray', red: 'red' }
+
+function GroupHeader({ number, title, rule, muted, children }: { number: number; title: string; rule?: string; muted?: boolean; children?: ReactNode }) {
   return (
-    <div className={cn('flex items-center gap-2.5 rounded-lg px-3.5 py-2.5 text-xs', tone === 'success' && 'bg-success-soft text-success-text')}>
-      <Icon icon={CheckmarkCircle02Icon} className="size-4 shrink-0" strokeWidth={2} />
-      <span>{children}</span>
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+      <span
+        className={cn(
+          'flex size-5.5 shrink-0 items-center justify-center rounded-full text-caption font-semibold',
+          muted ? 'bg-surface-subtle text-fg-secondary' : 'bg-fg-strong text-surface-raised',
+        )}
+      >
+        {number}
+      </span>
+      <h2 className="text-fg-strong text-sm font-semibold">{title}</h2>
+      {rule && <span className="text-fg-muted text-caption">{rule}</span>}
+      {children}
     </div>
   )
 }
-
-// ------------------------------------------------------------------ 一组
-const PAGE = 50
 
 export function ReviewGroupSection({
   cr,
@@ -191,7 +182,6 @@ export function ReviewGroupSection({
   checked,
   onCheck,
   renderDiff,
-  describe,
 }: {
   cr: ChangeRequestOut
   group: ReviewGroup
@@ -201,27 +191,12 @@ export function ReviewGroupSection({
   onCheck: () => void
   /** 某一项的前后对照（由页面提供，含拆分合并图、组织变更图、字段对照表） */
   renderDiff: (outcome: ItemOutcome) => ReactNode
-  /** 变更项的代码摘要（弱化显示） */
-  describe: (index: number) => string
 }) {
   const [limit, setLimit] = useState(PAGE)
-  const problems = group.indices.filter((i) => cr.problems.some((p) => p.item_index === i)).length
+  const problems = group.indices.flatMap((i) => rowIndices(cr, i)).filter((i) => cr.problems.some((p) => p.item_index === i)).length
   return (
     <section id={`review-${group.key}`} aria-labelledby={`review-${group.key}-h`} className="grid scroll-mt-6 gap-2">
-      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
-        <span
-          className={cn(
-            'flex size-5.5 items-center justify-center rounded-full text-caption font-semibold',
-            checked ? 'bg-success-text text-surface-raised' : 'bg-fg-strong text-surface-raised',
-          )}
-        >
-          {checked ? <Icon icon={Tick02Icon} className="size-3" strokeWidth={2.5} /> : number}
-        </span>
-        <h2 id={`review-${group.key}-h`} className="text-fg-strong text-base font-semibold">
-          {group.title}
-          <span className="text-fg-muted ml-1.5 text-xs font-normal tabular-nums">{group.indices.length}</span>
-        </h2>
-        {group.rule && <span className="text-fg-muted text-xs">{group.rule}</span>}
+      <GroupHeader number={number} title={group.title} rule={group.rule}>
         {problems > 0 && <Tag tone="red">{problems} 个问题</Tag>}
         {checkable && (
           <button
@@ -229,34 +204,20 @@ export function ReviewGroupSection({
             onClick={onCheck}
             aria-pressed={checked}
             className={cn(
-              'ml-auto inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-xs transition-colors',
-              checked ? 'border-success-text/30 bg-success-soft text-success-text' : 'border-line text-fg hover:bg-surface-hover',
+              'ml-auto inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-caption transition-colors',
+              checked ? 'border-success-text/30 bg-success-soft text-success-text' : 'border-line text-fg-secondary hover:bg-surface-hover',
             )}
           >
-            <span
-              className={cn(
-                'flex size-3.5 items-center justify-center rounded-sm border',
-                checked ? 'border-success-text bg-success-text text-surface-raised' : 'border-fg-muted',
-              )}
-            >
+            <span className={cn('flex size-3.5 items-center justify-center rounded-sm border', checked ? 'border-success-text bg-success-text text-surface-raised' : 'border-fg-muted')}>
               {checked && <Icon icon={Tick02Icon} className="size-2.5" strokeWidth={3} />}
             </span>
             我已核对
           </button>
         )}
-      </div>
-      <div className={cn('grid', checked && 'opacity-80')}>
+      </GroupHeader>
+      <div className="grid">
         {group.indices.slice(0, limit).map((i) => (
-          <ReviewItem
-            key={i}
-            index={i}
-            summary={cr.item_summaries?.[i] || cr.item_labels[i]}
-            label={cr.item_labels[i]}
-            code={describe(i)}
-            outcome={cr.outcomes?.find((o) => o.index === i)}
-            problem={cr.problems.find((p) => p.item_index === i)}
-            renderDiff={renderDiff}
-          />
+          <ReviewRow key={i} cr={cr} index={i} renderDiff={renderDiff} />
         ))}
         {group.indices.length > limit && (
           <button type="button" onClick={() => setLimit(group.indices.length)} className="text-fg-secondary hover:text-fg justify-self-start px-3 py-2 text-xs hover:underline">
@@ -268,83 +229,96 @@ export function ReviewGroupSection({
   )
 }
 
-function ReviewItem({
-  index,
-  summary,
-  label,
-  code,
-  outcome,
-  problem,
-  renderDiff,
-}: {
-  index: number
-  summary: string
-  label: string
-  code: string
-  outcome?: ItemOutcome
-  problem?: ProblemItem
-  renderDiff: (outcome: ItemOutcome) => ReactNode
-}) {
-  // 前后对照默认收起：先读一句话，需要时再展开；组织变更这类整体变更默认展开图示
-  const [open, setOpen] = useState(!!outcome && outcome.kind === 'department.reorganize')
+function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: number; renderDiff: (outcome: ItemOutcome) => ReactNode }) {
+  const view = cr.item_views?.[index]
+  const all = rowIndices(cr, index)
+  const problems = all.flatMap((i) => cr.problems.filter((p) => p.item_index === i))
+  const outcomes = all.flatMap((i) => cr.outcomes?.filter((o) => o.index === i) ?? [])
+  const [open, setOpen] = useState(false)
   return (
-    <div id={`item-${index}`} className={cn('hover:bg-surface-sidebar grid scroll-mt-6 gap-2 rounded-lg px-3 py-2.5', problem && 'bg-danger-soft/40')}>
-      <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="text-fg-disabled w-5 shrink-0 text-caption tabular-nums">{index + 1}</span>
-        <span className="text-fg-strong min-w-0 flex-1 text-sm break-words">{summary}</span>
-        <span className="text-fg-disabled hidden font-mono text-caption sm:inline">{label}</span>
-        {outcome && (
-          <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-fg-muted hover:text-fg inline-flex items-center gap-0.5 text-caption">
-            前后对照
-            <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3" strokeWidth={2} />
-          </button>
-        )}
+    <div id={`item-${index}`} className="grid scroll-mt-6 gap-2">
+      <div className={cn('hover:bg-surface-sidebar flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
+        {view ? view.parts.map((part, k) => <RowPart key={k} kind={part.kind} text={part.text} tone={part.tone ?? undefined} />) : <span className="text-fg">{cr.item_summaries?.[index]}</span>}
+        <span className="ml-auto flex items-center gap-3">
+          {view?.meta && <span className="text-fg-disabled font-mono text-caption">{view.meta}</span>}
+          {outcomes.length > 0 && (
+            <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-fg-disabled hover:text-fg inline-flex items-center gap-0.5 text-caption">
+              对照
+              <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3" strokeWidth={2} />
+            </button>
+          )}
+        </span>
       </div>
-      <p className="text-fg-disabled pl-7.5 font-mono text-caption break-all">{code}</p>
-      {problem && (
-        <div className="pl-7.5">
-          <ProblemCard problem={problem} compact />
+      {problems.map((p, k) => (
+        <div key={k} className="px-3">
+          <ProblemCard problem={p} compact />
         </div>
-      )}
-      {open && outcome && <div className="pl-7.5">{renderDiff(outcome)}</div>}
+      ))}
+      {open && <div className="grid gap-3 px-3 pb-2">{outcomes.map((o) => <div key={o.index}>{renderDiff(o)}</div>)}</div>}
     </div>
   )
 }
 
-/** 组织变更的两组补充说明：随原部门自动结束（无需操作）、需其他系统办理 */
-export function ReorgExtras({ cr }: { cr: ChangeRequestOut }) {
+/** 行内片段：名称标签（普通 / 新设 / 退出）、状态标签、箭头、文字 */
+function RowPart({ kind, text, tone }: { kind: string; text: string; tone?: string }) {
+  switch (kind) {
+    case 'chip':
+      return <span className="bg-surface-subtle text-fg-strong rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
+    case 'new':
+      return <span className="bg-tag-green-bg text-tag-green-text rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
+    case 'out':
+      return (
+        <span className="bg-tag-gray-bg text-fg-secondary decoration-fg-disabled rounded-md px-2 py-px text-xs font-medium whitespace-nowrap line-through">{text}</span>
+      )
+    case 'tag':
+      return (
+        <Tag tone={TAG_TONE[tone ?? 'gray'] ?? 'gray'} className="text-caption">
+          {text}
+        </Tag>
+      )
+    case 'arrow':
+      return <span className="text-fg-disabled">→</span>
+    default:
+      return <span className="text-fg-secondary">{text}</span>
+  }
+}
+
+/** 组织变更的补充：随原部门自动结束（无需操作，灰色序号）、需其他系统办理 */
+export function ReorgExtras({ cr, number }: { cr: ChangeRequestOut; number: number }) {
   const reorg = reorgInfo(cr)
   if (!reorg) return null
+  const ev = cr.items[reorg.index] as { effective_date?: string }
+  const last = ev.effective_date ? dayBefore(ev.effective_date) : ''
   return (
     <>
       {reorg.ended.length > 0 && (
-        <section id="review-auto" aria-labelledby="review-auto-h" className="grid scroll-mt-6 gap-2">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <span className="bg-surface-subtle text-fg-secondary flex size-5.5 items-center justify-center rounded-full text-caption">·</span>
-            <h2 id="review-auto-h" className="text-fg-strong text-base font-semibold">
-              随原部门自动结束
-            </h2>
-            <span className="text-fg-muted text-xs">无需操作，止于生效日前一天，历史保留</span>
-          </div>
+        <section id="review-auto" aria-label="随原部门自动结束" className="grid scroll-mt-6 gap-2">
+          <GroupHeader number={number} title="随原部门自动结束" rule={`无需操作，止于 ${last}，历史保留`} muted />
           <div className="flex flex-wrap gap-2 px-3">
             {reorg.ended.map((e) => (
-              <Tag key={e} tone="gray">
+              <span key={e} className="bg-surface-subtle text-fg-secondary rounded-md px-2 py-px text-xs">
                 {e}
-              </Tag>
+              </span>
             ))}
           </div>
         </section>
       )}
       {reorg.otherMatters && (
-        <section id="review-other" aria-labelledby="review-other-h" className="grid scroll-mt-6 gap-1">
-          <h2 id="review-other-h" className="text-fg-muted text-xs font-medium">
+        <section id="review-other" aria-labelledby="review-other-h" className="grid scroll-mt-6 gap-1.5">
+          <h2 id="review-other-h" className="text-fg-muted text-caption font-medium">
             需其他系统办理（本平台只登记）
           </h2>
-          <p className="text-fg-secondary text-sm">{reorg.otherMatters}</p>
+          <p className="text-fg-secondary text-xs">{reorg.otherMatters}</p>
         </section>
       )}
     </>
   )
+}
+
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
 }
 
 // ------------------------------------------------------------------ 电梯导航 + 核对进度
@@ -378,7 +352,6 @@ export function ReviewNav({
         </div>
       )}
       <nav className="border-line-subtle grid gap-0.5 border-l pl-1.5">
-        <NavLink onClick={() => jump('review-overview')}>概览</NavLink>
         {groups.map((g) => {
           const problems = g.indices.filter((i) => cr.problems.some((p) => p.item_index === i)).length
           const done = checks.checked.has(g.key)

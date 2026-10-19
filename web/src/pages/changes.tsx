@@ -20,7 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbRow, DbTable, DbToolbar, ToggleChip } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
 import { ProblemCard } from '@/components/problem-card'
-import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, ReviewOverview, useReviewChecks } from '@/components/change-review'
+import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks } from '@/components/change-review'
 import { Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { Steps, type StepItem } from '@/components/kit/steps'
@@ -263,8 +263,6 @@ export function ChangeDetailPage() {
         )}
         <div className="grid items-start gap-10 lg:grid-cols-4">
           <main className="grid min-w-0 gap-9 lg:col-span-3">
-            <ReviewOverview cr={cr} groups={groups} />
-
             {cr.problems.length > 0 && (
               <section className="grid gap-2" aria-label="需要处理的问题">
                 <h2 className="text-danger-text text-sm font-semibold">
@@ -328,10 +326,9 @@ export function ChangeDetailPage() {
                 checked={checks.checked.has(g.key)}
                 onCheck={() => checks.toggle(g.key)}
                 renderDiff={(o) => <OutcomeDiff outcome={o} />}
-                describe={(i) => describeItem(cr.items[i])}
               />
             ))}
-            <ReorgExtras cr={cr} />
+            <ReorgExtras cr={cr} number={groups.length + 1} />
 
             {primary && (
               <div className="border-line-subtle flex flex-wrap items-center gap-4 border-t pt-6">
@@ -610,14 +607,4 @@ function ReturnDialog({
   )
 }
 
-function describeItem(item: ChangeRequestOut['items'][number]): string {
-  if ('code' in item) return item.code
-  if (item.kind === 'operator_relation.create') return `${item.institution_code} → ${item.campus_code}`
-  if (item.kind === 'operator_relation.close') return `运营关系 #${item.relation_id}`
-  if ('external_code' in item) return `${item.system_code}/${item.namespace_code} ${item.external_code}`
-  if (item.kind === 'external_code.assignment_close') return `解释 #${item.assignment_id}`
-  if (item.kind === 'department.reorganize')
-    return `${REORG_TITLE[item.event_type]}：${item.sources.map((p) => p.code).join('、')} → ${item.results.map((p) => p.code).join('、')}`
-  return ''
-}
 

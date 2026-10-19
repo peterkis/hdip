@@ -449,6 +449,24 @@ class ChangeRequestSummary(BaseModel):
     cancelled_at: datetime | None
 
 
+class ItemPart(BaseModel):
+    """一行里的一个片段：text 文字；chip 名称；new 新设的名称；out 退出的名称；
+    tag 状态标签；arrow 箭头。"""
+
+    kind: Literal["text", "chip", "new", "out", "tag", "arrow"]
+    text: str
+    tone: str | None = None
+    """tag 的色调：green / brown / yellow / blue / gray / red。"""
+
+
+class ItemView(BaseModel):
+    parts: list[ItemPart]
+    meta: str | None = None
+    """靠右弱化显示：代码、院区。"""
+    covered_by: int | None = None
+    """并进另一行显示（如新设部门的主分类、隶属并进它的“新设”行）时，那一行的序号。"""
+
+
 class ChangeRequestOut(BaseModel):
     id: int
     status: ChangeStatus
@@ -456,6 +474,8 @@ class ChangeRequestOut(BaseModel):
     items: list[ChangeItem]
     item_labels: list[str]
     item_summaries: list[str] = []
+    item_views: list["ItemView"] = []
+    """每项的结构化呈现：名称标签、状态标签、箭头、文字片段，以及靠右的代码（申请页逐行展示）。"""
     """每项一句话说明：用名称说清谁、怎么变、从哪天起（预演失败时也有）。"""
     outcomes: list[ItemOutcome] | None
     """已确认：确认时记录的前后内容；草稿/已提交：按当前数据预演的结果。"""
