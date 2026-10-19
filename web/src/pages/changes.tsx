@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import {
   cancelChangeRequest,
@@ -20,6 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbRow, DbTable, DbToolbar, ToggleChip } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
 import { ProblemCard } from '@/components/problem-card'
+import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, ReviewOverview, useReviewChecks } from '@/components/change-review'
 import { Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { Steps, type StepItem } from '@/components/kit/steps'
@@ -153,6 +154,8 @@ export function ChangeDetailPage() {
   const [reorgEditing, setReorgEditing] = useState(false)
   // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
   const [itemLimit, setItemLimit] = useState(50)
+  const groups = useMemo(() => (cr ? groupItems(cr) : []), [cr])
+  const checks = useReviewChecks(cr ? `${cr.id}-${cr.updated_at}` : null, groups)
   // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）
   const jumpTo = (index: number) => {
     if (index >= itemLimit) setItemLimit(index + 1)
@@ -183,6 +186,32 @@ export function ChangeDetailPage() {
   // 申请页只用于核对与提交：不逐项移除（会拆散组织变更这类整体变更）。
   // 向导生成的草稿回到向导调整，保存时整体替换；其他草稿可撤销后重新发起。
   const reorg = cr.items.find((i) => i.kind === 'department.reorganize')
+  // 逐组核对：能提交（草稿）或能确认（已提交）的人，全部组核对完才能继续
+  const checkable = (cr.status === 'draft' && p.can_submit) || (cr.status === 'submitted' && p.can_confirm)
+  const gateTitle = checkable && !checks.all ? '逐组看完并点“我已核对”后才能继续' : undefined
+  const primary = p.can_submit ? (
+    <Button
+      disabled={action.isPending || (checkable && !checks.all)}
+      title={gateTitle}
+      onClick={() =>
+        run(async () => {
+          // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
+          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null })
+          return submitChangeRequest(id)
+        }, `申请 #${id} 已提交，等待确认`)
+      }
+    >
+      提交
+    </Button>
+  ) : cr.status === 'submitted' ? (
+    <Button
+      disabled={!p.can_confirm || action.isPending || (checkable && !checks.all)}
+      title={gateTitle ?? p.confirm_hint ?? undefined}
+      onClick={() => run(() => confirmChangeRequest(id), `申请 #${id} 已确认生效`)}
+    >
+      确认生效
+    </Button>
+  ) : null
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
   const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
 
@@ -218,26 +247,7 @@ export function ChangeDetailPage() {
                 退回
               </Button>
             )}
-            {p.can_submit && (
-              <Button disabled={action.isPending} onClick={() =>
-                  run(async () => {
-                    // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-                    if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null })
-                    return submitChangeRequest(id)
-                  }, `申请 #${id} 已提交，等待确认`)
-                }>
-                提交
-              </Button>
-            )}
-            {cr.status === 'submitted' && (
-              <Button
-                disabled={!p.can_confirm || action.isPending}
-                title={p.confirm_hint ?? undefined}
-                onClick={() => run(() => confirmChangeRequest(id), `申请 #${id} 已确认生效`)}
-              >
-                确认生效
-              </Button>
-            )}
+            {primary}
           </>
         }
       />
@@ -251,112 +261,92 @@ export function ChangeDetailPage() {
             {action.error.message}
           </Callout>
         )}
-        {cr.problems.length > 0 && (
-          <section className="grid gap-2" aria-label="需要处理的问题">
-            <h2 className="text-danger-text text-sm font-semibold">
-              还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
-            </h2>
-            {cr.problems.map((pr, k) => (
-              <ProblemCard
-                key={k}
-                problem={pr}
-                title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
-                onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
+        <div className="grid items-start gap-10 lg:grid-cols-4">
+          <main className="grid min-w-0 gap-9 lg:col-span-3">
+            <ReviewOverview cr={cr} groups={groups} />
+
+            {cr.problems.length > 0 && (
+              <section className="grid gap-2" aria-label="需要处理的问题">
+                <h2 className="text-danger-text text-sm font-semibold">
+                  还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
+                </h2>
+                {cr.problems.map((pr, k) => (
+                  <ProblemCard
+                    key={k}
+                    problem={pr}
+                    title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
+                    onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
+                  />
+                ))}
+              </section>
+            )}
+
+            {p.can_edit ? (
+              <Section
+                title={
+                  <>
+                    变更说明
+                    <span className="text-fg-muted text-caption font-normal">选填；提交后确认人会在页面上方看到</span>
+                  </>
+                }
+                action={
+                  <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
+                    保存说明
+                  </Button>
+                }
+              >
+                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
+              </Section>
+            ) : (
+              cr.note && (
+                <Callout
+                  tone="info"
+                  icon={QuoteDownIcon}
+                  title={
+                    <span className="flex items-center gap-2">
+                      变更说明
+                      <span className="text-fg-muted font-normal">
+                        {cr.created_by.display_name}
+                        {cr.submitted_at && ` · 提交于 ${stamp(cr.submitted_at)}`}
+                      </span>
+                    </span>
+                  }
+                >
+                  <p className="text-fg text-sm whitespace-pre-wrap">{cr.note}</p>
+                </Callout>
+              )
+            )}
+
+            {cr.items.length === 0 && <p className="text-fg-disabled text-xs">没有变更项</p>}
+            {groups.map((g, k) => (
+              <ReviewGroupSection
+                key={g.key}
+                cr={cr}
+                group={g}
+                number={k + 1}
+                checkable={checkable}
+                checked={checks.checked.has(g.key)}
+                onCheck={() => checks.toggle(g.key)}
+                renderDiff={(o) => <OutcomeDiff outcome={o} />}
+                describe={(i) => describeItem(cr.items[i])}
               />
             ))}
-          </section>
-        )}
+            <ReorgExtras cr={cr} />
 
-
-        {p.can_edit ? (
-          <Section
-            title={
-              <>
-                变更说明
-                <span className="text-fg-muted text-caption font-normal">选填；提交后确认人会在页面上方看到</span>
-              </>
-            }
-            action={
-              <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
-                保存说明
-              </Button>
-            }
-          >
-            <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
-          </Section>
-        ) : (
-          cr.note && (
-            <Callout
-              tone="info"
-              icon={QuoteDownIcon}
-              title={
-                <span className="flex items-center gap-2">
-                  变更说明
-                  <span className="text-fg-muted font-normal">
-                    {cr.created_by.display_name}
-                    {cr.submitted_at && ` · 提交于 ${stamp(cr.submitted_at)}`}
-                  </span>
-                </span>
-              }
-              className="border-l-2 border-brand"
-            >
-              <p className="text-fg text-sm whitespace-pre-wrap">{cr.note}</p>
-            </Callout>
-          )
-        )}
-
-        <Section
-          title={
-            <>
-              变更项（{cr.items.length}）
-              <span className="text-fg-muted text-caption font-normal">
-                {cr.status === 'confirmed' ? '确认时记录的前后内容' : '按当前数据预演，确认时会重新校验'}
-              </span>
-            </>
-          }
-        >
-          <div className="grid gap-3">
-            {cr.items.length === 0 && <p className="text-fg-disabled text-xs">没有变更项</p>}
-            {cr.items.slice(0, itemLimit).map((item, i) => {
-              const outcome = cr.outcomes?.find((o) => o.index === i)
-              const problem = cr.problems.find((x) => x.item_index === i)
-              return (
-                <div
-                  key={i}
-                  id={`item-${i}`}
-                  className={cn('bg-surface-raised min-w-0 scroll-mt-16 rounded-md border p-3', problem ? 'border-danger/30' : 'border-line-subtle')}
-                >
-                  <div className="mb-2 grid gap-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                      <span className="text-fg-muted tabular-nums">第 {i + 1} 项</span>
-                      <Tag tone={problem ? 'red' : 'gray'}>{cr.item_labels[i]}</Tag>
-                      {problem && <span className="text-danger-text text-caption">未通过</span>}
-                    </div>
-                    {/* 主要信息：用名称说清这一项在做什么；代码只作补充，弱化显示 */}
-                    <p className="text-fg-strong text-sm font-medium break-words">{cr.item_summaries?.[i] || outcome?.target || describeItem(item)}</p>
-                    <p className="text-fg-disabled font-mono text-caption break-all">{describeItem(item)}</p>
+            {primary && (
+              <div className="border-line-subtle flex flex-wrap items-center gap-4 border-t pt-6">
+                <div className="min-w-0 flex-1">
+                  <div className="text-fg-strong text-sm font-semibold">{checks.all || !checkable ? '看完了？' : `还有 ${checks.total - checks.done} 组没核对`}</div>
+                  <div className="text-fg-secondary text-xs">
+                    {cr.status === 'draft' ? '提交后不能再改；确认人确认时会按当天的数据再预演一次。' : '确认后在一个事务里全部生效，之后不能撤回。'}
                   </div>
-                  {problem && <ProblemCard problem={problem} compact />}
-                  {outcome && <OutcomeDiff outcome={outcome} />}
                 </div>
-              )
-            })}
-            {cr.items.length > itemLimit && (
-              <div className="flex items-center gap-3 text-xs">
-                <span className="text-fg-muted">
-                  已显示 {itemLimit} / {cr.items.length} 项
-                  {cr.problems.some((x) => (x.item_index ?? 0) >= itemLimit) && '（后面还有未通过校验的项）'}
-                </span>
-                <Button size="sm" variant="outline" onClick={() => setItemLimit(itemLimit + 200)}>
-                  再显示 200 项
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setItemLimit(cr.items.length)}>
-                  全部显示
-                </Button>
+                {primary}
               </div>
             )}
-          </div>
-        </Section>
+          </main>
+          <ReviewNav cr={cr} groups={groups} checks={checks} checkable={checkable} />
+        </div>
       </div>
 
       <ReturnDialog
