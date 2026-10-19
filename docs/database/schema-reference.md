@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0013**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0014**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -1020,7 +1020,7 @@ $function$
 
 | 用户名 | 显示名 | 角色 |
 | --- | --- | --- |
-| solo | 一人维护（维护+确认） | maintainer、confirmer |
+| solo | 张三 | maintainer、confirmer |
 | maintainer | 维护人 | maintainer |
 | confirmer | 确认人 | confirmer |
 | viewer | 只读 | viewer |

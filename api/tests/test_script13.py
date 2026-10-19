@@ -68,3 +68,18 @@ def test_script13_admin_hierarchy_levels_cycle_and_professional_mgmt(api):
     # 导出：行政视图结构
     csv = api.get("/api/export/department-hierarchy.csv", params={"as_of": "2027-01-01"}).text
     assert "ADMIN,TSS,图书室,2,KJB,科教部" in csv
+
+
+def test_script13_create_with_parent_in_one_request(api):
+    """新建部门时选上级：同一张申请里“新建 + 设置上级”两项，设立当日即为下级；可逐级建到三级。"""
+    api.apply(dept_create(code="XXZX", name="信息中心"))
+    done = api.apply(
+        dept_create(code="RJK", name="软件科", valid_from="2026-03-01"),
+        set_parent("RJK", "XXZX", "2026-03-01"),
+        dept_create(code="KFZ", name="开发组", valid_from="2026-03-01"),
+        set_parent("KFZ", "RJK", "2026-03-01"),
+    )
+    assert len(done["outcomes"]) == 4
+    org = _org(api, "2026-03-01")
+    assert org["RJK"] == (2, "XXZX")
+    assert org["KFZ"] == (3, "RJK")

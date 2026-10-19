@@ -110,6 +110,7 @@ export function DepartmentCreateDialog(props: DialogProps) {
   const [lifecycle, setLifecycle] = useState<'PREPARING' | 'ACTIVE'>('ACTIVE')
   const [inst, setInst] = useState('')
   const [code, setCode] = useState('')
+  const [parent, setParent] = useState('')
   const [validFrom, setValidFrom] = useEffectiveDate()
   return (
     <ItemDialog
@@ -122,15 +123,21 @@ export function DepartmentCreateDialog(props: DialogProps) {
           ['code', !!code.trim(), '请填写部门代码'],
           ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
           ['valid_from', !!validFrom, '请选择设立日期'],
-        ]) ?? {
-          kind: 'department.create',
-          code: code.trim(),
-          valid_from: validFrom,
-          lifecycle,
-          institution_code: orNull(inst),
-          duties: a.duties,
-          ...attrValues(a),
-        }
+        ]) ?? [
+          {
+            kind: 'department.create',
+            code: code.trim(),
+            valid_from: validFrom,
+            lifecycle,
+            institution_code: orNull(inst),
+            duties: a.duties,
+            ...attrValues(a),
+          },
+          // 选了上级：同一张草稿里再加一项“设置上级”，自设立日期起隶属
+          ...(parent
+            ? [{ kind: 'department.set_parent' as const, code: code.trim(), view_code: 'ADMIN', parent_code: parent, effective_date: validFrom }]
+            : []),
+        ]
       }
     >
       <AttrFields a={a} set={setA} />
@@ -151,6 +158,15 @@ export function DepartmentCreateDialog(props: DialogProps) {
         <TextField label="部门代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
         <TextField label="设立日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
       </div>
+      <DepartmentSelect
+        label="上级部门"
+        name="parent"
+        value={parent}
+        onChange={setParent}
+        exclude={code.trim() ? [code.trim()] : undefined}
+        placeholder="无上级（一级部门）"
+        hint="选填；选了就自设立日期起隶属该部门（行政视图），可逐级建到二级、三级。上级须在设立日期前已存在"
+      />
     </ItemDialog>
   )
 }

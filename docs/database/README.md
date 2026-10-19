@@ -164,6 +164,7 @@ stateDiagram-v2
 | 0011 | 未生效版本可更正：四张版本表的期间检查允许结束日 = 开始日 - 1（空期间 = 生效前已更正、从未生效）；排他约束改用等价的半开区间 `daterange(valid_from, valid_to + 1)` |
 | 0012 | 部门组织变更第一期：`department_change_event`（类型、生效日、正式依据必填、承接说明、需其他系统办理事项）与 `department_change_participant`（原部门 / 结果部门，存续 / 退出 / 新设）；两表只追加。确认规则 `department.reorganize` |
 | 0013 | 运营关系：同一主体与同一院区同一时期只能有一条关系，不论类型（`operator_relation_pair_excl` 取代只禁止同类型重叠的 `operator_relation_dup_excl`）；已有重叠数据时迁移失败并列出 |
+| 0014 | 种子账号 solo 的显示名称改为“张三”（用户名、角色不变） |
 
 ### 新增一类对象或变更的检查单
 

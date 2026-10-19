@@ -60,7 +60,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 单元类型码沿用 `OPD/IPD/ED/EXAM/LAB/PHARMACY/OR/OTHER`，**不新增、不重释码值**；类型不允许修订（职责变化走拆分或新建）。中文名（门诊单元、住院单元…）在 `option_item`。“医技单元”与码值的映射未定，不要自行推断。
 - 关闭运营关系或停用院区时，若仍有在用单元依赖，阻止确认并列出受影响单元。院区、关系类依赖在一张申请**全部变更项应用后**统一校验（`apply.py` 的 `_check_units`），所以“停用院区 + 改挂单元”可放在同一张申请里，不论先后。
 - 服务单元永久退出 = 最新版本写上 `valid_to`（最后有效日，当天仍有效），之后不再有版本；“已退出”由此推出，不另存状态。版本状态只有 `ACTIVE`（在用）/`SUSPENDED`（暂停）。
-- 行政隶属与管理关系（D2，迁移 0007）：`department.set_parent`（视图内换上级，空 = 一级部门）、`department.relation_create/.relation_close`（专业管理 / 协作 / 院区管理）。成环在申请全部应用后检查（`apply.py` 的 `_check_org`）；撤销部门自动结束它自己的上级边与关系，仍有下级则阻止。只能写入 ACTIVE 视图。
+- 行政隶属与管理关系（D2，迁移 0007）：`department.set_parent`（视图内换上级，空 = 一级部门）、`department.relation_create/.relation_close`（专业管理 / 协作 / 院区管理）。成环在申请全部应用后检查（`apply.py` 的 `_check_org`）；撤销部门自动结束它自己的上级边与关系，仍有下级则阻止。只能写入 ACTIVE 视图。新建部门表单可选“上级部门”：同一张草稿里生成 `department.create` + `department.set_parent` 两项（生效日 = 设立日期），所以二级、三级部门一次建成。
 - 部门变更项：`department.create/.revise/.change_lifecycle/.classify/.classification_close/.affiliate/.alias_add/.alias_close`；旧的 `.rename/.change_status` 只保留读取。分类字典（`classification_scheme/_code`）是配置，经 `/api/dictionary/*` 由有 `dictionary.maintain` 权限的人直接维护。
 - 部门组织变更（第一期，迁移 0012，`docs/部门组织变更-评估与分期.md`）：`department.reorganize` 记录事件（整体拆分 / 分设 / 吸收合并 / 合并新设）与参与部门的身份结论（存续 / 退出 / 新设），正式依据必填。**先定身份、不按名称推断**；新设部门须在同一申请里先 `department.create`（开始日 = 生效日）。退出的部门新版本为“被替代”（只能由事件产生），自动结束它的上级边、管理关系、分类、别名、主体归属；单元、下级部门、指向它的外部编码解释**不自动处置**，须在同一申请里逐项处理（`_check_units`、`_check_org`、`_check_ended_codes`），旧代码不直接改指向新部门。演变关系不是行政上下级。前端“组织变更”向导生成整张申请。
 - 拆分/合并（`service_unit.split` / `service_unit.merge`）：只填一个生效日 D，前身最后有效日 = D-1，后继自 D 起；后继新身份新代码、不继承前身版本历史、不自动迁移引用，可与前身不同部门/院区/运营主体。`service_unit_lineage` 一对前身—后继一行，只追加。
@@ -150,5 +150,5 @@ make check     # ruff + 前端类型检查
 
 ## 待确认
 
-- 认证与用户来源：目前是**开发期身份**——前端在请求头 `X-HDIP-User` 带用户名，后端只认 `app_user` 里启用的用户（种子：solo 维护+确认、maintainer、confirmer、viewer）。这不是安全措施。正式方案（本地账号或内网门户登录）确定后只替换 `api/src/hdip_api/core/auth.py` 与 `web/src/lib/session.ts`。
+- 认证与用户来源：目前是**开发期身份**——前端在请求头 `X-HDIP-User` 带用户名，后端只认 `app_user` 里启用的用户（种子：solo（显示名“张三”）维护+确认、maintainer、confirmer、viewer）。这不是安全措施。正式方案（本地账号或内网门户登录）确定后只替换 `api/src/hdip_api/core/auth.py` 与 `web/src/lib/session.ts`。
 - 主体性质目前是自由文本（旧仓库为“按登记证照确认”），是否改为选项待定。

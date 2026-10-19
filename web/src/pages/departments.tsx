@@ -848,6 +848,7 @@ export function DepartmentDetailPage() {
               detail: (v) => `${ESTABLISHMENT_FORM[v.establishment_form]}，${DEPARTMENT_LIFECYCLE[v.lifecycle as DepartmentLifecycle]}`,
             }}
             extra={departmentEvents(data)}
+            order="desc"
           />
         )}
 

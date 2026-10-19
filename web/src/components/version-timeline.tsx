@@ -1,5 +1,5 @@
 // 版本与事件时间线（按原型复刻）：左侧一条浅灰竖线，每个事件一个蓝色实心圆点；
-// 日期（灰）→ 事件名（粗）→ 一句说明（灰）。按时间从早到晚；查看日期之后的事件显示为灰色。
+// 日期（灰）→ 事件名（粗）→ 一句说明（灰）。默认按时间从早到晚，order="desc" 时最新在上（部门页）；查看日期之后的事件显示为灰色。
 // 事件由版本推出（设立、更名、修订属性、生命周期变更…），页面还可补充其他事件（分类赋值、隶属调整、组织变更）。
 import { Link } from 'react-router'
 import { useApp } from '@/lib/app-context'
@@ -72,8 +72,9 @@ export function useVersionEvents<V extends Version>(
   })
 }
 
-export function Timeline({ events, asOf }: { events: TimelineEvent[]; asOf: string }) {
+export function Timeline({ events, asOf, order = 'asc' }: { events: TimelineEvent[]; asOf: string; order?: 'asc' | 'desc' }) {
   const sorted = [...events].sort((a, b) => a.date.localeCompare(b.date))
+  if (order === 'desc') sorted.reverse()
   return (
     <div className="grid gap-5">
       <ol className="relative">
@@ -117,12 +118,14 @@ export function VersionTimeline<V extends Version>({
   asOf,
   first,
   extra = [],
+  order,
 }: {
   versions: V[]
   fields: (keyof V)[]
   asOf: string
   first?: { title: string; detail: (v: V) => string }
   extra?: TimelineEvent[]
+  order?: 'asc' | 'desc'
 }) {
   const { optionLabels } = useApp()
   const events = useVersionEvents(
@@ -138,5 +141,5 @@ export function VersionTimeline<V extends Version>({
           .join('，'),
     },
   )
-  return <Timeline events={[...events, ...extra]} asOf={asOf} />
+  return <Timeline events={[...events, ...extra]} asOf={asOf} order={order} />
 }
