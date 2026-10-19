@@ -12,6 +12,7 @@ import {
 } from '@/api/generated/changes/changes'
 import type { ChangeRequestWrite } from '@/api/generated/model'
 import { FormErrorsContext, isFieldErrors, type FieldErrors } from '@/components/forms/fields'
+import { fillNewCodes } from '@/components/forms/new-code'
 import { Callout } from '@/components/kit/callout'
 import { Button } from '@/components/ui/button'
 import {
@@ -43,8 +44,20 @@ export function useAddItem() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   return useMutation({
-    mutationFn: async ({ item, target, note }: { item: ChangeItemInput | ChangeItemInput[]; target: number | 'new'; note?: string }) => {
-      const items = Array.isArray(item) ? item : [item]
+    mutationFn: async ({
+      item,
+      target,
+      note,
+      requestKey,
+    }: {
+      item: ChangeItemInput | ChangeItemInput[]
+      target: number | 'new'
+      note?: string
+      /** 表单里有新建对象时，按它预留代码（同一次打开的表单不变，重试拿回同一批号） */
+      requestKey?: string
+    }) => {
+      const raw = Array.isArray(item) ? item : [item]
+      const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
       if (target === 'new') return createChangeRequest({ items, note: note ?? null })
       const cr = await getChangeRequest(target)
       return updateChangeRequest(target, { items: [...cr.items, ...items], note: cr.note })
@@ -99,6 +112,8 @@ export function ItemDialog({
     if (focusTick) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [focusTick])
   const add = useAddItem()
+  // 预留代码用的请求键：表单打开期间不变（弹窗只在打开时挂载，关闭即丢弃）
+  const [requestKey] = useState(() => crypto.randomUUID())
 
   const targetId = fixedTarget ?? (target === 'new' ? undefined : Number(target))
   const { data: draft } = useGetChangeRequest(targetId ?? 0, { query: { enabled: open && !!targetId } })
@@ -124,7 +139,7 @@ export function ItemDialog({
       setFormError('没有可保存的变更项')
       return
     }
-    add.mutate({ item: result, target: targetId ?? 'new', note }, { onSuccess: () => onOpenChange(false) })
+    add.mutate({ item: result, target: targetId ?? 'new', note, requestKey }, { onSuccess: () => onOpenChange(false) })
   }
 
   const error = formError ?? (add.error ? add.error.message : null)

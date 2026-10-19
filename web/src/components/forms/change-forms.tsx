@@ -8,6 +8,8 @@ import type {
 } from '@/api/generated/model'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
+import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
+import { newCode } from '@/components/forms/new-code'
 import { CampusSelect, InstitutionSelect, useStartFloor } from '@/components/forms/ref-selects'
 import {
   OPERATING_STATUS,
@@ -151,6 +153,7 @@ export function InstitutionReviseDialog({
 // ------------------------------------------------------------------ 院区
 const emptyCampus = {
   name: '',
+  pinyin: '',
   public_name: '',
   address: '',
   admin_division_code: '',
@@ -169,6 +172,7 @@ function toCampusForm(v?: CampusVersionOut): CampusForm {
 function campusValues(f: CampusForm) {
   return {
     name: f.name.trim(),
+    pinyin: orNull(f.pinyin),
     public_name: orNull(f.public_name),
     address: orNull(f.address),
     admin_division_code: orNull(f.admin_division_code),
@@ -177,11 +181,14 @@ function campusValues(f: CampusForm) {
   }
 }
 
-function CampusFields({ f, set }: { f: CampusForm; set: (f: CampusForm) => void }) {
+function CampusFields({ f, set, revise }: { f: CampusForm; set: (f: CampusForm) => void; revise?: boolean }) {
   const bind = (k: keyof CampusForm) => ({ value: f[k], onChange: (v: string) => set({ ...f, [k]: v }) })
   return (
     <>
-      <TextField label="名称" name="name" required {...bind('name')} />
+      <div className="grid grid-cols-[3fr_2fr] gap-3">
+        <TextField label="名称" name="name" required {...bind('name')} />
+        <PinyinField source={f.name} initialFollow={!revise} {...bind('pinyin')} />
+      </div>
       <TextField
         label="对外名称"
         hint="对外使用、与名称不同的叫法，如中心院区对外称“成都市中心医院”；相同则不填"
@@ -206,7 +213,6 @@ const statusOptions = (from = 0) =>
   OPERATING_STATUS_ORDER.slice(from).map((s) => ({ value: s, label: OPERATING_STATUS[s] }))
 
 export function CampusCreateDialog(props: DialogProps) {
-  const [code, setCode] = useState('')
   const [f, setF] = useState(toCampusForm())
   const [status, setStatus] = useState<CampusCreateOperatingStatus>('PLANNING')
   const [validFrom, setValidFrom] = useEffectiveDate()
@@ -218,12 +224,11 @@ export function CampusCreateDialog(props: DialogProps) {
       build={() =>
         requireFields([
           ['name', !!f.name.trim(), '请填写名称'],
-          ['code', !!code.trim(), '请填写院区代码'],
-          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
+          pinyinCheck(f.pinyin),
           ['valid_from', !!validFrom, '请选择生效日期'],
         ]) ?? {
           kind: 'campus.create',
-          code: code.trim(),
+          code: newCode('campus'),
           valid_from: validFrom,
           operating_status: status,
           fields: campusValues(f),
@@ -231,7 +236,7 @@ export function CampusCreateDialog(props: DialogProps) {
       }
     >
       <CampusFields f={f} set={setF} />
-      <TextField label="院区代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
+      <AutoCodeField type="campus" label="院区代码" />
       <SelectField
         label="初始运营状态"
         required
@@ -267,6 +272,7 @@ export function CampusReviseDialog({
       build={() => {
         const missing = requireFields([
           ['name', !!f.name.trim(), '名称不能为空'],
+          pinyinCheck(f.pinyin),
           ['effective_date', !!day, '请选择生效日期'],
         ])
         if (missing) return missing
@@ -275,7 +281,7 @@ export function CampusReviseDialog({
         return { kind: 'campus.revise', code, effective_date: day, changes }
       }}
     >
-      <CampusFields f={f} set={setF} />
+      <CampusFields f={f} set={setF} revise />
       <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )

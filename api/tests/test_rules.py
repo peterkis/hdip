@@ -436,3 +436,88 @@ def test_relation_pair_exclusion_in_database(api, owner_engine):
     )
     with owner_engine.connect() as c, pytest.raises(DBAPIError, match="pair_excl"):
         c.execute(sql)
+
+
+# -------------------------------------------------------------- 代码由系统分配、拼音码（迁移 0015）
+def _reserve(api, object_type, count=1, key="key-for-test-0001"):
+    r = api.post(
+        "/api/code-reservations",
+        {"object_type": object_type, "request_key": key, "count": count},
+    )
+    assert r.status_code == 200, r.text
+    return r.json()["codes"]
+
+
+def test_codes_follow_rules_and_retry_returns_same_codes(api):
+    assert _reserve(api, "campus") == ["C001"]
+    assert _reserve(api, "department", 2) == ["D000001", "D000002"]
+    # 同一请求键重试：已发的原样返回，只给不足的槽位发新号
+    assert _reserve(api, "department", 3) == ["D000001", "D000002", "D000003"]
+    assert _reserve(api, "department", 1, key="another-key-0002") == ["D000004"]
+    assert _reserve(api, "service_unit") == ["SU000001"]
+    # 只读用户不能取号
+    r = api.as_("viewer").post(
+        "/api/code-reservations",
+        {"object_type": "campus", "request_key": "key-for-test-0003", "count": 1},
+    )
+    assert r.status_code == 403
+
+
+def test_create_only_with_issued_code_of_same_type(api):
+    from factories import dept_create
+
+    strict = api.strict()
+    cr = strict.draft(dept_create(code="D123456", name="手填部门"))
+    msg = _problem(strict.submit(cr["id"]))
+    assert "不是系统分配的代码" in msg
+    strict.cancel(cr["id"])
+    # 院区的号不能拿来建部门
+    [c] = _reserve(api, "campus")
+    cr = strict.draft(dept_create(code=c, name="借号部门"))
+    assert "不是系统分配的代码" in _problem(strict.submit(cr["id"]))
+    strict.cancel(cr["id"])
+    # 大小写等价：小写也认，存为大写
+    [d] = _reserve(api, "department", key="key-for-test-0004")
+    cr = strict.draft(dept_create(code=d.lower(), name="心血管内科"))
+    assert cr["items"][0]["code"] == d
+    assert strict.submit(cr["id"]).status_code == 200
+    assert strict.confirm(cr["id"]).status_code == 200
+
+
+def test_issued_code_held_by_one_open_request(api):
+    from factories import dept_create
+
+    strict = api.strict()
+    [d] = _reserve(api, "department")
+    first = strict.draft(dept_create(code=d, name="心血管内科"))
+    r = strict.post("/api/change-requests", {"items": [dept_create(code=d, name="心内科")]})
+    assert r.status_code == 422 and f"申请 #{first['id']}" in r.json()["message"]
+    # 撤销后可以继续办理：复制为新草稿沿用原代码；再复制一份则拒绝（避免并行重复办理）
+    strict.cancel(first["id"])
+    copy = strict.post(f"/api/change-requests/{first['id']}/copy")
+    assert copy.status_code == 200 and copy.json()["items"][0]["code"] == d
+    again = strict.post(f"/api/change-requests/{first['id']}/copy")
+    assert again.status_code == 422 and f"申请 #{copy.json()['id']}" in again.json()["message"]
+
+
+def test_pinyin_generated_editable_and_searchable(api):
+    from factories import dept_create
+
+    api.apply(
+        dept_create(code="XNK", name="心血管内科"),
+        dept_create(code="YH", name="银行业务科", pinyin="yhywk"),
+    )
+    rows = {r["code"]: r["version"]["pinyin"] for r in api.get("/api/departments").json()}
+    assert rows["XNK"] == "XXGNK"  # 未给出：按名称生成
+    assert rows["YH"] == "YHYWK"  # 给出：大小写等价，存大写
+    found = api.get("/api/departments", params={"q": "xxg"}).json()
+    assert [r["code"] for r in found] == ["XNK"]
+    # 改名未给拼音码：按新名称重新生成；拼音码只能是字母数字
+    api.apply(
+        {"kind": "department.revise", "code": "XNK", "effective_date": "2026-01-01",
+         "changes": {"name": "心内科"}}
+    )  # fmt: skip
+    rows = {r["code"]: r["version"]["pinyin"] for r in api.get("/api/departments").json()}
+    assert rows["XNK"] == "XNK"
+    r = api.post("/api/change-requests", {"items": [dept_create(code="P1", pinyin="X-1")]})
+    assert r.status_code == 422

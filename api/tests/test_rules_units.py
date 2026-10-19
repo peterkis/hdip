@@ -119,6 +119,7 @@ def test_suspending_department_blocked_by_units_then_allowed_after_moving_them(a
     # 暂停期间不能新建挂在它下面的单元；恢复后又可以
     cr = api.draft(unit_create(code="U2", valid_from="2027-02-01"))
     assert "暂停履职" in api.submit(cr["id"]).json()["message"]
+    api.cancel(cr["id"])
     api.apply(
         {"kind": "department.change_lifecycle", "code": "XNK", "effective_date": "2027-03-01",
          "lifecycle": "ACTIVE"}
@@ -247,6 +248,7 @@ def test_cannot_split_retired_unit_or_on_its_start_day(api):
     api.apply(dept_create(), unit_create(code="U1"), unit_create(code="U2"))
     cr = api.draft(split("U1", "2026-11-01", successor("A", "甲"), successor("B", "乙")))
     assert "生效日须晚于" in api.submit(cr["id"]).json()["message"]
+    api.cancel(cr["id"])
     api.apply({"kind": "service_unit.retire", "code": "U2", "valid_to": "2026-11-30"})
     cr = api.draft(split("U2", "2027-01-01", successor("A", "甲"), successor("B", "乙")))
     assert "永久退出" in api.submit(cr["id"]).json()["message"]

@@ -9,7 +9,8 @@ import { createChangeRequest, updateChangeRequest } from '@/api/generated/change
 import { getGetDepartmentDependenciesQueryOptions, useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
 import type { DepartmentDependencies } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
-import { CODE_HINT, CODE_RE } from '@/components/forms/change-forms'
+import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
+import { fillNewCodes, isNewCode, newCode } from '@/components/forms/new-code'
 import { FormErrorsContext, requireFields, SelectField, TextField, type Option } from '@/components/forms/fields'
 import type { ChangeItemInput } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
@@ -41,7 +42,9 @@ const MAIN_SCHEME = 'DEPT_MAIN_CLASS'
 
 interface NewDept {
   name: string
+  /** 新设部门的代码：保存时由系统分配（先用占位符，见 forms/new-code.ts）；回到向导时是已分配的代码 */
   code: string
+  pinyin: string
   scope: string
   parent: string
   mainClass: string
@@ -87,6 +90,7 @@ function fromDraft(draft: ReorgDraft | undefined, source: ReorgSource) {
       : ev.results.map((r) => ({
           name: String(created.get(r.code)?.name ?? ''),
           code: r.code,
+          pinyin: String(created.get(r.code)?.pinyin ?? ''),
           scope: r.scope_note ?? '',
           parent: parentOf.has(r.code) ? (parentOf.get(r.code) ?? '') : '',
           mainClass: classOf.get(r.code) ?? '',
@@ -140,7 +144,10 @@ export function DepartmentReorgWizard({
   const [rename, setRename] = useState(init?.rename ?? '')
   const [target, setTarget] = useState(init?.target ?? '')
   const [others, setOthers] = useState<string[]>(init?.others ?? [''])
-  const blank = (): NewDept => ({ name: '', code: '', scope: '', parent: source.parentCode ?? '', mainClass: source.mainClass ?? '' })
+  // 每个新设部门一个占位代码槽位；保存时整张草稿一起换成系统分配的代码，重试拿回同一批号
+  const [requestKey] = useState(() => crypto.randomUUID())
+  const slot = useRef(0)
+  const blank = (): NewDept => ({ name: '', code: newCode('department', slot.current++), pinyin: '', scope: '', parent: source.parentCode ?? '', mainClass: source.mainClass ?? '' })
   const [news, setNews] = useState<NewDept[]>(init?.news.length ? init.news : [blank(), blank()])
   const [unitTo, setUnitTo] = useState<Record<string, string>>(init?.unitTo ?? {})
   const [childTo, setChildTo] = useState<Record<string, string>>(init?.childTo ?? {})
@@ -196,7 +203,6 @@ export function DepartmentReorgWizard({
   function check(): Record<string, string> | null {
     if (step === 0) return type ? null : { type: '请选择这次组织变更的类型' }
     if (step === 1) {
-      const codes = newList.map((n) => n.code.trim())
       const r = requireFields([
         ['day', !!day, '请选择生效日'],
         ['basis', !!basis.trim(), '请填写正式依据（文件号或决定说明）'],
@@ -207,9 +213,7 @@ export function DepartmentReorgWizard({
         ...(hasNew
           ? newList.flatMap((n, i): [string, boolean, string][] => [
               [`new.${i}.name`, !!n.name.trim(), '请填写新部门名称'],
-              [`new.${i}.code`, CODE_RE.test(n.code.trim()), '请填写管理编码（字母、数字、点、下划线、短横线）'],
-              [`new.${i}.code`, codes.indexOf(n.code.trim()) === i, '新部门的编码不能重复'],
-              [`new.${i}.code`, !depts.some((d) => d.code === n.code.trim()), '这个编码已被使用，代码永不复用'],
+              pinyinCheck(n.pinyin, `new.${i}.pinyin`),
             ])
           : []),
       ])
@@ -246,8 +250,9 @@ export function DepartmentReorgWizard({
       for (const n of newList)
         items.push({
           kind: 'department.create',
-          code: n.code.trim(),
+          code: n.code,
           name: n.name.trim(),
+          pinyin: n.pinyin || null,
           valid_from: day,
           lifecycle: 'ACTIVE',
           institution_code: source.institutionCode,
@@ -292,12 +297,13 @@ export function DepartmentReorgWizard({
   }
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
+      const items = await fillNewCodes(buildItems(), requestKey)
       // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
       return draft
-        ? updateChangeRequest(draft.id, { items: buildItems(), note: draft.note ?? note })
-        : createChangeRequest({ items: buildItems(), note })
+        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note })
+        : createChangeRequest({ items, note })
     },
     onSuccess: async (cr) => {
       notify.success(draft ? `草稿 #${cr.id} 已按向导内容更新，请核对后提交` : `已生成草稿 #${cr.id}，请核对后提交`)
@@ -435,8 +441,9 @@ export function DepartmentReorgWizard({
                       </legend>
                       <div className="grid grid-cols-2 gap-3">
                         <TextField label="名称" name={`new.${i}.name`} required value={n.name} onChange={(name) => setNew(i, { name })} />
-                        <TextField label="管理编码" name={`new.${i}.code`} required value={n.code} onChange={(code) => setNew(i, { code })} hint={CODE_HINT} />
+                        <PinyinField source={n.name} name={`new.${i}.pinyin`} value={n.pinyin} onChange={(pinyin) => setNew(i, { pinyin })} />
                       </div>
+                      <AutoCodeField type="department" label="管理编码" code={n.code} />
                       <TextField label="承接的职责" value={n.scope} onChange={(scope) => setNew(i, { scope })} placeholder="选填，如：高新院区住院" />
                       <div className="grid grid-cols-2 gap-3">
                         <DepartmentSelect
@@ -552,7 +559,7 @@ export function DepartmentReorgWizard({
                 sources={sourceCodes.map((c) => ({ code: c, name: deptName(c) }))}
                 results={
                   hasNew
-                    ? newList.map((n) => ({ code: n.code.trim(), name: n.name.trim() }))
+                    ? newList.map((n) => ({ code: isNewCode(n.code) ? '待分配' : n.code, name: n.name.trim() }))
                     : [{ code: target, name: deptName(target) }]
                 }
                 continuing={type === 'SPLIT_OFF' ? { code: source.code, name: rename.trim() || source.name } : null}

@@ -8,7 +8,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通，剧本 18–20（部门组织变更）有后端测试（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`（含组织变更与批量操作的起点数据，`make walk-db-minimal` 只建最小起点）、`make api-walk`、`make web-walk`；重建前先停掉 api-walk）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），全部业务页面已按新规范迁移（主体、院区、部门、服务单元、变更申请、分类方案、编码映射台账），并适配手机宽度（375px 无横向溢出）。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树（连线、可折叠）、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。主体详情有主体—院区运营关系图（主体列表不再放图）；部门详情“隶属与管理关系”有关系图；各详情页的版本时间线为竖向进度式；变更申请列表合并同类变更项计数、详情分批显示。批量操作：编码映射台账“批量裁决”（按源名称给候选，人勾选确认）、部门列表勾选后批量设置主分类 / 行政上级——都只是生成一张多项草稿。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库已导入并确认（#28–#30），部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（BY，运行）、高新院区（GX，筹建）、中心院区（ZX，筹建）。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–17 已在浏览器里走通，剧本 18–20（部门组织变更）有后端测试（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`（含组织变更与批量操作的起点数据，`make walk-db-minimal` 只建最小起点）、`make api-walk`、`make web-walk`；重建前先停掉 api-walk）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），全部业务页面已按新规范迁移（主体、院区、部门、服务单元、变更申请、分类方案、编码映射台账），并适配手机宽度（375px 无横向溢出）。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树（连线、可折叠）、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。主体详情有主体—院区运营关系图（主体列表不再放图）；部门详情“隶属与管理关系”有关系图；各详情页的版本时间线为竖向进度式；变更申请列表合并同类变更项计数、详情分批显示。批量操作：编码映射台账“批量裁决”（按源名称给候选，人勾选确认）、部门列表勾选后批量设置主分类 / 行政上级——都只是生成一张多项草稿。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库于 2026-10-19 按新代码规则重建（迁移 0015）：起点（主体、三院区与运营关系）与部门树在一张申请（#1）里，确认后再运行一次脚本生成服务单元与 HIS 申请；部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（C001，运行）、高新院区（C002，筹建）、中心院区（C003，筹建）。走查库同样重建，脚本里的 BY、XNK、SU-101 只是临时代码，写入时换成系统代码（`make walk-db` 末尾打印对照）。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - **文档与改动同步（Peter 2026-10-18 要求）**：迁移、表结构、接口、导出数据集或业务规则有任何改动，**在同一次提交里**同步：`make db-doc`（结构参考）、`docs/database/README.md`（全景表、写入表、读取与导出、迁移史、相应章节）、本文件的规则速查与文档索引，以及相关业务文档（设计文档、实施计划、评估与分期、走查记录）。新定的规则当场写进对应文档，不留到以后。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
@@ -16,7 +16,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 ## 三条硬约束（做错无法补救）
 
-1. **身份与代码**：id 永不复用；code 全局唯一且永久绑定，对象退出后也不释放、不复用。
+1. **身份与代码**：id 永不复用；code 全局唯一且永久绑定，对象退出后也不释放、不复用。院区、部门、服务单元的 code 由系统分配，不让人手填（见规则速查“代码分配”）。
 2. **不覆盖历史**：任何改动都产生新版本行，旧版本保留；业务表**无物理删除**（应用账号 `hdip_app` 没有 DELETE 权限，迁移里也不要写依赖删除的逻辑）。
 3. **语义边界**：院区 ≠ 法人；服务单元 = 部门 × 院区 × 运营主体 × 期间，≠ 病区/护理单元/地点。服务方向、接诊形式、换房间都**不**产生新单元。
 
@@ -44,6 +44,8 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 ## 领域规则速查
 
+- **代码分配（迁移 0015）**：院区 `C` + 3 位、部门 `D` + 6 位、服务单元 `SU` + 6 位数字，大小写等价（`Code` 类型自动转大写）。表单点“保存到申请”时经 `POST /api/code-reservations` 预留（同一表单同一请求键，重试拿回同一个号；号码不回收），变更项里先写占位符 `newCode()`（`forms/new-code.ts`），保存时整体替换。新建院区 / 部门 / 服务单元（含拆分合并后继、组织变更新设部门）只能用已预留的同类型代码（`apply._require_issued`）；同一代码同时只能由一张进行中的申请用来新建（`workflow._check_code_holders`）。主体代码仍由人填。测试客户端自动为新建代码登记预留（`api.strict()` 关掉）。
+- **拼音码**：院区 / 部门 / 服务单元版本的 `pinyin`，名称的拼音首字母（大写字母数字），随名称进版本、只用于检索、不唯一。表单按名称生成（`lib/pinyin.ts`，pinyin-pro）、可改，多音字逐个提示核对；未给出时后端生成（pypinyin），改名未给时按新名称重新生成。
 - 统一称**“部门”**，不用“科室”。服务单元必须挂所属部门；单元只引用部门 id，不复制部门名称。
 - 部门（D1 已实施，迁移 0006）：`department` 只留身份；属性在 `department_version`。
   - 部门属性版本：名称、简称、职责说明、设立形式（常设/临时+期限）、组织生命周期、行政级别（选填）、承担职责（自由标签）、依据文本（选填；维持决策 3，不做依据对象、不校验）。
@@ -100,8 +102,8 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
     core/           配置（HDIP_ 前缀环境变量）、数据库连接、错误、开发期身份
     models.py       ORM 映射（表结构以迁移为准）
     schemas/        items.py 变更项；read.py 查询与申请的响应
-    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出
-    routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口
+    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出；codes.py 代码分配与拼音码
+    routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口；codes.py 只做代码预留（不改主数据）
   scripts/export_openapi.py   导出 web/openapi.json
   scripts/export_schema_doc.py  从数据库生成 docs/database/schema-reference.md（make db-doc）
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
@@ -116,9 +118,9 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/components/kit/         自建的 Notion 风格组件：Icon（统一图标）、Tag、Callout、PropertyList、Steps（多步骤进度节点）、section（详情页区块 Section、轻量操作 InlineAction、申请链接 ChangeLink）、database（列表页的数据库视图）、toaster（轻提示）、date-input（日期录入，统一 yyyy-mm-dd，不直接用 `<input type="date">`）
   src/components/             图示：flow-kit.tsx（关系图共用的卡片、带标签直角折线、自动适配）、org-flow.tsx（部门隶属与管理关系图）、evolve-flow.tsx（拆分 / 合并 / 部门沿革，React Flow）、operator-flow.tsx（主体—院区运营关系图：直角折线、黑色端点，运行中 = 流动虚线，其他状态 = 实线 + 标签）、version-timeline.tsx（版本与事件时间线：按原型的竖线 + 蓝点 + 日期 / 事件名 / 说明）；细节见 docs/design/ui-tokens.md 第 8.1 节
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
-  src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象
+  src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象，new-code.ts 新建对象的代码占位与预留，code-fields.tsx 代码（只读）与拼音码字段
   src/pages/                  各页面（均按新规范：PageHeader + PropertyList + kit/section 的 Section，列表用 kit/database）；design.tsx 为 /design 视觉规范页
-  src/lib/                    码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
+  src/lib/                    拼音码（pinyin.ts）、码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档；docs/database/ 数据库设计；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）
 ```
 

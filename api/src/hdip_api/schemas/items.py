@@ -9,9 +9,16 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, TypeAdapter, model_validator
 
+# 院内代码大小写等价，一律存大写（d000001 = D000001）
 Code = Annotated[
     str,
-    StringConstraints(strip_whitespace=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"),
+    StringConstraints(
+        strip_whitespace=True, to_upper=True, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+    ),
+]
+# 拼音码：名称的拼音首字母，大写字母与数字；检索用，不唯一。新建时不填由后端按名称生成
+Pinyin = Annotated[
+    str, StringConstraints(strip_whitespace=True, to_upper=True, pattern=r"^[A-Za-z0-9]{1,64}$")
 ]
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
@@ -93,6 +100,7 @@ class CampusFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: Name
+    pinyin: Pinyin | None = None
     # 节点角色已停用（与院区名称重复），只为读取旧申请保留；对外叫法写 public_name
     node_role: Text | None = None
     public_name: Text | None = None
@@ -103,9 +111,10 @@ class CampusFields(BaseModel):
 
 
 class CampusPatch(_Patch):
-    """修订资料，不含运营状态（运营状态走 campus.change_status）。"""
+    """修订资料，不含运营状态（运营状态走 campus.change_status）。改名未给拼音码时按新名称生成。"""
 
     name: Name | None = None
+    pinyin: Pinyin | None = None
     node_role: Text | None = None
     public_name: Text | None = None
     address: Text | None = None
@@ -183,6 +192,7 @@ class DepartmentCreate(_Item):
     kind: Literal["department.create"]
     code: Code
     name: Name
+    pinyin: Pinyin | None = None
     # 生效日；旧申请里没有这一项，空表示确认当天
     valid_from: date | None = None
     short_name: Text | None = None
@@ -203,9 +213,10 @@ class DepartmentCreate(_Item):
 
 
 class DepartmentPatch(_Patch):
-    """只写要改的字段；写 null 表示清空。名称、设立形式不能清空。"""
+    """只写要改的字段；写 null 表示清空。名称、设立形式不能清空。改名未给拼音码时按新名称生成。"""
 
     name: Name | None = None
+    pinyin: Pinyin | None = None
     short_name: Text | None = None
     description: Text | None = None
     establishment_form: EstablishmentForm | None = None
@@ -401,6 +412,7 @@ class ServiceUnitFields(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: Name
+    pinyin: Pinyin | None = None
     department_code: Code
     campus_code: Code
     institution_code: Code
@@ -417,9 +429,10 @@ class ServiceUnitCreate(_Item):
 
 
 class ServiceUnitPatch(_Patch):
-    """修订只改名称、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"""
+    """修订只改名称（及拼音码）、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"""
 
     name: Name | None = None
+    pinyin: Pinyin | None = None
     phone: Text | None = None
     scope_note: Text | None = None
 

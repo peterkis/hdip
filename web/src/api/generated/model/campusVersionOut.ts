@@ -14,6 +14,7 @@ export interface CampusVersionOut {
   recorded_at: string;
   recorded_by: UserRef;
   name: string;
+  pinyin?: string | null;
   node_role: string | null;
   public_name: string | null;
   address: string | null;

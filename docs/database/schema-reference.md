@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0014**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0015**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)
+- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -215,6 +215,7 @@
 | `actual_open_date` | date |  |  |  |
 | `operating_status` | text | 是 |  |  |
 | `public_name` | text |  |  |  |
+| `pinyin` | text |  |  |  |
 
 约束：
 
@@ -223,6 +224,7 @@
 - `campus_version_no_overlap`（排他）：`EXCLUDE USING gist (campus_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `campus_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
 - `campus_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+- `campus_version_pinyin_check`（检查）：`CHECK ((pinyin ~ '^[A-Z0-9]{1,64}$'::text))`
 - `campus_version_public_name_check`（检查）：`CHECK (((public_name IS NULL) OR (btrim(public_name) <> ''::text)))`
 - `campus_version_status_check`（检查）：`CHECK ((operating_status = ANY (ARRAY['PLANNING'::text, 'TRIAL_RUNNING'::text, 'RUNNING'::text, 'SUSPENDED'::text])))`
 
@@ -313,6 +315,7 @@
 | `admin_grade` | text |  |  |  |
 | `duties` | text[] | 是 | '{}'::text[] |  |
 | `basis_note` | text |  |  |  |
+| `pinyin` | text |  |  |  |
 
 约束：
 
@@ -323,6 +326,7 @@
 - `department_version_lifecycle_check`（检查）：`CHECK ((lifecycle = ANY (ARRAY['PREPARING'::text, 'ACTIVE'::text, 'SUSPENDED'::text, 'REVOKED'::text, 'SUPERSEDED'::text])))`
 - `department_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
 - `department_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+- `department_version_pinyin_check`（检查）：`CHECK ((pinyin ~ '^[A-Z0-9]{1,64}$'::text))`
 - `department_version_temporary_check`（检查）：`CHECK (((establishment_form = 'TEMPORARY'::text) = (temporary_until IS NOT NULL)))`
 
 触发器：
@@ -617,6 +621,7 @@
 | `status` | text | 是 | 'ACTIVE'::text |  |
 | `phone` | text |  |  |  |
 | `scope_note` | text |  |  |  |
+| `pinyin` | text |  |  |  |
 
 约束：
 
@@ -625,6 +630,7 @@
 - `service_unit_version_no_overlap`（排他）：`EXCLUDE USING gist (service_unit_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
 - `service_unit_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
 - `service_unit_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+- `service_unit_version_pinyin_check`（检查）：`CHECK ((pinyin ~ '^[A-Z0-9]{1,64}$'::text))`
 - `service_unit_version_status_check`（检查）：`CHECK ((status = ANY (ARRAY['ACTIVE'::text, 'SUSPENDED'::text])))`
 
 索引：
@@ -821,6 +827,31 @@
 
 ## 其他（未登记说明）
 
+### code_reservation
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `object_type` | text | 是 |  |  |
+| `code` | text | 是 |  |  |
+| `request_key` | text | 是 |  |  |
+| `slot` | integer | 是 |  |  |
+| `reserved_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `reserved_by` | bigint | 是 |  | → `app_user` |
+
+约束：
+
+- `code_reservation_pkey`（主键）：`PRIMARY KEY (id)`
+- `code_reservation_code_uniq`（唯一）：`UNIQUE (code)`
+- `code_reservation_request_uniq`（唯一）：`UNIQUE (request_key, object_type, slot)`
+- `code_reservation_key_check`（检查）：`CHECK (((length(request_key) >= 8) AND (length(request_key) <= 100)))`
+- `code_reservation_slot_check`（检查）：`CHECK ((slot >= 0))`
+- `code_reservation_type_check`（检查）：`CHECK ((object_type = ANY (ARRAY['campus'::text, 'department'::text, 'service_unit'::text])))`
+
+触发器：
+
+- `code_reservation_guard`：`CREATE TRIGGER code_reservation_guard BEFORE UPDATE ON public.code_reservation FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ### department_change_event
 
 | 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
@@ -937,6 +968,7 @@ $function$
 | `classification_code` | INSERT、SELECT、UPDATE |
 | `classification_scheme` | INSERT、SELECT、UPDATE |
 | `code_namespace` | INSERT、SELECT、UPDATE |
+| `code_reservation` | INSERT、SELECT、UPDATE |
 | `department` | INSERT、SELECT、UPDATE |
 | `department_alias` | INSERT、SELECT、UPDATE |
 | `department_change_event` | INSERT、SELECT、UPDATE |

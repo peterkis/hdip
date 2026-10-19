@@ -52,6 +52,8 @@ class InstitutionVersionOut(VersionMeta):
 
 class CampusVersionOut(VersionMeta):
     name: str
+    pinyin: str | None = None
+    """名称的拼音首字母，检索用。"""
     node_role: str | None
     public_name: str | None
     address: str | None
@@ -123,6 +125,8 @@ class CampusDetail(BaseModel):
 # ------------------------------------------------------------------ 部门与服务单元
 class ServiceUnitVersionOut(VersionMeta):
     name: str
+    pinyin: str | None = None
+    """名称的拼音首字母，检索用。"""
     department_id: int
     department_code: str
     department_name: str
@@ -187,6 +191,8 @@ class ServiceUnitDetail(BaseModel):
 
 class DepartmentVersionOut(VersionMeta):
     name: str
+    pinyin: str | None = None
+    """名称的拼音首字母，检索用。"""
     short_name: str | None
     description: str | None
     establishment_form: Literal["STANDING", "TEMPORARY"]

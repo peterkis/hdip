@@ -11,6 +11,7 @@ export interface CampusFields {
      * @maxLength 200
      */
   name: string;
+  pinyin?: string | null;
   node_role?: string | null;
   public_name?: string | null;
   address?: string | null;

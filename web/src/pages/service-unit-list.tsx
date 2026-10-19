@@ -110,7 +110,10 @@ export function ServiceUnitsPage() {
       (u) =>
         (!f.type || u.unit_type === f.type) &&
         (!f.status || u.version.status === f.status) &&
-        (!q || u.code.toLowerCase().includes(q) || u.version.name.toLowerCase().includes(q)),
+        (!q ||
+          u.code.toLowerCase().includes(q) ||
+          u.version.name.toLowerCase().includes(q) ||
+          (u.version.pinyin ?? '').toLowerCase().includes(q)),
     )
   }, [units, f.type, f.status, query])
 
@@ -147,7 +150,7 @@ export function ServiceUnitsPage() {
         }
       />
 
-      <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="搜索名称或代码" />}>
+      <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="名称、拼音码或代码" />}>
         <FilterPill
           label="院区"
           icon={Building03Icon}

@@ -181,7 +181,7 @@ export function DepartmentsPage() {
 
       {!q && <DeptStats rows={all} codes={mainCodes} onPick={(c) => set('class', c)} active={cls} />}
 
-      <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="名称、曾用名、别名或代码" />}>
+      <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="名称、拼音码、别名或代码" />}>
         <FilterPill
           label="主分类"
           icon={Tag01Icon}
@@ -619,6 +619,7 @@ export function DepartmentDetailPage() {
                 items={[
                   { label: '正式名称', value: shown.name },
                   { label: '简称', value: shown.short_name },
+                  { label: '拼音码', value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
                   {
                     label: '曾用名',
                     value: formerNames.length ? formerNames.map((v) => `${v.name}（${v.valid_from} → ${v.valid_to ?? '长期'}）`).join('；') : null,

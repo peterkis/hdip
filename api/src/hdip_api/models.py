@@ -125,6 +125,7 @@ class CampusVersion(_Version, Base):
 
     campus_id: Mapped[int] = mapped_column(ForeignKey("campus.id"))
     name: Mapped[str] = mapped_column(Text)
+    pinyin: Mapped[str | None] = mapped_column(Text)  # 名称的拼音首字母，检索用
     node_role: Mapped[str | None] = mapped_column(Text)  # 已停用，只读历史
     public_name: Mapped[str | None] = mapped_column(Text)
     address: Mapped[str | None] = mapped_column(Text)
@@ -135,6 +136,7 @@ class CampusVersion(_Version, Base):
 
     CONTENT = (
         "name",
+        "pinyin",
         "node_role",
         "public_name",
         "address",
@@ -177,6 +179,7 @@ class DepartmentVersion(_Version, Base):
 
     department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
     name: Mapped[str] = mapped_column(Text)
+    pinyin: Mapped[str | None] = mapped_column(Text)
     short_name: Mapped[str | None] = mapped_column(Text)
     description: Mapped[str | None] = mapped_column(Text)
     establishment_form: Mapped[str] = mapped_column(Text)
@@ -188,6 +191,7 @@ class DepartmentVersion(_Version, Base):
 
     CONTENT = (
         "name",
+        "pinyin",
         "short_name",
         "description",
         "establishment_form",
@@ -325,6 +329,7 @@ class ServiceUnitVersion(_Version, Base):
 
     service_unit_id: Mapped[int] = mapped_column(ForeignKey("service_unit.id"))
     name: Mapped[str] = mapped_column(Text)
+    pinyin: Mapped[str | None] = mapped_column(Text)
     department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
     campus_id: Mapped[int] = mapped_column(ForeignKey("campus.id"))
     institution_id: Mapped[int] = mapped_column(ForeignKey("institution.id"))
@@ -334,6 +339,7 @@ class ServiceUnitVersion(_Version, Base):
 
     CONTENT = (
         "name",
+        "pinyin",
         "department_id",
         "campus_id",
         "institution_id",
@@ -461,3 +467,18 @@ class ExternalCodeAssignment(_Period, Base):
     unmodeled_type: Mapped[str | None] = mapped_column(Text)
     campus_id: Mapped[int | None] = mapped_column(ForeignKey("campus.id"))
     evidence_note: Mapped[str | None] = mapped_column(Text)
+
+
+class CodeReservation(Base):
+    """系统发出的院区 / 部门 / 服务单元代码；只追加。请求键 + 槽位唯一，重试拿回同一个号。"""
+
+    __tablename__ = "code_reservation"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    object_type: Mapped[str] = mapped_column(Text)
+    code: Mapped[str] = mapped_column(Text)
+    request_key: Mapped[str] = mapped_column(Text)
+    slot: Mapped[int] = mapped_column(Integer)
+    reserved_at: Mapped[datetime] = mapped_column(server_default=NOW)
+    reserved_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))

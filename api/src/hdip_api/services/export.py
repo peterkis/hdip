@@ -88,6 +88,7 @@ def _service_units(s: Session, day: date) -> Iterable[dict]:
             "version_no": v.version_no,
             "valid_from": v.valid_from,
             "valid_to": v.valid_to,
+            "unit_pinyin": v.pinyin,
         }
 
 
@@ -118,6 +119,7 @@ def _departments(s: Session, day: date) -> Iterable[dict]:
             "admin_level": d.level,
             "admin_parent_code": d.parent.code if d.parent else None,
             "admin_parent_name": d.parent.name if d.parent else None,
+            "department_pinyin": v.pinyin,
         }
 
 
@@ -182,6 +184,7 @@ def _campuses(s: Session, day: date) -> Iterable[dict]:
             "version_no": v.version_no,
             "valid_from": v.valid_from,
             "valid_to": v.valid_to,
+            "campus_pinyin": v.pinyin,
         }
 
 

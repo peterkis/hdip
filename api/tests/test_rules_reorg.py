@@ -95,6 +95,7 @@ def test_planned_unit_in_reorganization(api):
     p = next(x for x in r.json()["problems"] if x["item_index"] == 4)
     assert "不能在开始之前退出" in p["message"] and "2030-02-28" in p["hint"]
     assert [f["tone"] for f in p["facts"]] == ["info", "bad"]
+    api.cancel(cr["id"])
 
     api.apply(
         dept_create(code="B", name="乙科", valid_from=day),

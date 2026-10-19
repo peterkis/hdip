@@ -7,10 +7,11 @@
 import type { DepartmentPatchEstablishmentForm } from './departmentPatchEstablishmentForm';
 
 /**
- * 只写要改的字段；写 null 表示清空。名称、设立形式不能清空。
+ * 只写要改的字段；写 null 表示清空。名称、设立形式不能清空。改名未给拼音码时按新名称生成。
  */
 export interface DepartmentPatch {
   name?: string | null;
+  pinyin?: string | null;
   short_name?: string | null;
   description?: string | null;
   establishment_form?: DepartmentPatchEstablishmentForm;

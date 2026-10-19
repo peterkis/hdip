@@ -16,6 +16,7 @@ export interface DepartmentVersionOut {
   recorded_at: string;
   recorded_by: UserRef;
   name: string;
+  pinyin?: string | null;
   short_name: string | null;
   description: string | null;
   establishment_form: DepartmentVersionOutEstablishmentForm;

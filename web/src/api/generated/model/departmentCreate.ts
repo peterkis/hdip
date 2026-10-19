@@ -16,6 +16,7 @@ export interface DepartmentCreate {
      * @maxLength 200
      */
   name: string;
+  pinyin?: string | null;
   valid_from?: string | null;
   short_name?: string | null;
   description?: string | null;

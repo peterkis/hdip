@@ -4,7 +4,9 @@ import { useContext, useState } from 'react'
 import { useListCampuses, useListDepartments, useListServiceUnits } from '@/api/generated/master/master'
 import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
-import { CODE_HINT, CODE_RE, useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
+import { useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
+import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
+import { newCode } from '@/components/forms/new-code'
 import { diffPatch, FormErrorsContext, orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
 import { ItemDialog, useDraftItems } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect, useStartFloor } from '@/components/forms/ref-selects'
@@ -23,7 +25,7 @@ export function UnitCreateDialog({
   const [dept, setDept] = useState(departmentCode)
   const [campus, setCampus] = useState(campusCode)
   const [inst, setInst] = useState('')
-  const [code, setCode] = useState('')
+  const [pinyin, setPinyin] = useState('')
   const [phone, setPhone] = useState('')
   const [scope, setScope] = useState('')
   const [validFrom, setValidFrom] = useEffectiveDate()
@@ -37,20 +39,20 @@ export function UnitCreateDialog({
       build={() =>
         requireFields([
           ['name', !!name.trim(), '请填写名称'],
+          pinyinCheck(pinyin),
           ['unit_type', !!unitType, '请选择单元类型'],
           ['department', !!dept, '请选择所属部门'],
           ['campus', !!campus, '请选择所属院区'],
           ['institution', !!inst, '请选择所属运营主体'],
-          ['code', !!code.trim(), '请填写单元代码'],
-          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
           ['valid_from', !!validFrom, '请选择生效日期'],
         ]) ?? {
           kind: 'service_unit.create',
-          code: code.trim(),
+          code: newCode('service_unit'),
           unit_type: unitType as ServiceUnitCreateUnitType,
           valid_from: validFrom,
           fields: {
             name: name.trim(),
+            pinyin: orNull(pinyin),
             department_code: dept,
             campus_code: campus,
             institution_code: inst,
@@ -60,7 +62,10 @@ export function UnitCreateDialog({
         }
       }
     >
-      <TextField label="名称" name="name" required value={name} onChange={setName} />
+      <div className="grid grid-cols-[3fr_2fr] gap-3">
+        <TextField label="名称" name="name" required value={name} onChange={setName} />
+        <PinyinField source={name} value={pinyin} onChange={setPinyin} />
+      </div>
       <SelectField
         label="单元类型"
         name="unit_type"
@@ -83,14 +88,7 @@ export function UnitCreateDialog({
           campusCode={campus}
         />
       </div>
-      <TextField
-        label="单元代码"
-        name="code"
-        required
-        value={code}
-        onChange={setCode}
-        hint={`${CODE_HINT}；不要由部门代码 + 院区拼出`}
-      />
+      <AutoCodeField type="service_unit" label="单元代码" />
       <div className="grid grid-cols-2 gap-3">
         <TextField label="电话" value={phone} onChange={setPhone} />
         <TextField label="生效日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} hint={startHint} />
@@ -107,7 +105,12 @@ function currentDesc(current: ServiceUnitVersionOut) {
 }
 
 export function UnitReviseDialog({ code, current, ...props }: UnitDialogProps) {
-  const [f, setF] = useState({ name: current.name, phone: current.phone ?? '', scope_note: current.scope_note ?? '' })
+  const [f, setF] = useState({
+    name: current.name,
+    pinyin: current.pinyin ?? '',
+    phone: current.phone ?? '',
+    scope_note: current.scope_note ?? '',
+  })
   const [day, setDay] = useEffectiveDate(current.valid_from)
   const bind = (k: keyof typeof f) => ({ value: f[k], onChange: (v: string) => setF({ ...f, [k]: v }) })
   return (
@@ -118,11 +121,13 @@ export function UnitReviseDialog({ code, current, ...props }: UnitDialogProps) {
       build={() => {
         const missing = requireFields([
           ['name', !!f.name.trim(), '名称不能为空'],
+          pinyinCheck(f.pinyin),
           ['effective_date', !!day, '请选择生效日期'],
         ])
         if (missing) return missing
         const changes = diffPatch(current, {
           name: f.name.trim(),
+          pinyin: orNull(f.pinyin),
           phone: orNull(f.phone),
           scope_note: orNull(f.scope_note),
         })
@@ -130,7 +135,10 @@ export function UnitReviseDialog({ code, current, ...props }: UnitDialogProps) {
         return { kind: 'service_unit.revise', code, effective_date: day, changes }
       }}
     >
-      <TextField label="名称" name="name" required {...bind('name')} />
+      <div className="grid grid-cols-[3fr_2fr] gap-3">
+        <TextField label="名称" name="name" required {...bind('name')} />
+        <PinyinField source={f.name} initialFollow={false} {...bind('pinyin')} />
+      </div>
       <TextField label="电话" {...bind('phone')} />
       <TextField label="范围说明" {...bind('scope_note')} />
       <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
@@ -269,7 +277,7 @@ interface Successor {
   dept: string
   campus: string
   inst: string
-  code: string
+  pinyin: string
 }
 
 function successorFrom(current: ServiceUnitVersionOut, unitType: string, name = ''): Successor {
@@ -279,7 +287,7 @@ function successorFrom(current: ServiceUnitVersionOut, unitType: string, name = 
     dept: current.department_code,
     campus: current.campus_code,
     inst: current.institution_code,
-    code: '',
+    pinyin: '',
   }
 }
 
@@ -290,15 +298,22 @@ function successorChecks(s: Successor, key: string, label: string): [string, boo
     [`${key}.dept`, !!s.dept, `请选择${label}所属部门`],
     [`${key}.campus`, !!s.campus, `请选择${label}所属院区`],
     [`${key}.inst`, !!s.inst, `请选择${label}运营主体`],
-    [`${key}.code`, CODE_RE.test(s.code.trim()), `请填写${label}代码（字母、数字、点、下划线、短横线）`],
+    pinyinCheck(s.pinyin, `${key}.pinyin`),
   ]
 }
 
-function successorItem(s: Successor) {
+/** 后继的代码保存时由系统分配；slot 区分同一张拆分里的多个后继 */
+function successorItem(s: Successor, slot = 0) {
   return {
-    code: s.code.trim(),
+    code: newCode('service_unit', slot),
     unit_type: s.unit_type as ServiceUnitCreateUnitType,
-    fields: { name: s.name.trim(), department_code: s.dept, campus_code: s.campus, institution_code: s.inst },
+    fields: {
+      name: s.name.trim(),
+      pinyin: orNull(s.pinyin),
+      department_code: s.dept,
+      campus_code: s.campus,
+      institution_code: s.inst,
+    },
   }
 }
 
@@ -356,14 +371,10 @@ function SuccessorFields({
           campusCode={s.campus}
         />
       </div>
-      <TextField
-        label="单元代码"
-        name={`${fieldKey}.code`}
-        required
-        value={s.code}
-        onChange={(code) => set({ code })}
-        hint="新身份、新代码；不能沿用前身代码"
-      />
+      <div className="grid grid-cols-2 gap-3">
+        <PinyinField source={s.name} name={`${fieldKey}.pinyin`} value={s.pinyin} onChange={(pinyin) => set({ pinyin })} />
+        <AutoCodeField type="service_unit" label="单元代码" />
+      </div>
     </fieldset>
   )
 }
@@ -393,17 +404,11 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
           ['effective_date', !!day, '请选择生效日期'],
           ['effective_date', !day || day > current.valid_from, `生效日须晚于当前版本的开始日 ${current.valid_from}`],
           ...succ.flatMap((s, i) => successorChecks(s, `s${i}`, `后继 ${i + 1} 的`)),
-          ...succ.map((s, i): [string, boolean, string] => [`s${i}.code`, s.code.trim() !== code, '后继须用新代码，不能沿用前身代码']),
-          ...succ.map((s, i): [string, boolean, string] => [
-            `s${i}.code`,
-            succ.findIndex((x) => x.code.trim() === s.code.trim()) === i,
-            '后继单元代码不能重复',
-          ]),
         ])
         // 出错的后继不在下方时，切到第一个出错的后继，让标红的字段可见
         const bad = firstInvalid(missing, 's')
         if (bad !== null && !Object.keys(missing!.fieldErrors).some((k) => k.startsWith(`s${sel}.`))) setSel(bad)
-        return missing ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map(successorItem) }
+        return missing ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map((s, i) => successorItem(s, i)) }
       }}
     >
       <TextField
@@ -505,7 +510,6 @@ function SplitMergeFlow({
   const right: FlowUnit[] = after.map((s, i) => ({
     name: s.name.trim(),
     placeholder: kind === 'split' ? `后继单元 ${i + 1}（未命名）` : '合并后的单元（未命名）',
-    code: s.code.trim() || undefined,
     subtitle: describe(s),
     footer: day ? `自 ${day} 起` : '开始日待定',
     tag: { label: '新建', tone: 'new' },
@@ -541,7 +545,6 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
           ['effective_date', !!day, '请选择生效日期'],
           ...others.map((o, i): [string, boolean, string] => [`p${i}`, !!o, '请选择要一并合并的单元']),
           ...successorChecks(succ, 'succ', '后继单元'),
-          ['succ.code', !chosen.includes(succ.code.trim()), '后继须用新代码，不能沿用前身代码'],
         ])
         return missing ?? { kind: 'service_unit.merge', codes: chosen, effective_date: day, successor: successorItem(succ) }
       }}

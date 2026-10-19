@@ -174,6 +174,7 @@ export function CampusDetailPage() {
             ),
           },
           { label: '对外名称', icon: TextFontIcon, value: shown.public_name },
+          { label: '拼音码', icon: TextFontIcon, value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
           {
             label: '运营主体',
             icon: Hospital01Icon,

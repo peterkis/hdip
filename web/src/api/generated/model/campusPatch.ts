@@ -6,10 +6,11 @@
  */
 
 /**
- * 修订资料，不含运营状态（运营状态走 campus.change_status）。
+ * 修订资料，不含运营状态（运营状态走 campus.change_status）。改名未给拼音码时按新名称生成。
  */
 export interface CampusPatch {
   name?: string | null;
+  pinyin?: string | null;
   node_role?: string | null;
   public_name?: string | null;
   address?: string | null;

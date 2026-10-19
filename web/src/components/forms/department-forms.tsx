@@ -3,7 +3,9 @@
 import { useState } from 'react'
 import { useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
 import type { DepartmentAliasOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut } from '@/api/generated/model'
-import { CODE_HINT, CODE_RE, useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
+import { useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
+import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
+import { newCode } from '@/components/forms/new-code'
 import { diffPatch, orNull, requireFields, SelectField, TextField } from '@/components/forms/fields'
 import { ItemDialog } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect } from '@/components/forms/ref-selects'
@@ -25,6 +27,7 @@ const formOptions = Object.entries(ESTABLISHMENT_FORM).map(([value, label]) => (
 /** 部门属性（新建与修订共用的那部分） */
 interface Attrs {
   name: string
+  pinyin: string
   short_name: string
   establishment_form: EstablishmentForm
   temporary_until: string
@@ -37,6 +40,7 @@ interface Attrs {
 function toAttrs(v?: DepartmentVersionOut): Attrs {
   return {
     name: v?.name ?? '',
+    pinyin: v?.pinyin ?? '',
     short_name: v?.short_name ?? '',
     establishment_form: v?.establishment_form ?? 'STANDING',
     temporary_until: v?.temporary_until ?? '',
@@ -50,6 +54,7 @@ function toAttrs(v?: DepartmentVersionOut): Attrs {
 function attrValues(a: Attrs) {
   return {
     name: a.name.trim(),
+    pinyin: orNull(a.pinyin),
     short_name: orNull(a.short_name),
     establishment_form: a.establishment_form,
     temporary_until: a.establishment_form === 'TEMPORARY' ? orNull(a.temporary_until) : null,
@@ -62,11 +67,12 @@ function attrValues(a: Attrs) {
 function attrChecks(a: Attrs): [string, boolean, string][] {
   return [
     ['name', !!a.name.trim(), '请填写部门名称'],
+    pinyinCheck(a.pinyin),
     ['temporary_until', a.establishment_form !== 'TEMPORARY' || !!a.temporary_until, '经批准的临时部门必须填期限'],
   ]
 }
 
-function AttrFields({ a, set }: { a: Attrs; set: (a: Attrs) => void }) {
+function AttrFields({ a, set, revise }: { a: Attrs; set: (a: Attrs) => void; revise?: boolean }) {
   const bind = <K extends keyof Attrs>(k: K) => ({ value: a[k] as string, onChange: (v: string) => set({ ...a, [k]: v }) })
   return (
     <>
@@ -74,6 +80,7 @@ function AttrFields({ a, set }: { a: Attrs; set: (a: Attrs) => void }) {
         <TextField label="正式名称" name="name" required {...bind('name')} />
         <TextField label="简称" {...bind('short_name')} />
       </div>
+      <PinyinField source={a.name} initialFollow={!revise} {...bind('pinyin')} />
       <div className="grid grid-cols-2 gap-3">
         <SelectField
           label="设立形式"
@@ -109,7 +116,6 @@ export function DepartmentCreateDialog(props: DialogProps) {
   const [a, setA] = useState<Attrs>(toAttrs())
   const [lifecycle, setLifecycle] = useState<'PREPARING' | 'ACTIVE'>('ACTIVE')
   const [inst, setInst] = useState('')
-  const [code, setCode] = useState('')
   const [parent, setParent] = useState('')
   const [validFrom, setValidFrom] = useEffectiveDate()
   return (
@@ -120,13 +126,11 @@ export function DepartmentCreateDialog(props: DialogProps) {
       build={() =>
         requireFields([
           ...attrChecks(a),
-          ['code', !!code.trim(), '请填写部门代码'],
-          ['code', CODE_RE.test(code.trim()), '代码只能用字母、数字、点、下划线、短横线'],
           ['valid_from', !!validFrom, '请选择设立日期'],
         ]) ?? [
           {
             kind: 'department.create',
-            code: code.trim(),
+            code: newCode('department'),
             valid_from: validFrom,
             lifecycle,
             institution_code: orNull(inst),
@@ -135,7 +139,7 @@ export function DepartmentCreateDialog(props: DialogProps) {
           },
           // 选了上级：同一张草稿里再加一项“设置上级”，自设立日期起隶属
           ...(parent
-            ? [{ kind: 'department.set_parent' as const, code: code.trim(), view_code: 'ADMIN', parent_code: parent, effective_date: validFrom }]
+            ? [{ kind: 'department.set_parent' as const, code: newCode('department'), view_code: 'ADMIN', parent_code: parent, effective_date: validFrom }]
             : []),
         ]
       }
@@ -155,7 +159,7 @@ export function DepartmentCreateDialog(props: DialogProps) {
         <InstitutionSelect label="主体归属" name="institution" value={inst} onChange={setInst} />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <TextField label="部门代码" name="code" required value={code} onChange={setCode} hint={CODE_HINT} />
+        <AutoCodeField type="department" label="部门代码" />
         <TextField label="设立日期" name="valid_from" type="date" required value={validFrom} onChange={setValidFrom} />
       </div>
       <DepartmentSelect
@@ -163,7 +167,6 @@ export function DepartmentCreateDialog(props: DialogProps) {
         name="parent"
         value={parent}
         onChange={setParent}
-        exclude={code.trim() ? [code.trim()] : undefined}
         placeholder="无上级（一级部门）"
         hint="选填；选了就自设立日期起隶属该部门（行政视图），可逐级建到二级、三级。上级须在设立日期前已存在"
       />
@@ -189,7 +192,7 @@ export function DepartmentReviseDialog({ code, current, ...props }: DialogProps 
         return { kind: 'department.revise', code, effective_date: day, changes }
       }}
     >
-      <AttrFields a={a} set={setA} />
+      <AttrFields a={a} set={setA} revise />
       <TextField label="生效日期" name="effective_date" type="date" required value={day} onChange={setDay} />
     </ItemDialog>
   )

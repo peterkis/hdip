@@ -48,7 +48,11 @@ command.upgrade(Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
 from hdip_api.core.db import SessionLocal  # noqa: E402  按走查库建连接
 from hdip_api.models import AppUser  # noqa: E402
 from hdip_api.schemas.items import ITEMS_ADAPTER  # noqa: E402
-from hdip_api.services import workflow  # noqa: E402
+from hdip_api.services import codes, workflow  # noqa: E402
+
+# 下面的院区、部门、服务单元代码（BY、XNK、SU-101…）只是脚本里便于阅读的临时代码：
+# 写入前按新规则换成系统分配的代码（院区 C + 3 位、部门 D + 6 位、服务单元 SU + 6 位，迁移 0015）。
+KNOWN: dict[str, str] = {}
 
 START = [
     {
@@ -272,6 +276,7 @@ def _register_his(s, user) -> None:
 
 
 def _apply(s, user, items, note):
+    items = codes.issue_for_script(s, user, items, "walk", KNOWN)
     cr = workflow.create_draft(s, user, ITEMS_ADAPTER.validate_python(items), note)
     workflow.submit(s, user, cr.id)
     workflow.confirm(s, user, cr.id)
@@ -288,3 +293,4 @@ with SessionLocal() as s:
     s.commit()
 suffix = f"、#{second}（组织变更与批量操作）" if second else "；只含最小起点（--minimal）"
 print(f"已重建 {WALK}（起点数据：申请 #{first}{suffix}）")
+print("代码对照：" + "、".join(f"{k} → {v}" for k, v in KNOWN.items()))

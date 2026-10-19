@@ -81,12 +81,50 @@ def return_block_reason(s: Session, cr: ChangeRequest, user: AppUser) -> str | N
     return None
 
 
+# ------------------------------------------------------------------ 新建代码的持有
+def created_codes(items: list[dict]) -> list[str]:
+    """一张申请里要新建的院区、部门、服务单元代码（含拆分 / 合并的后继）。"""
+    out: list[str] = []
+    for i in items:
+        k = i.get("kind")
+        if k in ("campus.create", "department.create", "service_unit.create"):
+            out.append(i["code"])
+        elif k == "service_unit.split":
+            out += [x["code"] for x in i.get("successors", [])]
+        elif k == "service_unit.merge":
+            out.append(i["successor"]["code"])
+    return out
+
+
+def _check_code_holders(s: Session, items: list[dict], self_id: int | None) -> None:
+    """同一个预留代码同时只能由一张进行中的申请（草稿 / 已提交）用来新建，避免并行重复办理。"""
+    mine = set(created_codes(items))
+    if not mine:
+        return
+    others = s.scalars(
+        select(ChangeRequest).where(
+            ChangeRequest.status.in_(("draft", "submitted")),
+            *([ChangeRequest.id != self_id] if self_id else []),
+        )
+    )
+    for other in others:
+        clash = sorted(mine & set(created_codes(other.items)))
+        if clash:
+            raise BusinessError(
+                f"代码 {'、'.join(clash)} 已在申请 #{other.id}"
+                f"（{STATUS_LABELS[other.status]}）里用于新建。"
+                f"同一个代码同时只能由一张进行中的申请使用：请到申请 #{other.id} 继续处理。"
+            )
+
+
 # ------------------------------------------------------------------ 动作
 def create_draft(
     s: Session, user: AppUser, items: list[ChangeItem], note: str | None
 ) -> ChangeRequest:
     require_permission(user, CHANGE_CREATE)
-    cr = ChangeRequest(items=dump_items(items), note=_clean(note), created_by=user.id)
+    dumped = dump_items(items)
+    _check_code_holders(s, dumped, None)
+    cr = ChangeRequest(items=dumped, note=_clean(note), created_by=user.id)
     s.add(cr)
     s.flush()
     return cr
@@ -105,7 +143,9 @@ def update_draft(
             "这张草稿是一次部门组织变更，不能去掉组织变更事件而保留其他变更项。"
             "请回到组织变更向导调整；不再需要时，撤销整张草稿。"
         )
-    cr.items = dump_items(items)
+    dumped = dump_items(items)
+    _check_code_holders(s, dumped, cr.id)
+    cr.items = dumped
     cr.note = _clean(note)
     cr.updated_at = _now(s)
     s.flush()
@@ -176,6 +216,8 @@ def copy_as_draft(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
     if src is None:
         raise NotFound(f"变更申请 #{change_id} 不存在")
     _require_status(src, "returned", "cancelled")
+    # 退回 / 撤销后复制 = 继续办理原拟建对象，沿用其预留代码；已有一份进行中的副本时拒绝
+    _check_code_holders(s, src.items, None)
     cr = ChangeRequest(items=src.items, note=src.note, created_by=user.id, copied_from_id=src.id)
     s.add(cr)
     s.flush()

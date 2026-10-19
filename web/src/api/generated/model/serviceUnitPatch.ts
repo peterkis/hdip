@@ -6,10 +6,11 @@
  */
 
 /**
- * 修订只改名称、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。
+ * 修订只改名称（及拼音码）、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。
  */
 export interface ServiceUnitPatch {
   name?: string | null;
+  pinyin?: string | null;
   phone?: string | null;
   scope_note?: string | null;
 }

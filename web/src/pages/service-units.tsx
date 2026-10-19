@@ -106,6 +106,7 @@ export function ServiceUnitDetailPage() {
       <PropertyList
         items={[
           { label: '单元类型', icon: ListViewIcon, value: <Tag>{typeName}</Tag> },
+          { label: '拼音码', icon: TextFontIcon, value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
           {
             label: '状态',
             icon: Loading03Icon,

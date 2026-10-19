@@ -34,8 +34,10 @@ BUSINESS_TABLES = (
     "department_hierarchy, department_relation, "
     "department_alias, department_classification, department_institution, department_version, "
     "department, "
-    "operator_relation, campus_version, campus, institution_version, institution, change_request"
+    "operator_relation, campus_version, campus, institution_version, institution, change_request, "
+    "code_reservation"
 )
+CODE_SEQUENCES = ("campus_code_seq", "department_code_seq", "service_unit_code_seq")
 
 
 @pytest.fixture(scope="session")
@@ -55,6 +57,8 @@ def owner_engine():
 def clean(owner_engine):
     with owner_engine.begin() as c:
         c.execute(text(f"TRUNCATE {BUSINESS_TABLES} RESTART IDENTITY CASCADE"))
+        for seq in CODE_SEQUENCES:
+            c.execute(text(f"ALTER SEQUENCE {seq} RESTART"))
         c.execute(text("UPDATE approval_rule SET allow_self_confirm = true"))
         # 字典测试新增的代码（配置表不在 TRUNCATE 之列）
         c.execute(text("DELETE FROM classification_code WHERE code LIKE 'TEST\\_%'"))
@@ -78,14 +82,66 @@ def app_engine():
     return engine
 
 
-class Api:
-    """带身份的测试客户端：api.as_("solo").post(...)"""
+CREATE_TYPES = {
+    "campus.create": "campus",
+    "department.create": "department",
+    "service_unit.create": "service_unit",
+}
 
-    def __init__(self, client: TestClient, user: str = "solo") -> None:
-        self.client, self.user = client, user
+
+def _issued(items: list) -> list[tuple[str, str]]:
+    """申请里要新建的对象代码与类型（含拆分 / 合并的后继）。"""
+    out = []
+    for i in items or []:
+        k = i.get("kind")
+        if k in CREATE_TYPES:
+            out.append((CREATE_TYPES[k], str(i["code"]).upper()))
+        elif k == "service_unit.split":
+            out += [("service_unit", str(x["code"]).upper()) for x in i.get("successors", [])]
+        elif k == "service_unit.merge":
+            out.append(("service_unit", str(i["successor"]["code"]).upper()))
+    return out
+
+
+class Api:
+    """带身份的测试客户端：api.as_("solo").post(...)
+
+    新建院区 / 部门 / 服务单元的代码须由系统预留（迁移 0015）。多数测试关心的不是取号，
+    所以写申请时自动把其中要新建的代码登记为已预留（沿用 XNK、GX 这类可读的测试代码）；
+    测试取号规则本身时用 api.strict() 关掉。
+    """
+
+    def __init__(
+        self, client: TestClient, user: str = "solo", engine=None, auto_issue=True
+    ) -> None:
+        self.client, self.user, self.engine, self.auto_issue = client, user, engine, auto_issue
 
     def as_(self, user: str) -> "Api":
-        return Api(self.client, user)
+        return Api(self.client, user, self.engine, self.auto_issue)
+
+    def strict(self) -> "Api":
+        return Api(self.client, self.user, self.engine, auto_issue=False)
+
+    def _issue(self, url: str, body) -> None:
+        if not (self.auto_issue and self.engine is not None and isinstance(body, dict)):
+            return
+        if not url.startswith("/api/change-requests"):
+            return
+        pairs = _issued(body.get("items", []))
+        if not pairs:
+            return
+        with self.engine.begin() as c:
+            for object_type, code in pairs:
+                c.execute(
+                    text(
+                        "INSERT INTO code_reservation "
+                        "(object_type, code, request_key, slot, reserved_by) "
+                        "SELECT :t, :c, 'test-reserve-' || :c, 0, id "
+                        "FROM app_user WHERE username = 'solo' "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"t": object_type, "c": code},
+                )
 
     def _h(self):
         return {"X-HDIP-User": self.user}
@@ -94,12 +150,14 @@ class Api:
         return self.client.get(url, headers=self._h(), **kw)
 
     def post(self, url, json=None, **kw):
+        self._issue(url, json)
         return self.client.post(url, json=json, headers=self._h(), **kw)
 
     def patch(self, url, json=None, **kw):
         return self.client.patch(url, json=json, headers=self._h(), **kw)
 
     def put(self, url, json=None, **kw):
+        self._issue(url, json)
         return self.client.put(url, json=json, headers=self._h(), **kw)
 
     # 常用流程
@@ -110,6 +168,12 @@ class Api:
 
     def submit(self, cid):
         return self.post(f"/api/change-requests/{cid}/submit")
+
+    def cancel(self, cid):
+        """撤销草稿：它里面要新建的代码随之不再被占用（同一代码同时只能由一张进行中的申请使用）。"""
+        r = self.post(f"/api/change-requests/{cid}/cancel")
+        assert r.status_code == 200, r.text
+        return r.json()
 
     def confirm(self, cid):
         return self.post(f"/api/change-requests/{cid}/confirm")
@@ -128,7 +192,7 @@ class Api:
 def api(owner_engine) -> Api:
     from hdip_api.main import app
 
-    return Api(TestClient(app))
+    return Api(TestClient(app), engine=owner_engine)
 
 
 @pytest.fixture

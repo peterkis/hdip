@@ -2713,6 +2713,95 @@
         }
       }
     },
+    "/api/code-reservations": {
+      "post": {
+        "tags": [
+          "changes"
+        ],
+        "summary": "Reserve Codes",
+        "operationId": "reserveCodes",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReserveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReserveOut"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
     "/api/dictionary/classification-schemes/{scheme_code}/codes": {
       "post": {
         "tags": [
@@ -3868,6 +3957,18 @@
             "minLength": 1,
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "node_role": {
             "anyOf": [
               {
@@ -3963,6 +4064,18 @@
             ],
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "node_role": {
             "anyOf": [
               {
@@ -4039,7 +4152,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "CampusPatch",
-        "description": "修订资料，不含运营状态（运营状态走 campus.change_status）。"
+        "description": "修订资料，不含运营状态（运营状态走 campus.change_status）。改名未给拼音码时按新名称生成。"
       },
       "CampusRevise": {
         "properties": {
@@ -4153,6 +4266,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
           },
           "node_role": {
             "anyOf": [
@@ -5843,6 +5967,18 @@
             "minLength": 1,
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "valid_from": {
             "anyOf": [
               {
@@ -6236,6 +6372,18 @@
             ],
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "short_name": {
             "anyOf": [
               {
@@ -6331,7 +6479,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "DepartmentPatch",
-        "description": "只写要改的字段；写 null 表示清空。名称、设立形式不能清空。"
+        "description": "只写要改的字段；写 null 表示清空。名称、设立形式不能清空。改名未给拼音码时按新名称生成。"
       },
       "DepartmentRelationClose": {
         "properties": {
@@ -6846,6 +6994,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
           },
           "short_name": {
             "anyOf": [
@@ -8113,7 +8272,7 @@
           "text"
         ],
         "title": "ItemPart",
-        "description": "一行里的一个片段：text 文字；chip 名称；new 新设的名称；out 退出的名称；\ntag 状态标签；arrow 箭头。"
+        "description": "一行里的一个片段：text 文字；chip 名称；new 新设的名称；out 退出的名称；\ntag 状态标签；arrow 箭头；ref 关联对象的名称（如隶属的上级部门，着色显示）。"
       },
       "ItemView": {
         "properties": {
@@ -8864,6 +9023,54 @@
         ],
         "title": "ReorgParticipantOut"
       },
+      "ReserveBody": {
+        "properties": {
+          "object_type": {
+            "type": "string",
+            "enum": [
+              "campus",
+              "department",
+              "service_unit"
+            ],
+            "title": "Object Type"
+          },
+          "request_key": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 8,
+            "title": "Request Key"
+          },
+          "count": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_type",
+          "request_key",
+          "count"
+        ],
+        "title": "ReserveBody"
+      },
+      "ReserveOut": {
+        "properties": {
+          "codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codes"
+        ],
+        "title": "ReserveOut"
+      },
       "ReturnBody": {
         "properties": {
           "reason": {
@@ -9162,6 +9369,18 @@
             "minLength": 1,
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "department_code": {
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
@@ -9263,6 +9482,18 @@
             ],
             "title": "Name"
           },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
           "phone": {
             "anyOf": [
               {
@@ -9291,7 +9522,7 @@
         "additionalProperties": false,
         "type": "object",
         "title": "ServiceUnitPatch",
-        "description": "修订只改名称、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"
+        "description": "修订只改名称（及拼音码）、电话、范围说明；身份、类型、部门、院区、运营主体各有显式动作。"
       },
       "ServiceUnitRebind": {
         "properties": {
@@ -9516,6 +9747,17 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
           },
           "department_id": {
             "type": "integer",

@@ -85,6 +85,7 @@ from hdip_api.schemas.items import (
     ServiceUnitRevise,
     ServiceUnitSplit,
 )
+from hdip_api.services import codes
 
 STATUS_LABELS = {
     "PLANNING": "筹建",
@@ -156,6 +157,10 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     ),
     "external_code_assignment_target_check": "解释须指向且只指向一个对象",
     "external_code_assignment_period_check": "结束日不能早于开始日",
+    "campus_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
+    "department_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
+    "service_unit_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
+    "code_reservation_code_uniq": "这个代码已经发出过，代码永不复用",
 }
 
 
@@ -357,10 +362,30 @@ def _institution_revise(ctx: Ctx, item: InstitutionRevise) -> dict:
     }
 
 
+def _require_issued(s: Session, object_type: str, code: str, field_name: str) -> None:
+    """新建对象只能用系统预留的同类型代码（迁移 0015，services/codes.py）。"""
+    if not codes.is_reserved(s, object_type, code):
+        label = codes.RULES[object_type][3]
+        raise ItemError(
+            f"{label}代码 {code} 不是系统分配的代码",
+            field_name,
+            hint=f"新建{label}的代码由系统分配（{codes.rule_text(object_type)}）："
+            f"请从“新建{label}”表单重新保存，不要手填代码。",
+        )
+
+
+def _with_pinyin(content: dict) -> dict:
+    """拼音码为空（未给出、或旧版本没有）时按名称生成。"""
+    if not content.get("pinyin"):
+        content["pinyin"] = codes.pinyin_of(content["name"])
+    return content
+
+
 def _campus_create(ctx: Ctx, item: CampusCreate) -> dict:
     s = ctx.session
     if s.scalar(select(Campus.id).where(Campus.code == item.code)):
         raise ItemError(f"院区代码 {item.code} 已被使用，代码永不复用", "code")
+    _require_issued(s, "campus", item.code, "code")
     _check_option(s, "campus_node_role", item.fields.node_role, "fields.node_role")
     obj = Campus(code=item.code, created_change_id=ctx.change_id)
     s.add(obj)
@@ -372,7 +397,7 @@ def _campus_create(ctx: Ctx, item: CampusCreate) -> dict:
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
         operating_status=item.operating_status,
-        **item.fields.model_dump(),
+        **_with_pinyin(item.fields.model_dump()),
     )
     s.add(v)
     s.flush()
@@ -386,7 +411,9 @@ def _campus_revise(ctx: Ctx, item: CampusRevise) -> dict:
     _check_option(s, "campus_node_role", patch.get("node_role"), "changes.node_role")
     latest = _latest(s, CampusVersion, CampusVersion.campus_id, obj.id)
     before = version_snapshot(latest)
-    content = {k: getattr(latest, k) for k in CampusVersion.CONTENT} | patch
+    if "name" in patch and "pinyin" not in patch:  # 改名未给拼音码：按新名称生成
+        patch["pinyin"] = None
+    content = _with_pinyin({k: getattr(latest, k) for k in CampusVersion.CONTENT} | patch)
     new = _next_version(
         ctx, CampusVersion, "campus_id", obj.id, latest, item.effective_date, content
     )
@@ -570,6 +597,7 @@ def _department_create(ctx: Ctx, item: DepartmentCreate) -> dict:
     s = ctx.session
     if s.scalar(select(Department.id).where(Department.code == item.code)):
         raise ItemError(f"部门代码 {item.code} 已被使用，代码永不复用", "code")
+    _require_issued(s, "department", item.code, "code")
     inst = None
     if item.institution_code:
         inst = _ref(s, _institution, item.institution_code, "institution_code")
@@ -584,6 +612,7 @@ def _department_create(ctx: Ctx, item: DepartmentCreate) -> dict:
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
         name=item.name,
+        pinyin=item.pinyin or codes.pinyin_of(item.name),
         short_name=item.short_name,
         description=item.description,
         establishment_form=item.establishment_form,
@@ -616,8 +645,10 @@ def _department_revise(ctx: Ctx, item: DepartmentRevise) -> dict:
     latest = _dept_latest(s, d)
     _require_not_terminal(latest)
     before = version_snapshot(latest)
-    content = {k: getattr(latest, k) for k in DepartmentVersion.CONTENT}
-    content |= item.changes.model_dump(exclude_unset=True)
+    patch = item.changes.model_dump(exclude_unset=True)
+    if "name" in patch and "pinyin" not in patch:  # 改名未给拼音码：按新名称生成
+        patch["pinyin"] = None
+    content = _with_pinyin({k: getattr(latest, k) for k in DepartmentVersion.CONTENT} | patch)
     if content["establishment_form"] == "STANDING":
         content["temporary_until"] = None
     elif content["temporary_until"] is None:
@@ -1443,6 +1474,7 @@ def _new_unit(
         raise ItemError(
             f"服务单元代码 {code} 已被使用（含已退出单元），代码永不复用", f"{prefix}code"
         )
+    _require_issued(s, "service_unit", code, f"{prefix}code")
     dept = _active_department(s, f.department_code, f"{prefix}fields.department_code")
     campus = _ref(s, _campus, f.campus_code, f"{prefix}fields.campus_code")
     inst = _ref(s, _institution, f.institution_code, f"{prefix}fields.institution_code")
@@ -1456,6 +1488,7 @@ def _new_unit(
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
         name=f.name,
+        pinyin=f.pinyin or codes.pinyin_of(f.name),
         department_id=dept.id,
         campus_id=campus.id,
         institution_id=inst.id,
@@ -1498,6 +1531,8 @@ def _unit_next(ctx: Ctx, code: str, day: date, patch: dict) -> dict:
 
 def _unit_revise(ctx: Ctx, item: ServiceUnitRevise) -> dict:
     patch = item.changes.model_dump(exclude_unset=True)
+    if "name" in patch and not patch.get("pinyin"):  # 改名未给拼音码：按新名称生成
+        patch["pinyin"] = codes.pinyin_of(patch["name"])
     return _unit_next(ctx, item.code, item.effective_date, patch)
 
 

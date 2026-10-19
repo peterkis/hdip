@@ -44,6 +44,7 @@ erDiagram
 | --- | --- | --- |
 | 配置 | `app_user`、`option_item`、`approval_rule` | 用户与角色、选项码值、确认规则。只由迁移维护，不经变更申请 |
 | 申请 | `change_request` | 唯一写入入口 |
+| 代码分配 | `code_reservation`；序列 `campus_code_seq`、`department_code_seq`、`service_unit_code_seq` | 系统发出的院区 / 部门 / 服务单元代码，只追加、不可修改（迁移 0015，见第 3.1 节） |
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
 | 字典 | `classification_scheme`、`classification_code`、`org_view` | 配置：分类方案与代码（维护人可直接维护）、组织视图 |
@@ -53,6 +54,8 @@ erDiagram
 | 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
 
 院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
+
+院区、部门、服务单元的版本自迁移 0015 起有“拼音码” `pinyin`：名称的拼音首字母（大写字母与数字，1–64 位），随名称进版本，只用于检索，不要求唯一。表单按名称生成、可修改；变更项未给出时后端按名称生成（`services/codes.py` 的 `pinyin_of`，pypinyin）；改名未给拼音码时按新名称重新生成。
 
 ## 2. 设计约定
 
@@ -123,6 +126,15 @@ stateDiagram-v2
 - 同样在全部变更项应用后进行的还有：`_check_org`（视图不成环；撤销 / 被替代的部门不能还有下级）、`_check_codes`（同一代码重叠期间的解释要么都带院区条件、要么都不带）、`_check_ended_codes`（退出的部门在退出日及以后不能还有外部编码解释指向它）。
 - 确认权限：`approval_rule`（对象类型 × 动作 → 确认角色、是否允许提交人自确认）。改规则不改代码。
 
+### 3.1 代码由系统分配（迁移 0015）
+
+- 规则：院区 `C` + 3 位数字（`C001`），部门 `D` + 6 位数字（`D000001`），服务单元 `SU` + 6 位数字（`SU000001`）。院内代码大小写等价，一律存大写（变更项里的 `Code` 类型自动转大写）。主体代码不在此列，仍由人填写。
+- 取号：表单点“保存到申请”时调用 `POST /api/code-reservations`（`object_type`、`request_key`、`count`），由序列发号并登记到 `code_reservation`。同一个请求键 + 槽位只发一次：网络重试、校验失败后再保存都拿回同一个号。号码不回收，撤销或退回的草稿留下空号，不影响识别。
+- 新建院区、部门、服务单元（含拆分 / 合并的后继、组织变更新设的部门）只能用已登记的**同类型**代码，否则预演与确认都拒绝（`apply._require_issued`）。代码格式由发号保证，表里没有格式检查约束，以便测试沿用 XNK 这类可读代码。
+- 同一个代码同时只能由一张进行中的申请（草稿 / 已提交）用来新建（`workflow._check_code_holders`，保存草稿、复制为新草稿时检查）。退回或撤销后“复制为新草稿”= 继续办理原拟建对象，沿用其代码；再复制一份会被拒绝。
+- 预留只登记“这个号已经发出”，不改主数据，所以不经变更申请；对象本身仍经申请新建。
+- 脚本数据（走查库、样例导入）先用可读的临时代码，写入前由 `codes.issue_for_script` 按固定请求键换成系统代码，重跑拿回同一批号。
+
 | 对象 | 变更项 kind | 写入的表 |
 | --- | --- | --- |
 | 主体 | `institution.create`、`institution.revise` | `institution`、`institution_version` |
@@ -145,7 +157,7 @@ stateDiagram-v2
 - 编码映射台账 `GET /api/external-codes?suggest=true`：为待裁决代码按源名称给出候选对象（`queries._Suggester`）。可信度从高到低：与单元 / 部门名称相同（`exact`）、与部门简称或别名相同（`alias`）、与曾用名相同（`former_name`）、源名称包含部门或单元名称（`contains`，取最长）、去掉“科、门诊、专家、病区”等后缀后相近（`similar`）。只是建议，不写库；批量裁决仍是一张含多个 `external_code.assign` 的申请。
 - **批量操作 = 一张申请里的多个变更项**，不另设批量接口：整体预演、整体确认；任何一项不通过则整张不能提交，提示指出第几项（`problems[].item_index`）。
 - 承接清单 `GET /api/departments/{id}/dependencies?day=`：部门在某日及以后仍有效的服务单元、下级部门、外部编码解释、分类与管理关系（组织变更向导用）。
-- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`）、部门（`departments`）、院区（`campuses`，末尾加了 `public_name`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）。列名和列顺序是对外契约，新增列只能加在末尾。
+- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`，末尾加了 `unit_pinyin`）、部门（`departments`，末尾加了 `department_pinyin`）、院区（`campuses`，末尾加了 `public_name`、`campus_pinyin`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）。列名和列顺序是对外契约，新增列只能加在末尾。
 
 ## 5. 迁移史
 
@@ -165,6 +177,7 @@ stateDiagram-v2
 | 0012 | 部门组织变更第一期：`department_change_event`（类型、生效日、正式依据必填、承接说明、需其他系统办理事项）与 `department_change_participant`（原部门 / 结果部门，存续 / 退出 / 新设）；两表只追加。确认规则 `department.reorganize` |
 | 0013 | 运营关系：同一主体与同一院区同一时期只能有一条关系，不论类型（`operator_relation_pair_excl` 取代只禁止同类型重叠的 `operator_relation_dup_excl`）；已有重叠数据时迁移失败并列出 |
 | 0014 | 种子账号 solo 的显示名称改为“张三”（用户名、角色不变） |
+| 0015 | 院区、部门、服务单元的代码改由系统分配：三个发号序列与 `code_reservation`（只追加）；院区 / 部门 / 服务单元版本加拼音码 `pinyin`。开发库与走查库按新规则重建 |
 
 ### 新增一类对象或变更的检查单
 

@@ -516,6 +516,7 @@ def list_departments(s: Session, as_of: date, q: str | None = None) -> list[Depa
         if needle and not (
             needle in d.code.lower()
             or any(needle in v.name.lower() for v in versions[d.id])
+            or any(needle in (v.pinyin or "").lower() for v in versions[d.id])
             or any(needle in a.value.lower() for a in aliases[d.id])
         ):
             continue

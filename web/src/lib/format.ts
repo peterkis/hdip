@@ -116,6 +116,7 @@ export const FIELD_LABELS: Record<string, string> = {
   valid_from: '生效起',
   valid_to: '生效止',
   name: '名称',
+  pinyin: '拼音码',
   nature: '主体性质',
   unified_credit_code: '统一社会信用代码',
   medical_reg_code: '医疗机构登记代码',

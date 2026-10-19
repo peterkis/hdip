@@ -5,17 +5,21 @@
 资料包是候选基线（DRAFT_NOT_PRODUCTION），所以这里只做两件事：
 1. 配置（维护人可直接维护，不经申请）：来源系统与字典、外部分类方案及其正式代码表。
 2. 业务数据一律生成变更申请并提交，由确认人在页面上确认，脚本不代为确认：
-   - 院区：本部院区更名（运行）、新增中心院区（筹建）及其运营关系；高新院区保持筹建；
-   - 部门：资料包的行政部门树（心血管内科与已有的 XNK 是同一部门，不重复新建）；
+   - 起点：主体（成都市第三人民医院）与三个直属院区——本部院区（运行）、高新院区（筹建）、
+     中心院区（筹建）及其运营关系；库里已有的跳过；
+   - 部门：资料包的行政部门树；
    - 服务单元与 HIS 科室字典：资料包的服务单元都在本部院区（Peter 确认）；护理单元不是服务单元、
      没有确定所属部门的单元不导入；HIS 全部源代码登记入台账，只解释证据明确的几类，其余待裁决。
-   部门与院区申请确认后再运行一次本脚本，才会生成服务单元与 HIS 字典申请（它引用这些部门）。
+   起点与部门申请确认后再运行一次本脚本，才会生成服务单元与 HIS 字典申请（它引用这些部门）。
 
 脚本可重复运行：已有的配置跳过，已生成过的申请（按说明里的标记识别）不再生成。
 资料包要求不自动补值的字段（组织生效日、启停状态、企业微信原生 ID 等）不推断：开始日按
 Peter 指定——部门、服务单元及其关系 2020-01-01，筹建的中心院区 2027-12-27；已有对象不能
 追溯，所以涉及它们的开始日取较晚的一个。
 资料包里的脚本一概不运行，只读取 02_机器可读/ 下的 CSV。
+
+代码（迁移 0015）：院区、部门、服务单元的代码由系统分配（C + 3 位、D + 6 位、SU + 6 位）。资料包的
+代码（D0001、SU-G-…）和院区简称（BY、GX、ZX）只用来对照：每个按固定的请求键取号，脚本重跑拿回同一个号。
 """
 
 import argparse
@@ -44,12 +48,12 @@ from hdip_api.models import (
     SourceSystem,
 )
 from hdip_api.schemas.items import ITEMS_ADAPTER
-from hdip_api.services import workflow
+from hdip_api.services import codes, workflow
 
 RECORDED_ON = "2026-10-16"  # 资料包的记录日期
 START = date(2020, 1, 1)  # Peter 指定：部门、服务单元及其关系的开始日
 PLANNED_CAMPUS_START = date(2027, 12, 27)  # Peter 指定：筹建院区的开始日
-CAMPUS = "BY"  # 资料包的服务单元都属于本部院区
+CAMPUS = "BY"  # 资料包的服务单元都属于本部院区（BY 是脚本里的院区简称，写入时换成系统代码）
 # 资料包单元类型 → 既有单元类型码；没有对应的归为 OTHER，原类型名写进范围说明
 # （码值不新增、不另作解释）
 UNIT_TYPES = {
@@ -62,10 +66,13 @@ UNIT_TYPES = {
     "OPERATION": "OR",
 }
 INSTITUTION = "CD3"
-# 资料包里的心血管内科 D0042 就是库里已有的 XNK
-SAME_DEPARTMENT = {"D0042": "XNK"}
+# 院区简称 → (名称, 对外名称, 开始日, 运营状态)
+CAMPUSES = {
+    "BY": ("本部院区", None, START, "RUNNING"),
+    "GX": ("高新院区", None, date(2026, 10, 1), "PLANNING"),
+    "ZX": ("中心院区", "成都市中心医院", PLANNED_CAMPUS_START, "PLANNING"),
+}
 
-TAG_CAMPUS = "[样例导入:院区]"
 TAG_DEPT = "[样例导入:部门]"
 TAG_HIS = "[样例导入:服务单元与HIS科室字典]"
 
@@ -199,6 +206,26 @@ def file_request(s, user: AppUser, tag: str, items: list[dict], note: str) -> No
     print(f"{tag} 已生成并提交申请 #{cr.id}（{len(items)} 项），请确认人确认")
 
 
+class Codes:
+    """资料包代码 / 院区简称 → 系统分配的代码。固定请求键，重跑拿回同一个号。"""
+
+    def __init__(self, s, user: AppUser, root: Path) -> None:
+        self.map: dict[str, str] = {}
+        for short in CAMPUSES:
+            self._take(s, user, "campus", short)
+        for r in load(root, "departments"):
+            self._take(s, user, "department", r["department_code"])
+        for r in load(root, "service_units"):
+            self._take(s, user, "service_unit", r["service_unit_code"])
+
+    def _take(self, s, user, object_type, temp: str) -> None:
+        key = f"import-sample:{object_type}:{temp}"
+        [self.map[temp]] = codes.reserve(s, user, object_type, key, 1)
+
+    def __getitem__(self, temp: str) -> str:
+        return self.map[temp]
+
+
 class Starts:
     """已有对象的开始日：新内容的开始日不能早于它们，取 START 与之中较晚的一个。"""
 
@@ -241,52 +268,55 @@ def iso(d: date) -> str:
     return d.isoformat()
 
 
-def campus_items(starts: Starts) -> list[dict]:
-    return [
-        # 更名是纠正称呼，在记录日生效（本部院区自 2020-01-01 起已有版本，不能往前插）
-        {
-            "kind": "campus.revise",
-            "code": "BY",
-            "effective_date": RECORDED_ON,
-            "changes": {"name": "本部院区"},
-        },
-        {
-            "kind": "campus.create",
-            "code": "ZX",
-            "valid_from": iso(PLANNED_CAMPUS_START),
-            "operating_status": "PLANNING",
-            "fields": {"name": "中心院区", "public_name": "成都市中心医院"},
-        },
-        {
-            "kind": "operator_relation.create",
-            "institution_code": INSTITUTION,
-            "campus_code": "ZX",
-            "relation_type": "OPERATE",
-            "is_primary": True,
-            "valid_from": iso(max(PLANNED_CAMPUS_START, starts.institution(INSTITUTION))),
-        },
-    ]
+def campus_items(s, code: Codes) -> list[dict]:
+    """起点：主体与三个直属院区及其运营关系；库里已有的跳过。"""
+    items: list[dict] = []
+    if s.scalar(select(Institution.id).where(Institution.code == INSTITUTION)) is None:
+        items.append(
+            {
+                "kind": "institution.create",
+                "code": INSTITUTION,
+                "valid_from": iso(START),
+                "fields": {"name": "成都市第三人民医院", "nature": "事业单位法人"},
+            }
+        )
+    for short, (name, public_name, start, status) in CAMPUSES.items():
+        if s.scalar(select(Campus.id).where(Campus.code == code[short])) is not None:
+            continue
+        items += [
+            {
+                "kind": "campus.create",
+                "code": code[short],
+                "valid_from": iso(start),
+                "operating_status": status,
+                "fields": {"name": name, "public_name": public_name},
+            },
+            {
+                "kind": "operator_relation.create",
+                "institution_code": INSTITUTION,
+                "campus_code": code[short],
+                "relation_type": "OPERATE",
+                "is_primary": True,
+                "valid_from": iso(start),
+            },
+        ]
+    return items
 
 
-def dept_code_map(root: Path) -> dict[str, str]:
+def dept_code_map(root: Path, code: Codes) -> dict[str, str]:
     """资料包部门 ID → 本系统部门代码。"""
-    return {
-        r["department_id"]: SAME_DEPARTMENT.get(r["department_code"], r["department_code"])
-        for r in load(root, "departments")
-    }
+    return {r["department_id"]: code[r["department_code"]] for r in load(root, "departments")}
 
 
-def department_items(root: Path, starts: Starts) -> list[dict]:
+def department_items(root: Path, starts: Starts, code: Codes) -> list[dict]:
     rows = load(root, "departments")
-    code_of = dept_code_map(root)
+    code_of = dept_code_map(root, code)
     items: list[dict] = []
     for r in rows:
-        if r["department_code"] in SAME_DEPARTMENT:
-            continue
         items.append(
             {
                 "kind": "department.create",
-                "code": r["department_code"],
+                "code": code[r["department_code"]],
                 "name": r["department_name"],
                 "valid_from": iso(START),
                 "lifecycle": "ACTIVE",
@@ -310,10 +340,12 @@ def department_items(root: Path, starts: Starts) -> list[dict]:
     return items
 
 
-def unit_items(root: Path, starts: Starts) -> tuple[list[dict], dict[str, tuple[str, date]]]:
+def unit_items(
+    root: Path, starts: Starts, code: Codes
+) -> tuple[list[dict], dict[str, tuple[str, date]]]:
     """导入有所属部门、且不是护理单元的服务单元。返回变更项与“HIS 源代码 → (单元代码, 开始日)”。"""
-    code_of = dept_code_map(root)
-    campus_from = starts.campus_operated(CAMPUS)
+    code_of = dept_code_map(root, code)
+    campus_from = starts.campus_operated(code[CAMPUS])
     items, by_his = [], {}
     for r in load(root, "service_units"):
         if r["unit_type_code"] == "NURSING" or not r["primary_department_id"]:
@@ -325,26 +357,28 @@ def unit_items(root: Path, starts: Starts) -> tuple[list[dict], dict[str, tuple[
         items.append(
             {
                 "kind": "service_unit.create",
-                "code": r["service_unit_code"],
+                "code": code[r["service_unit_code"]],
                 "unit_type": unit_type,
                 "valid_from": iso(day),
                 "fields": {
                     "name": r["service_unit_name"],
                     "department_code": dept,
-                    "campus_code": CAMPUS,
+                    "campus_code": code[CAMPUS],
                     "institution_code": INSTITUTION,
                     "scope_note": note,
                 },
             }
         )
         if r["source_his_code"]:
-            by_his[r["source_his_code"].strip()] = (r["service_unit_code"], day)
+            by_his[r["source_his_code"].strip()] = (code[r["service_unit_code"]], day)
     return items, by_his
 
 
-def his_items(root: Path, starts: Starts, units_by_his: dict[str, tuple[str, date]]) -> list[dict]:
+def his_items(
+    root: Path, starts: Starts, code: Codes, units_by_his: dict[str, tuple[str, date]]
+) -> list[dict]:
     """登记全部源代码；只解释证据明确的几类，其余留作待裁决。"""
-    departments = dept_code_map(root)
+    departments = dept_code_map(root, code)
     units = {r["service_unit_id"]: r for r in load(root, "service_units")}
     roles: dict[str, list[dict]] = {}
     for m in load(root, "source_mappings"):
@@ -440,37 +474,34 @@ def main() -> None:
         if user is None:
             sys.exit(f"用户 {args.user} 不存在或未启用")
         ensure_config(s, root, user)
+        code = Codes(s, user, root)
         s.commit()
         starts = Starts(s)
 
-        file_request(
-            s,
-            user,
-            TAG_CAMPUS,
-            campus_items(starts),
-            "三个直属院区：本部院区（原“本院院区”更名，运行）、高新院区（筹建，不变）、"
-            "中心院区（新增，筹建，自 2027-12-27 起，由成都市第三人民医院主要运营）。",
-        )
-        s.commit()
+        # 起点（主体、院区、运营关系）与部门树放在同一张申请里：部门引用的主体可以是同一申请新建的
         file_request(
             s,
             user,
             TAG_DEPT,
-            department_items(root, starts),
-            "资料包行政部门树（企业微信路径快照，候选基线）。心血管内科即已有的 XNK，不重复新建。"
-            "开始日按 2020-01-01；部门管理主分类不自动填，由人工补齐。",
+            campus_items(s, code) + department_items(root, starts, code),
+            "起点：成都市第三人民医院与三个直属院区——本部院区（运行）、高新院区（筹建）、"
+            "中心院区（筹建，自 2027-12-27 起，对外称成都市中心医院），"
+            "均由成都市第三人民医院主要运营；"
+            "资料包行政部门树（企业微信路径快照，候选基线），开始日按 2020-01-01，"
+            "部门管理主分类不自动填，由人工补齐。",
         )
         s.commit()
 
-        if s.scalar(select(Department.id).where(Department.code == "D0001")) is None:
+        first_dept = code[load(root, "departments")[0]["department_code"]]
+        if s.scalar(select(Department.id).where(Department.code == first_dept)) is None:
             print(f"{TAG_HIS} 待部门申请确认后再运行一次本脚本生成")
             return
-        units, units_by_his = unit_items(root, starts)
+        units, units_by_his = unit_items(root, starts, code)
         file_request(
             s,
             user,
             TAG_HIS,
-            units + his_items(root, starts, units_by_his),
+            units + his_items(root, starts, code, units_by_his),
             f"资料包服务单元 {len(units)} 个，均在本部院区，开始日不早于本部院区有运营关系之日；"
             "护理单元不是服务单元，未定所属部门的单元暂不导入；类型无既有码值的归为“其他”，原类型写在范围说明。"
             "HIS 科室字典全部源代码登记入台账，解释：高置信的部门身份、由该记录构建的服务单元、"

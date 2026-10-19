@@ -77,6 +77,7 @@ def test_script18_split_department(api):
     cr = api.draft(*new_depts, event)
     msg = problem(api.submit(cr["id"]))
     assert "SU-101" in msg or "呼吸内科门诊" in msg
+    api.cancel(cr["id"])  # 撤销后再按承接清单重新起草（同一代码同时只能由一张进行中的申请使用）
 
     # 承接清单逐项处置
     cr = api.draft(

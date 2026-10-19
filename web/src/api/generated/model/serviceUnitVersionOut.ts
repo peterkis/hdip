@@ -14,6 +14,7 @@ export interface ServiceUnitVersionOut {
   recorded_at: string;
   recorded_by: UserRef;
   name: string;
+  pinyin?: string | null;
   department_id: number;
   department_code: string;
   department_name: string;
