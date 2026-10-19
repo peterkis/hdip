@@ -1,5 +1,6 @@
 // 应用外壳（Notion 风格）：左侧栏导航 + 顶栏面包屑与“查看日期” + 正文。
 // 导航分组在 components/shell/nav.ts 配置；尺寸、颜色全部来自令牌，见 docs/design/ui-tokens.md。
+import { DateInput } from '@/components/kit/date-input'
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
@@ -273,11 +274,12 @@ function AsOfPicker() {
       >
         <Icon icon={Calendar03Icon} className={cn(isToday && 'text-fg-muted')} />
         <span className={cn('hidden whitespace-nowrap sm:inline', isToday && 'text-fg-muted')}>查看日期</span>
-        <input
-          type="date"
-          className={cn('w-28 bg-transparent outline-none', isToday && 'text-fg')}
+        <DateInput
+          bare
+          aria-label="查看日期"
+          className={cn('w-20 bg-transparent', isToday && 'text-fg')}
           value={asOf}
-          onChange={(e) => e.target.value && setAsOf(e.target.value)}
+          onChange={(v) => v && setAsOf(v)}
         />
       </label>
     </div>

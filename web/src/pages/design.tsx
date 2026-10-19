@@ -1,5 +1,6 @@
 // /design：统一 UI 视觉规范（Notion 风格）。展示全部设计令牌与组件在令牌下的样子。
 // 本页自身也只用令牌，并示范应用外壳：左侧栏 + 顶栏面包屑 + 900 宽正文。
+import { DateInput } from '@/components/kit/date-input'
 import { Icon, type AppIcon } from '@/components/kit/icon'
 import {
   Activity01Icon,
@@ -637,7 +638,7 @@ function ControlsSection() {
         </Field>
         <Field>
           <FieldLabel htmlFor="d-date">生效日期</FieldLabel>
-          <Input id="d-date" type="date" defaultValue="2026-10-14" />
+          <DesignDate id="d-date" initial="2026-10-14" />
         </Field>
         <Field>
           <FieldLabel htmlFor="d-bad">院区代码</FieldLabel>
@@ -811,7 +812,7 @@ function OverlaySection() {
             </DialogHeader>
             <Field>
               <FieldLabel htmlFor="d-last">最后有效日</FieldLabel>
-              <Input id="d-last" type="date" defaultValue="2026-12-31" />
+              <DesignDate id="d-last" initial="2026-12-31" />
             </Field>
             <DialogFooter>
               <Button variant="ghost">取消</Button>
@@ -868,4 +869,10 @@ function RulesSection() {
       </div>
     </Section>
   )
+}
+
+/** 示例用的日期输入（全项目统一 yyyy-mm-dd，见 components/kit/date-input.tsx） */
+function DesignDate({ id, initial }: { id: string; initial: string }) {
+  const [v, setV] = useState(initial)
+  return <DateInput id={id} value={v} onChange={setV} />
 }

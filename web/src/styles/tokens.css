@@ -171,6 +171,8 @@
   --hd-border-default: var(--hd-alpha-black-200); /* 输入框、卡片 */
   --hd-border-strong: var(--hd-alpha-black-300);
   --hd-flow-edge: var(--hd-gray-400);            /* 关系图连线：不透明，多条线叠在同一段上颜色不加深 */
+  --hd-flow-edge-soft: var(--hd-gray-300);       /* 竖向关系图（部门隶属）的连线：更浅，降低重心 */
+  --hd-flow-card-foot: var(--hd-gray-50);        /* 竖向关系图卡片下半部的底色 */
 
   /* 强调（主按钮、链接、焦点、选中）。换品牌色只改这一组，或用 [data-accent] */
   --hd-accent: var(--hd-blue-600);
@@ -274,6 +276,8 @@
   --hd-border-default: var(--hd-alpha-white-150);
   --hd-border-strong: var(--hd-alpha-white-200);
   --hd-flow-edge: var(--hd-gray-600);
+  --hd-flow-edge-soft: var(--hd-gray-700);
+  --hd-flow-card-foot: var(--hd-gray-850);
 
   --hd-accent: var(--hd-blue-500);
   --hd-accent-hover: var(--hd-blue-400);

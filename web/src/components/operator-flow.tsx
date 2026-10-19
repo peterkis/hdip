@@ -4,7 +4,7 @@
 import { Building03Icon, Calendar03Icon, Hospital01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { Background, BackgroundVariant, ReactFlow } from '@xyflow/react'
 import type { CampusRow, RelationOut } from '@/api/generated/model'
-import { AutoFit, edgeTypes, FIT, nodeTypes, PILL_ICON, type CardNode, type LabeledEdge, type Pill } from '@/components/flow-kit'
+import { AutoFit, KEEP_CARDS_CLICKABLE, edgeTypes, FIT, nodeTypes, PILL_ICON, type CardNode, type LabeledEdge, type Pill } from '@/components/flow-kit'
 import { useFlowHeight } from '@/components/flow-size'
 import { OPERATING_STATUS, RELATION_TYPE, type OperatingStatus, type RelationType } from '@/lib/format'
 
@@ -150,6 +150,7 @@ export function OperatorFlow({
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
+          onNodeClick={KEEP_CARDS_CLICKABLE}
           panOnDrag={false}
           zoomOnScroll={false}
           zoomOnPinch={false}

@@ -18,6 +18,7 @@ import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Icon } from '@/components/kit/icon'
 import { useFlowHeight } from '@/components/flow-size'
+import { KEEP_CARDS_CLICKABLE } from '@/components/flow-kit'
 import { cn } from '@/lib/utils'
 
 export type FlowUnit = {
@@ -222,6 +223,7 @@ export function EvolveFlow({
         nodesDraggable={false}
         nodesConnectable={false}
         elementsSelectable={false}
+        onNodeClick={KEEP_CARDS_CLICKABLE}
         panOnDrag={false}
         zoomOnScroll={false}
         zoomOnPinch={false}

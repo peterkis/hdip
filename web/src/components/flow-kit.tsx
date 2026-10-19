@@ -72,7 +72,7 @@ export function FlowCard({ data }: NodeProps<CardNode>) {
   const body = (
     <div
       className={cn(
-        'bg-surface-raised flex flex-col rounded-lg border shadow-xs transition-colors',
+        'bg-surface-raised flex flex-col overflow-hidden rounded-lg border shadow-xs transition-colors',
         data.strong ? 'border-line-strong' : 'border-line',
         data.href && 'hover:border-line-strong',
       )}
@@ -96,7 +96,8 @@ export function FlowCard({ data }: NodeProps<CardNode>) {
         </span>
       </div>
       {/* 底部比标题小一号（12px），与参考区块的比例一致 */}
-      <div className="border-line-subtle mt-auto flex min-w-0 items-center gap-1.5 border-t px-3 py-1.5">
+      {/* hd-card-foot：竖向关系图里换成浅灰底（index.css 的 .hd-flow-vertical） */}
+      <div className="hd-card-foot border-line-subtle mt-auto flex min-w-0 items-center gap-1.5 border-t px-3 py-1.5">
         <span className="bg-surface-subtle text-fg-secondary flex size-4 shrink-0 items-center justify-center rounded-full">
           <Icon icon={data.footerIcon} className="size-2.5" strokeWidth={2} />
         </span>
@@ -155,6 +156,13 @@ export function LabeledStepEdge({ sourceX, sourceY, targetX, targetY, sourcePosi
 
 export const nodeTypes = { card: FlowCard }
 export const edgeTypes = { labeled: LabeledStepEdge }
+
+// ------------------------------------------------------------------ 卡片可点
+/**
+ * 传给 ReactFlow 的 onNodeClick。不可选、不可拖、又没有点击回调的节点会被 React Flow 设为 pointer-events: none，
+ * 卡片里的链接、按钮就点不到；挂一个空回调即可恢复，跳转仍由卡片里的 <Link> 完成（不重复导航）。
+ */
+export const KEEP_CARDS_CLICKABLE = () => {}
 
 // ------------------------------------------------------------------ 自动适配
 export const FIT = { padding: 0.1, maxZoom: 1 }

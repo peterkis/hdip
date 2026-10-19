@@ -5,7 +5,7 @@
 import { Building03Icon, Layers01Icon, UserGroupIcon } from '@hugeicons/core-free-icons'
 import { Background, BackgroundVariant, ReactFlow } from '@xyflow/react'
 import type { DepartmentRelationOut, DeptRef } from '@/api/generated/model'
-import { AutoFit, edgeTypes, FIT, nodeTypes, type CardNode, type LabeledEdge, type PillTone } from '@/components/flow-kit'
+import { AutoFit, KEEP_CARDS_CLICKABLE, edgeTypes, FIT, nodeTypes, type CardNode, type LabeledEdge, type PillTone } from '@/components/flow-kit'
 import { useFlowHeight } from '@/components/flow-size'
 import { DEPT_RELATION, levelName, type DeptRelationKind } from '@/lib/format'
 
@@ -167,7 +167,7 @@ export function OrgFlow({
 
   return (
     <div className="grid gap-2">
-      <div ref={ref} className="hd-flow hd-flow-dots bg-surface-sidebar border-line-subtle rounded-md border" style={{ height: boxHeight }}>
+      <div ref={ref} className="hd-flow hd-flow-dots hd-flow-vertical bg-surface-page border-line-subtle rounded-md border" style={{ height: boxHeight }}>
         <ReactFlow
           key={nodes.map((n) => n.id).join(',')}
           nodes={nodes}
@@ -180,6 +180,7 @@ export function OrgFlow({
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}
+          onNodeClick={KEEP_CARDS_CLICKABLE}
           panOnDrag={false}
           zoomOnScroll={false}
           zoomOnPinch={false}
@@ -192,10 +193,10 @@ export function OrgFlow({
       </div>
       <p className="text-fg-muted flex flex-wrap items-center gap-x-4 gap-y-1 text-caption">
         <span className="flex items-center gap-1.5">
-          <span className="hd-legend-idle" /> 实线：行政隶属（{asOf}，上级在上、下级在下）
+          <span className="hd-legend-idle hd-legend-soft" /> 实线：行政隶属（{asOf}，上级在上、下级在下）
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="hd-legend-running" /> 虚线 + 标签：管理关系（右：本部门管理 / 协作的对象；左：管理本部门的）
+          <span className="hd-legend-running hd-legend-soft" /> 虚线 + 标签：管理关系（右：本部门管理 / 协作的对象；左：管理本部门的）
         </span>
         <span>点卡片查看对应部门</span>
       </p>

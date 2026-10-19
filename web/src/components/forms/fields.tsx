@@ -1,6 +1,7 @@
 // 表单小件：带标签的输入、日期、下拉。值统一用字符串，空串表示未填。
 // 校验：表单 build() 返回 FieldErrors 时，对应字段（按 name 对应）同时标红、说明写在字段下方，
 // 焦点落到第一个出错字段；用户一改动，该字段的标记即消除（见 item-dialog.tsx）。
+import { DateInput } from '@/components/kit/date-input'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -88,19 +89,34 @@ export function TextField({
   return (
     <Field>
       <Label htmlFor={f.id} label={label} required={required} />
-      <Input
-        id={f.id}
-        type={type}
-        value={value}
-        placeholder={placeholder}
-        disabled={disabled}
-        aria-invalid={!!f.error || undefined}
-        className={invalidFill}
-        onChange={(e) => {
-          f.touch()
-          onChange(e.target.value)
-        }}
-      />
+      {type === 'date' ? (
+        <DateInput
+          id={f.id}
+          value={value}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={!!f.error || undefined}
+          className={invalidFill}
+          onChange={(v) => {
+            f.touch()
+            onChange(v)
+          }}
+        />
+      ) : (
+        <Input
+          id={f.id}
+          type={type}
+          value={value}
+          placeholder={placeholder}
+          disabled={disabled}
+          aria-invalid={!!f.error || undefined}
+          className={invalidFill}
+          onChange={(e) => {
+            f.touch()
+            onChange(e.target.value)
+          }}
+        />
+      )}
       <Help error={f.error} hint={hint} />
     </Field>
   )

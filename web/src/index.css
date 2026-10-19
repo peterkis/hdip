@@ -222,6 +222,24 @@
 .hd-flow .hd-edge-idle .react-flow__edge-path {
   stroke-dasharray: none;
 }
+
+/* 竖向关系图（部门隶属与管理关系，components/org-flow.tsx），按参考截图：
+   端点更小（4px）、连线更浅，卡片下半部浅灰底，整张图的重心更轻 */
+.hd-flow.hd-flow-vertical .react-flow__handle {
+  width: 4px;
+  height: 4px;
+}
+.hd-flow.hd-flow-vertical .hd-edge-idle .react-flow__edge-path,
+.hd-flow.hd-flow-vertical .hd-edge-running .react-flow__edge-path {
+  stroke: var(--hd-flow-edge-soft);
+}
+.hd-legend-idle.hd-legend-soft,
+.hd-legend-running.hd-legend-soft {
+  border-color: var(--hd-flow-edge-soft);
+}
+.hd-flow-vertical .hd-card-foot {
+  background: var(--hd-flow-card-foot);
+}
 .hd-flow .react-flow__edge-textbg {
   fill: var(--hd-surface-raised);
   stroke: var(--hd-border-default);
