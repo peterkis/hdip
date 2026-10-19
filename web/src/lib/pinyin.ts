@@ -7,9 +7,20 @@ export const PINYIN_RE = /^[A-Z0-9]{1,64}$/
 
 const OPTS = { pattern: 'first', toneType: 'none', type: 'array' } as const
 
+/**
+ * 固定读音：院内名称里只按这个首字母取，不再提示多音字（如“区”固定取 Q，不取姓氏读音 ōu 的 O；
+ * 2026-10-19 Peter 决定）。要再加字，在这里加一行。
+ */
+const FIXED: Record<string, string> = {
+  区: 'Q',
+}
+
 /** 名称 → 拼音码 */
 export function pinyinCode(name: string): string {
-  return pinyin(name.trim(), OPTS)
+  const text = name.trim()
+  const chars = [...text]
+  return pinyin(text, OPTS)
+    .map((x, i) => FIXED[chars[i]] ?? x)
     .join('')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
@@ -31,6 +42,7 @@ export function polyphones(name: string): Polyphone[] {
   const all = polyphonic(text, OPTS)
   const out: Polyphone[] = []
   ;[...text].forEach((char, i) => {
+    if (FIXED[char]) return
     const letters = [...new Set((all[i] ?? []).map((x) => x.toUpperCase()))].filter((x) => /^[A-Z]$/.test(x))
     if (letters.length > 1) out.push({ char, letters, chosen: (chosen[i] ?? '').toUpperCase() })
   })

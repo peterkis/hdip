@@ -12,7 +12,7 @@
 import re
 from typing import Literal
 
-from pypinyin import Style, lazy_pinyin
+from pypinyin import Style, lazy_pinyin, load_single_dict
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -84,6 +84,9 @@ def is_reserved(s: Session, object_type: str, code: str) -> bool:
 
 # ------------------------------------------------------------------ 拼音码
 _KEEP = re.compile(r"[^A-Z0-9]")
+# 固定读音（与前端 lib/pinyin.ts 的 FIXED 一致）：“区”固定读 qū，
+# 不取姓氏读音 ōu（2026-10-19 Peter 决定）
+load_single_dict({ord("区"): "qū"})
 
 
 def pinyin_of(name: str) -> str | None:
