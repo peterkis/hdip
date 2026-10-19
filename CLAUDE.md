@@ -33,7 +33,8 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 - 一张申请可含多项变更，确认时在**一个事务**里全部应用，失败整体回滚（拆分、合并、“新建部门 + 新建服务单元”都靠它）。
 - 不提供“创建即生效”的捷径，**初始导入也是一张批量申请**，确认一次。
 - 同一人可提交并确认（`approval_rule.allow_self_confirm`，默认开），但确认这一步不能省。
-- 提交前、确认页、确认时用同一段代码（`services/apply.py`）：提交与查看时在 SAVEPOINT 里预演再回滚，确认时真正写入；校验不过不能提交/确认。退回必须写原因。
+- 提交前、确认页、确认时用同一段代码（`services/apply.py`）：提交与查看时在 SAVEPOINT 里预演再回滚，确认时真正写入；校验不过不能提交/确认。退回必须写原因。预演**逐项试算**（每项一个 SAVEPOINT，失败回滚后继续），一次列出全部问题，通过的项照常给前后内容；确认时遇到第一个问题即停。
+- **问题提示写法**（参照 ASD-STE100：短句、主动语态、先说事实再说操作、一句只说一件事）：`ItemError(message, field, hint=..., facts=[(标签, 日期, 'info'|'bad')])`——message 用名称说事实，hint 说怎么改，facts 供前端画日期对照小轴。申请里每项另有一句话说明（`services/describe.py` 的 `item_summaries`，用名称，不依赖预演）。
 - 变更项按 `kind` 区分（`schemas/items.py`，如 `campus.create`、`operator_relation.close`）。对象之间**用 code 引用**，所以同一张申请里后一项可引用前一项新建的对象；运营关系无 code，关闭时用 id。新增一种变更 = 加 schema + `HANDLERS` 里的处理函数 + `approval_rule` 种子 + 测试。
 - 数据库拒绝时由 `CONSTRAINT_MESSAGES` 把约束名翻译成中文。新约束请显式命名并补上翻译。
 - API 只暴露“创建/提交/确认/退回申请”和只读查询，**不提供业务表的直接增改接口**。例外只限**配置/字典**（如部门分类方案与代码）：有维护人角色可直接维护、不需确认，记录维护人与时间，不删除只停用；部门上的分类**赋值**仍是业务数据，照常经变更申请。

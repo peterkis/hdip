@@ -3,12 +3,25 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
+class DateFact(BaseModel):
+    """问题涉及的一个日期，前端画成小时间轴：tone=bad 的是你填的、与事实冲突的日期。"""
+
+    label: str
+    date: str
+    tone: str = "info"
+
+
 class ProblemItem(BaseModel):
-    """一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。"""
+    """一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。
+
+    message 只说事实（短句、主动语态）；hint 说怎么改；facts 是相关日期。
+    """
 
     message: str
     item_index: int | None = None
     field: str | None = None
+    hint: str | None = None
+    facts: list[DateFact] = []
 
 
 class Problem(BaseModel):
@@ -27,6 +40,8 @@ class BusinessError(Exception):
         self.message = message
         self.status_code = status_code
         self.problems = problems or []
+        # 逐项预演时：通过的各项的前后内容（失败项不在其中）
+        self.outcomes: list[dict] | None = None
 
 
 class NotFound(BusinessError):

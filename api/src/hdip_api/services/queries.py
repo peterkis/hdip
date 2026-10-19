@@ -86,6 +86,7 @@ from hdip_api.schemas.read import (
 )
 from hdip_api.services import workflow
 from hdip_api.services.apply import dry_run, is_void
+from hdip_api.services.describe import describe_items
 
 
 def covers(valid_from: date, valid_to: date | None, day: date) -> bool:
@@ -1198,6 +1199,8 @@ def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
             outcomes = dry_run(s, items, cr.id, user.id)
         except BusinessError as e:
             problems, problem_message = e.problems, e.message
+            # 逐项预演：通过的各项仍给出前后内容，失败的项另列问题
+            outcomes = e.outcomes
 
     is_creator = cr.created_by == user.id
     is_maintainer = has_permission(user, CHANGE_CREATE)
@@ -1212,6 +1215,7 @@ def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
         note=cr.note,
         items=items,
         item_labels=_labels(cr),
+        item_summaries=describe_items(s, cr.items),
         outcomes=[ItemOutcome.model_validate(o) for o in outcomes] if outcomes else None,
         problems=problems,
         problem_message=problem_message,

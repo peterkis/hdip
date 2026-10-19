@@ -4,12 +4,17 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DateFact } from './dateFact';
 
 /**
  * 一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。
+ *
+ * message 只说事实（短句、主动语态）；hint 说怎么改；facts 是相关日期。
  */
 export interface ProblemItem {
   message: string;
   item_index?: number | null;
   field?: string | null;
+  hint?: string | null;
+  facts?: DateFact[];
 }

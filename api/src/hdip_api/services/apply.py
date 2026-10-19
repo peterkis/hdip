@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
-from hdip_api.core.errors import BusinessError, ProblemItem
+from hdip_api.core.errors import BusinessError, DateFact, ProblemItem
 from hdip_api.models import (
     Campus,
     CampusVersion,
@@ -160,10 +160,32 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
 
 
 class ItemError(Exception):
-    def __init__(self, message: str, field: str | None = None) -> None:
+    """变更项不能应用：message 说事实，hint 说怎么改，facts 是相关日期（前端画小时间轴）。"""
+
+    def __init__(
+        self,
+        message: str,
+        field: str | None = None,
+        hint: str | None = None,
+        facts: list[tuple[str, date, str]] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.field = field
+        self.hint = hint
+        self.facts = facts or []
+
+    def problem(self, index: int) -> ProblemItem:
+        return ProblemItem(
+            message=self.message,
+            item_index=index,
+            field=self.field,
+            hint=self.hint,
+            facts=[
+                DateFact(label=label, date=d.isoformat(), tone=tone)
+                for label, d, tone in self.facts
+            ],
+        )
 
 
 @dataclass
@@ -264,10 +286,19 @@ def _next_version(ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date,
         raise ItemError("当前版本已结束，不能修订")
     correcting = day == latest.valid_from and latest.valid_from > _today(ctx.session)
     if day < latest.valid_from or (day == latest.valid_from and not correcting):
+        start = latest.valid_from
+        future = start > _today(ctx.session)
         raise ItemError(
-            f"生效日须晚于当前版本的开始日 {latest.valid_from.isoformat()}"
-            "（尚未生效的版本可在开始日当天更正）",
+            f"“{latest.name}”当前这一版从 {start.isoformat()} 开始。"
+            f"新的生效日必须晚于这一天，你填的是 {day.isoformat()}。",
             "effective_date",
+            hint=f"把生效日改到 {start.isoformat()} 之后。"
+            + (
+                f"这一版还没有生效，也可以把生效日填为 {start.isoformat()}，直接更正这一版。"
+                if future
+                else ""
+            ),
+            facts=[("当前这一版开始", start, "info"), ("你填的生效日", day, "bad")],
         )
     old = {k: getattr(latest, k) for k in model.CONTENT}
     if old == content:
@@ -1441,11 +1472,24 @@ def _end_unit(
         raise ItemError(
             f"服务单元 {code} 已于 {latest.valid_to.isoformat()} 后永久退出", code_field
         )
-    if last_day < latest.valid_from:
+    start = latest.valid_from
+    # 还没开始的单元（当前版本开始日晚于今天）：最后有效日 = 开始日前一天 = 取消这个计划，从未生效
+    cancel_plan = last_day == start - timedelta(days=1) and start > _today(s)
+    if last_day < start and not cancel_plan:
+        future = start > _today(s)
+        eve = (start - timedelta(days=1)).isoformat()
         raise ItemError(
-            f"服务单元 {code} 的最后有效日不能早于其当前版本的开始日 "
-            f"{latest.valid_from.isoformat()}",
+            f"“{latest.name}”（{code}）这一版从 {start.isoformat()} 开始。"
+            f"最后有效日 {last_day.isoformat()} 早于这一天，单元不能在开始之前退出。",
             day_field,
+            hint=(
+                f"如果要取消这个尚未开始的单元，把最后有效日填为 {eve}"
+                "（开始日前一天），它就从未生效。如果它照常开始、只是换部门，改用“更换所属部门”，"
+                f"生效日填 {start.isoformat()}。"
+                if future
+                else f"把最后有效日改为 {start.isoformat()} 或之后。"
+            ),
+            facts=[("单元开始", start, "info"), ("你填的最后有效日", last_day, "bad")],
         )
     before = unit_snapshot(s, latest)
     latest.valid_to = last_day
@@ -1844,6 +1888,8 @@ def _not_started(s: Session, model, owner_col: str, obj, what: str, subject: str
 
 def unit_version_problem(s: Session, v: ServiceUnitVersion) -> str | None:
     """单元版本须满足：院区在整个期间存在且非停用；运营主体与该院区有覆盖整个期间的“运营”关系。"""
+    if is_void(v):  # 生效前已更正 / 取消的计划：从未生效，不需要依赖成立
+        return None
     campus = s.get(Campus, v.campus_id)
     inst = s.get(Institution, v.institution_id)
 
@@ -1918,13 +1964,25 @@ def _check_units(ctx: Ctx) -> list[ProblemItem]:
             if version_id in ctx.new_unit_versions:
                 own.append(problem)
             else:
-                dependents.append(f"{unit.code} {v.name}（{problem}）")
+                dependents.append(f"“{v.name}”（{unit.code}）：{problem}")
     problems = []
     for index, (own, dependents) in sorted(blocked.items()):
         parts = list(own)
         if dependents:
-            parts.append("仍有服务单元依赖，须先对这些单元重新绑定或退出：" + "；".join(dependents))
-        problems.append(ProblemItem(message="；".join(parts), item_index=index))
+            parts.append(
+                f"这一项生效后，有 {len(dependents)} 个服务单元不再成立。"
+                + "；".join(dependents)
+                + "。"
+            )
+        problems.append(
+            ProblemItem(
+                message="".join(parts),
+                item_index=index,
+                hint="在本申请里为这些单元逐个处理：改挂到其他部门、改绑院区或运营主体，或让单元退出。"
+                if dependents
+                else None,
+            )
+        )
     return problems
 
 
@@ -1978,45 +2036,75 @@ def _db_message(exc: DBAPIError) -> str:
 
 
 def apply_items(
-    session: Session, items: list[ChangeItem], change_id: int, user_id: int
+    session: Session,
+    items: list[ChangeItem],
+    change_id: int,
+    user_id: int,
+    *,
+    collect: bool = False,
 ) -> list[dict]:
-    """依次应用，返回每项的前后内容。任一项失败抛 BusinessError，调用方负责回滚。"""
+    """依次应用，返回每项的前后内容。不通过抛 BusinessError，调用方负责回滚。
+
+    collect=True（预演用）：每项在自己的 SAVEPOINT 里试，失败的项回滚后继续试后面的，
+    一次列出全部问题；通过的各项前后内容放在 BusinessError.outcomes 里，页面照常显示对照。
+    确认时 collect=False：遇到第一个问题就停。
+    """
     if not items:
         raise BusinessError("变更申请里没有变更项")
     ctx = Ctx(session, change_id, user_id)
     outcomes: list[dict] = []
+    problems: list[ProblemItem] = []
     for index, item in enumerate(items):
         label = KIND_LABELS[item.kind]
         ctx.index = index
+        sp = session.begin_nested() if collect else None
+        saved = _ctx_state(ctx) if collect else {}
         try:
             out = HANDLERS[item.kind](ctx, item)
-        except ItemError as e:
-            raise BusinessError(
-                f"第 {index + 1} 项（{label}）未通过校验：{e.message}",
-                problems=[ProblemItem(message=e.message, item_index=index, field=e.field)],
-            ) from None
-        except DBAPIError as e:
-            msg = _db_message(e)
-            raise BusinessError(
-                f"第 {index + 1} 项（{label}）未通过校验：{msg}",
-                problems=[ProblemItem(message=msg, item_index=index)],
-            ) from None
+        except (ItemError, DBAPIError) as e:
+            if isinstance(e, ItemError):
+                problem = e.problem(index)
+            else:
+                problem = ProblemItem(message=_db_message(e), item_index=index)
+            if sp is None:
+                raise BusinessError(
+                    f"第 {index + 1} 项（{label}）未通过校验：{problem.message}", problems=[problem]
+                ) from None
+            sp.rollback()
+            _ctx_restore(ctx, saved)
+            problems.append(problem)
+            continue
+        if sp is not None:
+            sp.commit()
         outcomes.append({"index": index, "kind": item.kind, "label": label, **out})
-    problems = _check_units(ctx) + _check_org(ctx) + _check_codes(ctx) + _check_ended_codes(ctx)
+    problems += _check_units(ctx) + _check_org(ctx) + _check_codes(ctx) + _check_ended_codes(ctx)
     if problems:
         first = problems[0]
         label = KIND_LABELS[items[first.item_index].kind]
-        raise BusinessError(
-            f"第 {first.item_index + 1} 项（{label}）未通过校验：{first.message}",
+        more = f"（另有 {len(problems) - 1} 个问题）" if len(problems) > 1 else ""
+        err = BusinessError(
+            f"第 {first.item_index + 1} 项（{label}）未通过校验：{first.message}{more}",
             problems=problems,
         )
+        err.outcomes = outcomes
+        raise err
     return outcomes
 
 
+def _ctx_state(ctx: Ctx) -> dict:
+    """预演时每项之前记下跨项校验用的登记表，该项失败回滚后恢复（避免校验引用已回滚的行）。"""
+    return {k: dict(v) for k, v in vars(ctx).items() if isinstance(v, dict)}
+
+
+def _ctx_restore(ctx: Ctx, saved: dict) -> None:
+    for k, v in saved.items():
+        setattr(ctx, k, v)
+
+
 def dry_run(session: Session, items: list[ChangeItem], change_id: int, user_id: int) -> list[dict]:
-    """在 SAVEPOINT 里执行一遍再回滚：用于提交前校验和确认页差异。"""
+    """在 SAVEPOINT 里逐项预演再回滚：用于提交前校验和确认页差异，一次列出全部问题。"""
     savepoint = session.begin_nested()
     try:
-        return apply_items(session, items, change_id, user_id)
+        return apply_items(session, items, change_id, user_id, collect=True)
     finally:
         savepoint.rollback()

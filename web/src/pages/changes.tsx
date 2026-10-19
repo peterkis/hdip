@@ -13,18 +13,12 @@ import {
 } from '@/api/generated/changes/changes'
 import type { ChangeRequestOut, ChangeRequestSummary, ItemOutcome, ListChangeRequestsStatus } from '@/api/generated/model'
 import { ChangeStatusBadge } from '@/components/badges'
-import {
-  CampusCreateDialog,
-  InstitutionCreateDialog,
-  RelationCreateDialog,
-} from '@/components/forms/change-forms'
-import { DepartmentCreateDialog } from '@/components/forms/department-forms'
-import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbRow, DbTable, DbToolbar, ToggleChip } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
+import { ProblemCard } from '@/components/problem-card'
 import { Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { Steps, type StepItem } from '@/components/kit/steps'
@@ -157,7 +151,11 @@ export function ChangeDetailPage() {
   const [returning, setReturning] = useState(false)
   // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
   const [itemLimit, setItemLimit] = useState(50)
-  const [adding, setAdding] = useState<'institution' | 'campus' | 'relation' | 'department' | 'unit' | null>(null)
+  // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）
+  const jumpTo = (index: number) => {
+    if (index >= itemLimit) setItemLimit(index + 1)
+    requestAnimationFrame(() => document.getElementById(`item-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
   const [noteFor, setNoteFor] = useState<number | null>(null)
@@ -184,7 +182,6 @@ export function ChangeDetailPage() {
     run(() => updateChangeRequest(id, { items: cr.items.filter((_, i) => i !== index), note: cr.note }))
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
   const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
-  const closeAdd = (o: boolean) => !o && setAdding(null)
 
   return (
     <div className="max-w-(--hd-page-max-width)">
@@ -238,20 +235,30 @@ export function ChangeDetailPage() {
       />
 
       <div className="grid gap-4">
+        <div className="border-line-subtle rounded-md border px-2 py-4 sm:px-4">
+          <Steps steps={progress(cr)} />
+        </div>
         {action.error && (
           <Callout tone="danger" title="操作未成功">
             {action.error.message}
           </Callout>
         )}
-        {cr.problem_message && (
-          <Callout tone="danger" title={`按当前数据校验未通过，${cr.status === 'draft' ? '暂不能提交' : '暂不能确认'}`}>
-            {cr.problem_message}
-          </Callout>
+        {cr.problems.length > 0 && (
+          <section className="grid gap-2" aria-label="需要处理的问题">
+            <h2 className="text-danger-text text-sm font-semibold">
+              还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
+            </h2>
+            {cr.problems.map((pr, k) => (
+              <ProblemCard
+                key={k}
+                problem={pr}
+                title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
+                onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
+              />
+            ))}
+          </section>
         )}
 
-        <div className="border-line-subtle rounded-md border px-2 py-4 sm:px-4">
-          <Steps steps={progress(cr)} />
-        </div>
 
         {p.can_edit ? (
           <Section
@@ -299,25 +306,6 @@ export function ChangeDetailPage() {
               </span>
             </>
           }
-          action={
-            p.can_edit && (
-              <>
-                {(
-                  [
-                    ['institution', '新建主体'],
-                    ['campus', '新建院区'],
-                    ['relation', '建立运营关系'],
-                    ['department', '新建部门'],
-                    ['unit', '新建服务单元'],
-                  ] as const
-                ).map(([k, label]) => (
-                  <Button key={k} size="xs" variant="outline" onClick={() => setAdding(k)}>
-                    + {label}
-                  </Button>
-                ))}
-              </>
-            )
-          }
         >
           <div className="grid gap-3">
             {cr.items.length === 0 && <p className="text-fg-disabled text-xs">没有变更项</p>}
@@ -325,18 +313,27 @@ export function ChangeDetailPage() {
               const outcome = cr.outcomes?.find((o) => o.index === i)
               const problem = cr.problems.find((x) => x.item_index === i)
               return (
-                <div key={i} className={cn('bg-surface-raised min-w-0 rounded-md border p-3', problem ? 'border-danger' : 'border-line-subtle')}>
-                  <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                    <span className="text-fg-muted">第 {i + 1} 项</span>
-                    <Tag tone="gray">{cr.item_labels[i]}</Tag>
-                    <span className="text-fg-strong min-w-0 break-words">{outcome?.target ?? describeItem(item)}</span>
-                    {p.can_edit && (
-                      <Button size="xs" variant="ghost" className="ml-auto" onClick={() => removeItem(i)}>
-                        移除
-                      </Button>
-                    )}
+                <div
+                  key={i}
+                  id={`item-${i}`}
+                  className={cn('bg-surface-raised min-w-0 scroll-mt-16 rounded-md border p-3', problem ? 'border-danger' : 'border-line-subtle')}
+                >
+                  <div className="mb-2 grid gap-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                      <span className="text-fg-muted tabular-nums">第 {i + 1} 项</span>
+                      <Tag tone={problem ? 'red' : 'gray'}>{cr.item_labels[i]}</Tag>
+                      {problem && <span className="text-danger-text text-caption">未通过</span>}
+                      {p.can_edit && (
+                        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => removeItem(i)}>
+                          移除
+                        </Button>
+                      )}
+                    </div>
+                    {/* 主要信息：用名称说清这一项在做什么；代码只作补充，弱化显示 */}
+                    <p className="text-fg-strong text-sm font-medium break-words">{cr.item_summaries?.[i] || outcome?.target || describeItem(item)}</p>
+                    <p className="text-fg-disabled font-mono text-caption break-all">{describeItem(item)}</p>
                   </div>
-                  {problem && <p className="text-danger-text mb-2 text-xs">{problem.message}</p>}
+                  {problem && <ProblemCard problem={problem} compact />}
                   {outcome && <OutcomeDiff outcome={outcome} />}
                 </div>
               )
@@ -372,27 +369,6 @@ export function ChangeDetailPage() {
           })
         }
       />
-      {adding === 'institution' && <InstitutionCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
-      {adding === 'campus' && <CampusCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
-      {adding === 'department' && <DepartmentCreateDialog open onOpenChange={closeAdd} fixedTarget={id} />}
-      {adding === 'unit' && (
-        <UnitCreateDialog
-          open
-          onOpenChange={closeAdd}
-          fixedTarget={id}
-          departmentCode={lastCode(cr, 'department.create')}
-          campusCode={lastCode(cr, 'campus.create')}
-        />
-      )}
-      {adding === 'relation' && (
-        <RelationCreateDialog
-          open
-          onOpenChange={closeAdd}
-          fixedTarget={id}
-          campusCode={lastCode(cr, 'campus.create')}
-          institutionCode={lastCode(cr, 'institution.create')}
-        />
-      )}
     </div>
   )
 }
@@ -625,7 +601,3 @@ function describeItem(item: ChangeRequestOut['items'][number]): string {
   return ''
 }
 
-function lastCode(cr: ChangeRequestOut, kind: string): string | undefined {
-  const found = [...cr.items].reverse().find((i) => i.kind === kind)
-  return found && 'code' in found ? found.code : undefined
-}

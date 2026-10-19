@@ -31,6 +31,7 @@ export * from './classRef';
 export * from './codeSuggestion';
 export * from './codeSuggestionMatch';
 export * from './codeSuggestionTargetType';
+export * from './dateFact';
 export * from './departmentAffiliate';
 export * from './departmentAffiliationOut';
 export * from './departmentAliasAdd';

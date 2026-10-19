@@ -73,7 +73,7 @@ def test_revise_effective_date_must_be_after_current_start(api):
             "changes": {"name": "新名称"},
         }
     )
-    assert "生效日须晚于" in _problem(api.submit(cr["id"]))
+    assert "必须晚于" in _problem(api.submit(cr["id"]))
 
 
 def test_revise_without_real_change_rejected(api):
@@ -379,7 +379,7 @@ def test_future_version_can_be_corrected_on_its_start_date(api):
 def test_effective_version_cannot_be_corrected_on_its_start_date(api):
     api.apply(inst_create(), campus_create(valid_from="2020-01-01"))
     cr = api.draft(_campus_revise("GX", "2020-01-01", public_name="某某"))
-    assert "须晚于当前版本的开始日" in _problem(api.submit(cr["id"]))
+    assert "必须晚于" in _problem(api.submit(cr["id"]))
 
 
 def test_corrected_campus_still_carries_units(api):

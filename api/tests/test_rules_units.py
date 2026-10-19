@@ -20,7 +20,7 @@ def test_suspending_campus_blocked_by_units_and_lists_them(api):
     r = api.submit(cr["id"])
     assert r.status_code == 422
     msg = r.json()["message"]
-    assert "仍有服务单元依赖" in msg and "U1" in msg and "U2" in msg
+    assert "个服务单元不再成立" in msg and "U1" in msg and "U2" in msg
 
 
 def test_suspend_campus_and_move_units_in_one_request(api):
@@ -53,7 +53,7 @@ def test_closing_operate_relation_blocked_by_units(api):
     )
     r = api.submit(cr["id"])
     assert r.status_code == 422
-    assert "仍有服务单元依赖" in r.json()["message"]
+    assert "个服务单元不再成立" in r.json()["message"]
     # 退出单元后可以关闭
     api.apply(
         {"kind": "service_unit.retire", "code": "U1", "valid_to": "2026-12-31"},
@@ -109,7 +109,7 @@ def test_suspending_department_blocked_by_units_then_allowed_after_moving_them(a
     )  # fmt: skip
     r = api.submit(cr["id"])
     assert r.status_code == 422
-    assert "仍有服务单元依赖" in r.json()["message"] and "暂停履职" in r.json()["message"]
+    assert "个服务单元不再成立" in r.json()["message"] and "暂停履职" in r.json()["message"]
     # 同一张申请里先把单元改挂走：成立
     api.apply(
         {"kind": "department.change_lifecycle", "code": "XNK", "effective_date": "2027-01-01",

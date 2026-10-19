@@ -50,6 +50,7 @@ export interface ChangeRequestOut {
   note: string | null;
   items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
   item_labels: string[];
+  item_summaries?: string[];
   outcomes: ItemOutcome[] | null;
   problems: ProblemItem[];
   problem_message: string | null;

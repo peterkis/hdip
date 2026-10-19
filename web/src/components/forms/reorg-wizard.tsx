@@ -118,10 +118,14 @@ export function DepartmentReorgWizard({
     : target
       ? [{ value: target, label: `${deptName(target)}（承接）` }]
       : []
-  const unitOptions: Option[] = [
+  // 生效日之后才开始的单元（计划中）：改挂在它的开始日直接更正那一版；“退出”即取消这个计划，从未生效
+  const planned = (u: { version: { valid_from: string } }) => !!day && u.version.valid_from > day
+  const unitOptions = (u: { version: { valid_from: string } }): Option[] => [
     ...(type === 'SPLIT_OFF' ? [{ value: KEEP, label: `保持在${rename.trim() || source.name}（存续）` }] : []),
-    ...resultOptions,
-    { value: RETIRE, label: `单元永久退出（最后有效日 ${day ? dayBefore(day) : '—'}）` },
+    ...resultOptions.map((o) => (planned(u) ? { ...o, label: `${o.label}，自 ${u.version.valid_from} 开始时就挂在这里` } : o)),
+    planned(u)
+      ? { value: RETIRE, label: `取消这个计划中的单元（原定 ${u.version.valid_from} 开始，取消后从未生效）` }
+      : { value: RETIRE, label: `单元永久退出（最后有效日 ${day ? dayBefore(day) : '—'}）` },
   ]
   const childOptions: Option[] = [
     ...(type === 'SPLIT_OFF' ? [{ value: KEEP, label: `保持隶属${rename.trim() || source.name}` }] : []),
@@ -206,8 +210,10 @@ export function DepartmentReorgWizard({
     for (const u of allUnits) {
       const to = unitChoice(u.code)
       if (to === KEEP) continue
-      if (to === RETIRE) items.push({ kind: 'service_unit.retire', code: u.code, valid_to: last })
-      else items.push({ kind: 'service_unit.change_department', code: u.code, effective_date: day, department_code: to })
+      // 计划中的单元：在它的开始日处理（更正那一版 / 取消计划），不能早于开始日
+      const start = u.version.valid_from > day ? u.version.valid_from : null
+      if (to === RETIRE) items.push({ kind: 'service_unit.retire', code: u.code, valid_to: start ? dayBefore(start) : last })
+      else items.push({ kind: 'service_unit.change_department', code: u.code, effective_date: start ?? day, department_code: to })
     }
     for (const c of allChildren) {
       const to = childChoice(c.code)
@@ -409,13 +415,17 @@ export function DepartmentReorgWizard({
                   onBulk={(to) => setUnitTo(Object.fromEntries(allUnits.map((u) => [u.code, to])))}
                 >
                   {allUnits.map((u) => (
-                    <ChecklistRow key={u.code} label={`${u.version.name}`} sub={`${u.code} · ${u.version.campus_name}${sourceCodes.length > 1 ? ` · 原属 ${deptName(u.from)}` : ''}`}>
+                    <ChecklistRow
+                      key={u.code}
+                      label={`${u.version.name}`}
+                      sub={`${u.code} · ${u.version.campus_name}${sourceCodes.length > 1 ? ` · 原属 ${deptName(u.from)}` : ''}${planned(u) ? ` · 计划 ${u.version.valid_from} 开始` : ''}`}
+                    >
                       <SelectField
                         label="由谁承接"
                         name={`unit.${u.code}`}
                         value={unitChoice(u.code)}
                         onChange={(v) => setUnitTo({ ...unitTo, [u.code]: v })}
-                        options={unitOptions}
+                        options={unitOptions(u)}
                         placeholder="请选择"
                       />
                     </ChecklistRow>

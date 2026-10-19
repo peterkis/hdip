@@ -455,6 +455,8 @@ class ChangeRequestOut(BaseModel):
     note: str | None
     items: list[ChangeItem]
     item_labels: list[str]
+    item_summaries: list[str] = []
+    """每项一句话说明：用名称说清谁、怎么变、从哪天起（预演失败时也有）。"""
     outcomes: list[ItemOutcome] | None
     """已确认：确认时记录的前后内容；草稿/已提交：按当前数据预演的结果。"""
     problems: list[ProblemItem]

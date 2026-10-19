@@ -42,6 +42,8 @@ export function Steps({ steps, className }: { steps: StepItem[]; className?: str
               DOT[s.state],
             )}
           >
+            {/* 当前节点：一圈柔和的光晕缓慢扩散、淡出，提示“正在这一步”；系统要求减少动效时不播放 */}
+            {s.state === 'current' && <span aria-hidden className="hd-breathe bg-brand absolute inset-0 rounded-full" />}
             {s.state === 'done' ? (
               <Icon icon={Tick02Icon} className="size-3.5" strokeWidth={2.5} />
             ) : s.state === 'stopped' ? (

@@ -4429,6 +4429,14 @@
             "type": "array",
             "title": "Item Labels"
           },
+          "item_summaries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Item Summaries",
+            "default": []
+          },
           "outcomes": {
             "anyOf": [
               {
@@ -5355,6 +5363,30 @@
         ],
         "title": "CodeSuggestion",
         "description": "按源名称找到的候选：只是建议，裁决仍由人勾选确认、经变更申请生效。"
+      },
+      "DateFact": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "tone": {
+            "type": "string",
+            "title": "Tone",
+            "default": "info"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "date"
+        ],
+        "title": "DateFact",
+        "description": "问题涉及的一个日期，前端画成小时间轴：tone=bad 的是你填的、与事实冲突的日期。"
       },
       "DepartmentAffiliate": {
         "properties": {
@@ -8476,6 +8508,25 @@
               }
             ],
             "title": "Field"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hint"
+          },
+          "facts": {
+            "items": {
+              "$ref": "#/components/schemas/DateFact"
+            },
+            "type": "array",
+            "title": "Facts",
+            "default": []
           }
         },
         "type": "object",
@@ -8483,7 +8534,7 @@
           "message"
         ],
         "title": "ProblemItem",
-        "description": "一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。"
+        "description": "一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。\n\nmessage 只说事实（短句、主动语态）；hint 说怎么改；facts 是相关日期。"
       },
       "RelationOut": {
         "properties": {

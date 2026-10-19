@@ -63,3 +63,62 @@ def test_exited_department_keeps_no_open_code_and_cannot_get_new_ones(api):
     cr = api.draft(ext_assign("D1", T, department_code="A"))
     assert "已退出" in problem(api.submit(cr["id"]))
     api.apply(ext_assign("D1", T, department_code="B", evidence_note="HIS 重新分配记录（模拟）"))
+
+
+def test_planned_unit_in_reorganization(api):
+    """组织变更生效日之后才开始的单元：改挂在它的开始日直接更正那一版；或取消计划（从未生效）。"""
+    from factories import unit_create, unit_item
+
+    api.apply(
+        *world(),
+        dept_create(code="A", name="甲科"),
+        unit_create(code="P1", name="甲科高新门诊", dept="A", campus="GX", valid_from="2030-03-01"),
+        unit_create(
+            code="P2",
+            name="甲科高新病房",
+            unit_type="IPD",
+            dept="A",
+            campus="GX",
+            valid_from="2030-03-01",
+        ),
+    )
+    day = "2030-01-01"
+    # 早于单元开始日退出：拒绝，并给出怎么改
+    cr = api.draft(
+        dept_create(code="B", name="乙科", valid_from=day),
+        dept_create(code="C", name="丙科", valid_from=day),
+        reorganize("SPLIT", day, ["A"], ["B", "C"]),
+        unit_item("change_department", "P1", "2030-03-01", department_code="B"),
+        {"kind": "service_unit.retire", "code": "P2", "valid_to": "2029-12-31"},
+    )
+    r = api.submit(cr["id"])
+    p = next(x for x in r.json()["problems"] if x["item_index"] == 4)
+    assert "不能在开始之前退出" in p["message"] and "2030-02-28" in p["hint"]
+    assert [f["tone"] for f in p["facts"]] == ["info", "bad"]
+
+    api.apply(
+        dept_create(code="B", name="乙科", valid_from=day),
+        dept_create(code="C", name="丙科", valid_from=day),
+        reorganize("SPLIT", day, ["A"], ["B", "C"]),
+        unit_item("change_department", "P1", "2030-03-01", department_code="B"),
+        {"kind": "service_unit.retire", "code": "P2", "valid_to": "2030-02-28"},  # 取消计划
+    )
+    units = {
+        u["code"]: u for u in api.get("/api/service-units", params={"as_of": "2030-03-01"}).json()
+    }
+    assert units["P1"]["version"]["department_code"] == "B"
+    assert "P2" not in units
+
+
+def test_preview_lists_all_problems_and_keeps_passing_outcomes(api):
+    """预演逐项试算：两处问题一次列出，通过的项仍有前后内容；每项有带名称的一句话说明。"""
+    api.apply(dept_create(code="A", name="甲科"), dept_create(code="B", name="乙科"))
+    cr = api.draft(
+        dept_item("revise", "A", effective_date="2019-01-01", changes={"name": "甲科二"}),
+        dept_item("revise", "B", effective_date="2026-12-01", changes={"name": "乙科新"}),
+        dept_item("revise", "B", effective_date="2019-01-01", changes={"name": "乙科三"}),
+    )
+    d = api.get(f"/api/change-requests/{cr['id']}").json()
+    assert [p["item_index"] for p in d["problems"]] == [0, 2]
+    assert [o["index"] for o in d["outcomes"]] == [1]
+    assert d["item_summaries"][1] == "部门“乙科”更名为“乙科新”，自 2026-12-01 起"
