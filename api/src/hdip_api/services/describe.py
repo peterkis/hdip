@@ -221,7 +221,8 @@ def describe_items(s: Session, items: list[dict]) -> list[str]:
 
 
 # ------------------------------------------------------------------ 结构化的行（申请页按原型逐行呈现）
-# 一行 = 若干片段：名称标签（chip：普通 / new 新设 / out 退出）、状态标签（tag，带色调）、箭头、普通文字；
+# 一行 = 若干片段：名称标签（chip：普通 / new 新设 / out 退出 / ref 关联对象，如隶属的上级部门）、
+# 状态标签（tag，带色调）、箭头、普通文字；
 # meta 是靠右弱化显示的代码与院区。新设部门的主分类、隶属并进它的“新设”那一行（covered_by 指向那一行）。
 Part = dict[str, str]
 
@@ -257,49 +258,58 @@ def item_views(s: Session, items: list[dict]) -> list[dict]:
     created = {
         i["code"]: idx for idx, i in enumerate(items) if i.get("kind") == "department.create"
     }
-    # 新设部门的主分类、隶属：并进“新设”那一行
-    extra: dict[str, list[str]] = {}
+    # 新设部门的主分类、隶属：并进“新设”那一行（每条一组片段，前面加“·”）
+    extra: dict[str, list[list[Part]]] = {}
+    has_parent: set[str] = set()
     covered: dict[int, int] = {}
     for idx, i in enumerate(items):
         k = i.get("kind")
         code = i.get("code")
         if code in created and k == "department.classify" and i.get("class_code"):
-            extra.setdefault(code, []).append(
-                n.classes.get(
-                    (i.get("scheme_code", "DEPT_MAIN_CLASS"), i["class_code"]), i["class_code"]
-                )
+            cls = n.classes.get(
+                (i.get("scheme_code", "DEPT_MAIN_CLASS"), i["class_code"]), i["class_code"]
             )
+            extra.setdefault(code, []).append([_p("text", f"· {cls}")])
             covered[idx] = created[code]
         elif code in created and k == "department.set_parent":
+            has_parent.add(code)
             extra.setdefault(code, []).append(
-                f"隶属{n.dept.get(i['parent_code'], i['parent_code'])}"
+                [_p("text", "· 隶属"), _parent_chip(n, i["parent_code"])]
                 if i.get("parent_code")
-                else "一级部门"
+                else [_p("text", "· 一级部门")]
             )
             covered[idx] = created[code]
     views = []
     for idx, i in enumerate(items):
         try:
-            parts, meta = _view(n, units, extra, i)
+            parts, meta = _view(n, units, extra, has_parent, i)
         except (KeyError, TypeError, ValueError):
             parts, meta = [_p("text", KIND_LABELS.get(i.get("kind", ""), ""))], None
         views.append({"parts": parts, "meta": meta, "covered_by": covered.get(idx)})
     return views
 
 
-def _view(n: _Names, units: dict, extra: dict, i: dict) -> tuple[list[Part], str | None]:
+def _parent_chip(n: _Names, code: str) -> Part:
+    """隶属的上级部门：同一申请里新设的用新设标签，其余用关联对象标签（着色，与正文区分）。"""
+    return _p("new" if code in n.new_depts else "ref", n.dept.get(code, code))
+
+
+def _view(
+    n: _Names, units: dict, extra: dict, has_parent: set[str], i: dict
+) -> tuple[list[Part], str | None]:
     k = i.get("kind", "")
     day = lambda key="effective_date": _day(i[key]) if i.get(key) else ""  # noqa: E731
     dept_chip = lambda code: _p("new" if code in n.new_depts else "chip", n.dept.get(code, code))  # noqa: E731
     match k:
         case "department.create":
             more = extra.get(i["code"], [])
-            if not any(x.startswith("隶属") for x in more):
-                more = [*more, "一级部门"]
+            if i["code"] not in has_parent:
+                more = [*more, [_p("text", "· 一级部门")]]
             return [
                 _p("new", i["name"]),
                 _p("tag", "新设", "green"),
-                _p("text", " · ".join([f"自 {day('valid_from')}", *more])),
+                _p("text", f"自 {day('valid_from')}"),
+                *[p for group in more for p in group],
             ], i["code"]
         case "department.reorganize":
             src = [p["code"] for p in i["sources"]]
@@ -350,7 +360,7 @@ def _view(n: _Names, units: dict, extra: dict, i: dict) -> tuple[list[Part], str
                     dept_chip(i["code"]),
                     _p("arrow", "→"),
                     _p("text", "改为隶属"),
-                    dept_chip(i["parent_code"]),
+                    _parent_chip(n, i["parent_code"]),
                     _p("text", f"自 {day()}"),
                 ], i["code"]
             return [

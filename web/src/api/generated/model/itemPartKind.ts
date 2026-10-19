@@ -15,4 +15,5 @@ export const ItemPartKind = {
   out: 'out',
   tag: 'tag',
   arrow: 'arrow',
+  ref: 'ref',
 } as const;

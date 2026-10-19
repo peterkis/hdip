@@ -1,5 +1,5 @@
-// 多步骤流程的进度节点（细长样式，按申请页原型）：一行排开，圆点在左；右侧第一行是节点名称与
-// 灰色的（操作人），第二行是时间或提示。已完成 = 实心勾；当前 = 浅底描边 + 缓慢扩散的光晕“呼吸”；未到 = 灰。
+// 多步骤流程的进度节点（细长样式，按申请页原型）：一行排开，圆点在左；右侧第一行是节点名称，
+// 第二行是操作人与时间（如“张三 10-19 14:34”）或提示。已完成 = 实心勾；当前 = 浅底描边 + 缓慢扩散的光晕“呼吸”；未到 = 灰。
 // 终止于某一步（退回、撤销）时，该节点标红，后面的节点灰掉。
 import { Icon } from '@/components/kit/icon'
 import { Cancel01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
@@ -11,7 +11,7 @@ export type StepState = 'done' | 'current' | 'upcoming' | 'stopped' | 'skipped'
 export interface StepItem {
   label: string
   state: StepState
-  /** 操作人：显示在名称后的括号里，灰色 */
+  /** 操作人：显示在第二行时间之前 */
   who?: string
   /** 第二行：时间，或“等待谁做什么” */
   detail?: ReactNode
@@ -52,11 +52,14 @@ export function Steps({ steps, className }: { steps: StepItem[]; className?: str
             </span>
           </span>
           <span className="grid min-w-0 leading-snug">
-            <span className="truncate text-xs">
-              <span className={LABEL[s.state]}>{s.label}</span>
-              {s.who && <span className="text-fg-muted ml-1 font-normal">（{s.who}）</span>}
-            </span>
-            {s.detail && <span className="text-fg-muted truncate text-caption">{s.detail}</span>}
+            <span className={cn('truncate text-xs', LABEL[s.state])}>{s.label}</span>
+            {(s.who || s.detail) && (
+              <span className="text-fg-muted truncate text-caption">
+                {s.who && <span className="text-fg-secondary">{s.who}</span>}
+                {s.who && s.detail && ' '}
+                {s.detail}
+              </span>
+            )}
           </span>
         </li>
       ))}

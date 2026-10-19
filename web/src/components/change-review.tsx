@@ -243,7 +243,7 @@ function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: num
           {view?.meta && <span className="text-fg-disabled font-mono text-caption">{view.meta}</span>}
           {outcomes.length > 0 && (
             <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-fg-disabled hover:text-fg inline-flex items-center gap-0.5 text-caption">
-              对照
+              详情
               <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3" strokeWidth={2} />
             </button>
           )}
@@ -259,11 +259,14 @@ function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: num
   )
 }
 
-/** 行内片段：名称标签（普通 / 新设 / 退出）、状态标签、箭头、文字 */
+/** 行内片段：名称标签（普通 / 新设 / 退出 / 关联对象）、状态标签、箭头、文字 */
 function RowPart({ kind, text, tone }: { kind: string; text: string; tone?: string }) {
   switch (kind) {
     case 'chip':
       return <span className="bg-surface-subtle text-fg-strong rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
+    case 'ref':
+      // 关联对象（如隶属的上级部门）：浅蓝标签，与正文和本项的对象区分开
+      return <span className="bg-tag-blue-bg text-tag-blue-text rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
     case 'new':
       return <span className="bg-tag-green-bg text-tag-green-text rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
     case 'out':
@@ -369,12 +372,6 @@ export function ReviewNav({
         {reorg?.ended.length ? <NavLink onClick={() => jump('review-auto')}>自动结束</NavLink> : null}
         {reorg?.otherMatters ? <NavLink onClick={() => jump('review-other')}>其他系统</NavLink> : null}
       </nav>
-      <p className="bg-surface-sidebar text-fg-secondary rounded-lg px-3 py-2.5 text-caption">
-        共 {cr.items.length} 项变更
-        {cr.problems.length ? <span className="text-danger-text"> · {cr.problems.length} 个问题</span> : cr.status !== 'confirmed' ? ' · 预演通过' : ''}
-        <br />
-        绿点 = 已核对，红点 = 有问题
-      </p>
     </aside>
   )
 }

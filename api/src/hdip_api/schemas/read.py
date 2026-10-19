@@ -451,9 +451,9 @@ class ChangeRequestSummary(BaseModel):
 
 class ItemPart(BaseModel):
     """一行里的一个片段：text 文字；chip 名称；new 新设的名称；out 退出的名称；
-    tag 状态标签；arrow 箭头。"""
+    tag 状态标签；arrow 箭头；ref 关联对象的名称（如隶属的上级部门，着色显示）。"""
 
-    kind: Literal["text", "chip", "new", "out", "tag", "arrow"]
+    kind: Literal["text", "chip", "new", "out", "tag", "arrow", "ref"]
     text: str
     tone: str | None = None
     """tag 的色调：green / brown / yellow / blue / gray / red。"""

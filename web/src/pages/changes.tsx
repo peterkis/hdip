@@ -338,7 +338,6 @@ export function ChangeDetailPage() {
                     {cr.status === 'draft' ? '提交后不能再改；确认人确认时会按当天的数据再预演一次。' : '确认后在一个事务里全部生效，之后不能撤回。'}
                   </div>
                 </div>
-                {primary}
               </div>
             )}
           </main>

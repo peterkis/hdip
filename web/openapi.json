@@ -8086,7 +8086,8 @@
               "new",
               "out",
               "tag",
-              "arrow"
+              "arrow",
+              "ref"
             ],
             "title": "Kind"
           },
