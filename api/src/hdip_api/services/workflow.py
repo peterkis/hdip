@@ -98,6 +98,13 @@ def update_draft(
     cr = get_for_update(s, change_id)
     _require_status(cr, "draft")
     _require_creator(cr, user)
+    # 组织变更是一个整体：含组织变更事件的草稿，不能只留下它的部分变更项（会拆散原子变更）
+    had_reorg = any(i.get("kind") == "department.reorganize" for i in cr.items)
+    if had_reorg and not any(i.kind == "department.reorganize" for i in items):
+        raise BusinessError(
+            "这张草稿是一次部门组织变更，不能去掉组织变更事件而保留其他变更项。"
+            "请回到组织变更向导调整；不再需要时，撤销整张草稿。"
+        )
     cr.items = dump_items(items)
     cr.note = _clean(note)
     cr.updated_at = _now(s)

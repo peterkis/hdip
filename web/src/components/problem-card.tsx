@@ -1,4 +1,4 @@
-// 校验问题卡片：按“发生了什么 → 日期对照 → 怎么改”三段呈现（文字按 ASD-STE100 的原则写：
+// 校验问题卡片（柔和样式：浅红底、淡边框、无粗色条）：按“发生了什么 → 日期对照 → 怎么改”三段呈现（文字按 ASD-STE100 的原则写：
 // 短句、主动语态、先说事实再说操作、一句只说一件事）。日期冲突画成一条小时间轴，冲突的日期标红。
 import { Alert02Icon, ArrowDown01Icon, BulbIcon } from '@hugeicons/core-free-icons'
 import type { ProblemItem } from '@/api/generated/model'
@@ -19,10 +19,13 @@ export function ProblemCard({
   compact?: boolean
 }) {
   return (
-    <div className={cn('bg-danger-soft grid gap-2 rounded-md border-l-2 border-danger px-3 py-2.5', compact && 'py-2')}>
+    // 柔和提示：浅红底 + 很淡的细边框，不用粗色条；图标放在浅色圆形底里
+    <div className={cn('bg-danger-soft border-danger/15 grid gap-2 rounded-lg border px-3 py-2.5', compact && 'py-2')}>
       {(title || onJump) && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Icon icon={Alert02Icon} className="text-danger-text size-4" strokeWidth={2} />
+          <span className="bg-surface-raised text-danger-text flex size-5 items-center justify-center rounded-full">
+            <Icon icon={Alert02Icon} className="size-3" strokeWidth={2} />
+          </span>
           {title && <span className="text-fg-strong font-medium">{title}</span>}
           {onJump && (
             <button type="button" onClick={onJump} className="text-danger-text ml-auto inline-flex items-center gap-0.5 text-caption hover:underline">

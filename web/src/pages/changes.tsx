@@ -14,7 +14,8 @@ import {
 import type { ChangeRequestOut, ChangeRequestSummary, ItemOutcome, ListChangeRequestsStatus } from '@/api/generated/model'
 import { ChangeStatusBadge } from '@/components/badges'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
-import { REORG_TITLE } from '@/components/forms/reorg-wizard'
+import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wizard'
+import { useListDepartments } from '@/api/generated/master/master'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbRow, DbTable, DbToolbar, ToggleChip } from '@/components/kit/database'
 import { Missing } from '@/components/kit/missing'
@@ -149,6 +150,7 @@ export function ChangeDetailPage() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
+  const [reorgEditing, setReorgEditing] = useState(false)
   // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
   const [itemLimit, setItemLimit] = useState(50)
   // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）
@@ -178,8 +180,9 @@ export function ChangeDetailPage() {
   /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
   const run = (fn: () => Promise<ChangeRequestOut>, done?: string) =>
     action.mutate(fn, { onSuccess: () => done && notify.success(done) })
-  const removeItem = (index: number) =>
-    run(() => updateChangeRequest(id, { items: cr.items.filter((_, i) => i !== index), note: cr.note }))
+  // 申请页只用于核对与提交：不逐项移除（会拆散组织变更这类整体变更）。
+  // 向导生成的草稿回到向导调整，保存时整体替换；其他草稿可撤销后重新发起。
+  const reorg = cr.items.find((i) => i.kind === 'department.reorganize')
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
   const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
 
@@ -195,6 +198,11 @@ export function ChangeDetailPage() {
         description={cr.copied_from_id ? <>复制自 <Link className="underline" to={`/changes/${cr.copied_from_id}`}>#{cr.copied_from_id}</Link></> : undefined}
         actions={
           <>
+            {p.can_edit && reorg && (
+              <Button variant="outline" disabled={action.isPending} onClick={() => setReorgEditing(true)}>
+                回到向导调整
+              </Button>
+            )}
             {p.can_cancel && (
               <Button variant="ghost" disabled={action.isPending} onClick={() => run(() => cancelChangeRequest(id), `申请 #${id} 已撤销`)}>
                 撤销
@@ -316,18 +324,13 @@ export function ChangeDetailPage() {
                 <div
                   key={i}
                   id={`item-${i}`}
-                  className={cn('bg-surface-raised min-w-0 scroll-mt-16 rounded-md border p-3', problem ? 'border-danger' : 'border-line-subtle')}
+                  className={cn('bg-surface-raised min-w-0 scroll-mt-16 rounded-md border p-3', problem ? 'border-danger/30' : 'border-line-subtle')}
                 >
                   <div className="mb-2 grid gap-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                       <span className="text-fg-muted tabular-nums">第 {i + 1} 项</span>
                       <Tag tone={problem ? 'red' : 'gray'}>{cr.item_labels[i]}</Tag>
                       {problem && <span className="text-danger-text text-caption">未通过</span>}
-                      {p.can_edit && (
-                        <Button size="xs" variant="ghost" className="ml-auto" onClick={() => removeItem(i)}>
-                          移除
-                        </Button>
-                      )}
                     </div>
                     {/* 主要信息：用名称说清这一项在做什么；代码只作补充，弱化显示 */}
                     <p className="text-fg-strong text-sm font-medium break-words">{cr.item_summaries?.[i] || outcome?.target || describeItem(item)}</p>
@@ -369,7 +372,34 @@ export function ChangeDetailPage() {
           })
         }
       />
+      {reorgEditing && reorg?.kind === 'department.reorganize' && (
+        <ReorgEditor cr={cr} sourceCode={reorg.sources[0].code} onClose={() => setReorgEditing(false)} />
+      )}
     </div>
+  )
+}
+
+/** 回到向导调整组织变更草稿：找到原部门，按草稿恢复向导 */
+function ReorgEditor({ cr, sourceCode, onClose }: { cr: ChangeRequestOut; sourceCode: string; onClose: () => void }) {
+  const { asOf } = useApp()
+  const { data: depts } = useListDepartments({ as_of: asOf })
+  const row = depts?.find((d) => d.code === sourceCode)
+  if (!row) return null
+  const created = cr.items.find((i) => i.kind === 'department.create')
+  return (
+    <DepartmentReorgWizard
+      open
+      onOpenChange={(o) => !o && onClose()}
+      source={{
+        id: row.id,
+        code: row.code,
+        name: row.version.name,
+        institutionCode: created && 'institution_code' in created ? (created.institution_code ?? null) : null,
+        parentCode: row.parent?.code ?? null,
+        mainClass: row.main_class?.code ?? null,
+      }}
+      draft={{ id: cr.id, note: cr.note ?? null, items: cr.items }}
+    />
   )
 }
 

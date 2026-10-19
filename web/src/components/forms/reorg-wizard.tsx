@@ -5,11 +5,11 @@
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { createChangeRequest } from '@/api/generated/changes/changes'
+import { createChangeRequest, updateChangeRequest } from '@/api/generated/changes/changes'
 import { getGetDepartmentDependenciesQueryOptions, useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
 import type { DepartmentDependencies } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
-import { CODE_HINT, CODE_RE, useEffectiveDate } from '@/components/forms/change-forms'
+import { CODE_HINT, CODE_RE } from '@/components/forms/change-forms'
 import { FormErrorsContext, requireFields, SelectField, TextField, type Option } from '@/components/forms/fields'
 import type { ChangeItemInput } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
+import { today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { cn } from '@/lib/utils'
 
@@ -61,32 +62,89 @@ function dayBefore(day: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+/** 向导要编辑的已有草稿：按草稿里的变更项恢复向导状态，保存时整体替换这张草稿的变更项 */
+export interface ReorgDraft {
+  id: number
+  note: string | null
+  items: ChangeItemInput[]
+}
+
+type Item = Record<string, unknown> & { kind: string }
+
+/** 从草稿的变更项恢复向导状态（向导生成的草稿可以完整还原） */
+function fromDraft(draft: ReorgDraft | undefined, source: ReorgSource) {
+  const items = (draft?.items ?? []) as unknown as Item[]
+  const ev = items.find((i) => i.kind === 'department.reorganize') as
+    | (Item & { event_type: ReorgType; effective_date: string; basis_note: string; other_matters?: string | null; sources: { code: string; scope_note?: string | null }[]; results: { code: string; scope_note?: string | null }[] })
+    | undefined
+  if (!ev) return null
+  const created = new Map(items.filter((i) => i.kind === 'department.create').map((i) => [i.code as string, i]))
+  const parentOf = new Map(items.filter((i) => i.kind === 'department.set_parent').map((i) => [i.code as string, (i.parent_code as string | null) ?? null]))
+  const classOf = new Map(items.filter((i) => i.kind === 'department.classify').map((i) => [i.code as string, (i.class_code as string) ?? '']))
+  const news: NewDept[] =
+    ev.event_type === 'ABSORB'
+      ? []
+      : ev.results.map((r) => ({
+          name: String(created.get(r.code)?.name ?? ''),
+          code: r.code,
+          scope: r.scope_note ?? '',
+          parent: parentOf.has(r.code) ? (parentOf.get(r.code) ?? '') : '',
+          mainClass: classOf.get(r.code) ?? '',
+        }))
+  const unitTo: Record<string, string> = {}
+  for (const i of items) {
+    if (i.kind === 'service_unit.change_department') unitTo[i.code as string] = i.department_code as string
+    if (i.kind === 'service_unit.retire') unitTo[i.code as string] = RETIRE
+  }
+  const childTo: Record<string, string> = {}
+  for (const i of items)
+    if (i.kind === 'department.set_parent' && !created.has(i.code as string)) childTo[i.code as string] = (i.parent_code as string | null) ?? TOP
+  const rename = items.find((i) => i.kind === 'department.revise' && i.code === source.code) as (Item & { changes: { name?: string } }) | undefined
+  return {
+    type: ev.event_type,
+    day: ev.effective_date,
+    basis: ev.basis_note,
+    otherMatters: ev.other_matters ?? '',
+    sourceScope: ev.sources.find((x) => x.code === source.code)?.scope_note ?? '',
+    others: ev.event_type === 'MERGE' ? ev.sources.filter((x) => x.code !== source.code).map((x) => x.code) : [''],
+    target: ev.event_type === 'ABSORB' ? ev.results[0]?.code ?? '' : '',
+    rename: rename?.changes.name ?? '',
+    news,
+    unitTo,
+    childTo,
+  }
+}
+
 export function DepartmentReorgWizard({
   open,
   onOpenChange,
   source,
+  draft,
 }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   source: ReorgSource
+  /** 给出时为“回到向导调整”：恢复草稿内容，保存时整体替换这张草稿的变更项 */
+  draft?: ReorgDraft
 }) {
+  const [init] = useState(() => fromDraft(draft, source))
   const { asOf } = useApp()
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
-  const [type, setType] = useState<ReorgType | ''>('')
-  const [day, setDay] = useEffectiveDate()
-  const [basis, setBasis] = useState('')
-  const [sourceScope, setSourceScope] = useState('')
-  const [rename, setRename] = useState('')
-  const [target, setTarget] = useState('')
-  const [others, setOthers] = useState<string[]>([''])
+  const [type, setType] = useState<ReorgType | ''>(init?.type ?? '')
+  const [day, setDay] = useState(() => init?.day ?? today())
+  const [basis, setBasis] = useState(init?.basis ?? '')
+  const [sourceScope, setSourceScope] = useState(init?.sourceScope ?? '')
+  const [rename, setRename] = useState(init?.rename ?? '')
+  const [target, setTarget] = useState(init?.target ?? '')
+  const [others, setOthers] = useState<string[]>(init?.others ?? [''])
   const blank = (): NewDept => ({ name: '', code: '', scope: '', parent: source.parentCode ?? '', mainClass: source.mainClass ?? '' })
-  const [news, setNews] = useState<NewDept[]>([blank(), blank()])
-  const [unitTo, setUnitTo] = useState<Record<string, string>>({})
-  const [childTo, setChildTo] = useState<Record<string, string>>({})
-  const [otherMatters, setOtherMatters] = useState('')
+  const [news, setNews] = useState<NewDept[]>(init?.news.length ? init.news : [blank(), blank()])
+  const [unitTo, setUnitTo] = useState<Record<string, string>>(init?.unitTo ?? {})
+  const [childTo, setChildTo] = useState<Record<string, string>>(init?.childTo ?? {})
+  const [otherMatters, setOtherMatters] = useState(init?.otherMatters ?? '')
 
   const { data: depts = [] } = useListDepartments({ as_of: asOf })
   const { data: schemes = [] } = useListClassificationSchemes()
@@ -234,13 +292,15 @@ export function DepartmentReorgWizard({
   }
 
   const save = useMutation({
-    mutationFn: () =>
-      createChangeRequest({
-        items: buildItems(),
-        note: `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`,
-      }),
+    mutationFn: () => {
+      const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
+      // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
+      return draft
+        ? updateChangeRequest(draft.id, { items: buildItems(), note: draft.note ?? note })
+        : createChangeRequest({ items: buildItems(), note })
+    },
     onSuccess: async (cr) => {
-      notify.success(`已生成草稿 #${cr.id}，请核对后提交`)
+      notify.success(draft ? `草稿 #${cr.id} 已按向导内容更新，请核对后提交` : `已生成草稿 #${cr.id}，请核对后提交`)
       await qc.invalidateQueries()
       onOpenChange(false)
       navigate(`/changes/${cr.id}`)
@@ -263,7 +323,10 @@ export function DepartmentReorgWizard({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>部门组织变更：{source.name}</DialogTitle>
+          <DialogTitle>
+            部门组织变更：{source.name}
+            {draft && <span className="text-fg-muted ml-2 text-xs font-normal">调整草稿 #{draft.id}</span>}
+          </DialogTitle>
           <DialogDescription>先定身份（谁存续、谁退出、谁新设），再逐项处置受影响的单元、下级部门与编码。生成一张草稿，提交、确认后整体生效。</DialogDescription>
         </DialogHeader>
         <Steps steps={steps} className="py-1" />
@@ -496,6 +559,7 @@ export function DepartmentReorgWizard({
                 items={buildItems()}
                 otherMatters={otherMatters}
                 setOtherMatters={setOtherMatters}
+                draftId={draft?.id}
               />
             )}
           </div>
@@ -513,7 +577,7 @@ export function DepartmentReorgWizard({
             </Button>
           ) : (
             <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? '生成中…' : '生成变更申请草稿'}
+              {save.isPending ? '保存中…' : draft ? `更新草稿 #${draft.id}` : '生成变更申请草稿'}
             </Button>
           )}
         </DialogFooter>
@@ -588,7 +652,9 @@ function Review({
   items,
   otherMatters,
   setOtherMatters,
+  draftId,
 }: {
+  draftId?: number
   type: ReorgType
   day: string
   sources: { code: string; name: string }[]
@@ -620,7 +686,7 @@ function Review({
     <>
       <EvolveFlow kind={sources.length > 1 ? 'merge' : 'split'} day={day} label={REORG_TITLE[type]} before={before} after={after} />
       <p className="text-fg-secondary text-xs">
-        将生成一张草稿，共 {items.length} 项：{counts.map(([label, n]) => `${label} ${n}`).join('、')}。提交前系统会再按数据预演一遍；有依赖没处置会被拦下。
+        {draftId ? `将整体替换草稿 #${draftId} 的变更项` : '将生成一张草稿'}，共 {items.length} 项：{counts.map(([label, n]) => `${label} ${n}`).join('、')}。提交前系统会再按数据预演一遍；有依赖没处置会被拦下。
       </p>
       <Field label="需其他系统办理的事项（选填）">
         <Textarea

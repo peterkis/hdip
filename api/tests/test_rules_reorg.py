@@ -122,3 +122,18 @@ def test_preview_lists_all_problems_and_keeps_passing_outcomes(api):
     assert [p["item_index"] for p in d["problems"]] == [0, 2]
     assert [o["index"] for o in d["outcomes"]] == [1]
     assert d["item_summaries"][1] == "部门“乙科”更名为“乙科新”，自 2026-12-01 起"
+
+
+def test_reorganization_draft_cannot_lose_its_event(api):
+    """含组织变更事件的草稿，更新时不能去掉事件而保留其他项（防止原子变更被拆散）。"""
+    api.apply(dept_create(code="A", name="甲科"), dept_create(code="B", name="乙科"))
+    items = [
+        reorganize("ABSORB", T, ["A"], ["B"]),
+        dept_item("revise", "B", effective_date=T, changes={"name": "乙科新"}),
+    ]
+    cr = api.draft(*items)
+    r = api.put(f"/api/change-requests/{cr['id']}", {"items": items[1:], "note": None})
+    assert r.status_code == 422 and "组织变更" in r.json()["message"]
+    # 整体替换（仍含事件）可以
+    r = api.put(f"/api/change-requests/{cr['id']}", {"items": items[:1], "note": None})
+    assert r.status_code == 200
