@@ -17,15 +17,23 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useListDepartments } from '@/api/generated/master/master'
-import type { PersonDetail, PersonEngagementOut, PersonRow } from '@/api/generated/model'
+import type { PersonAssignmentOut, PersonDetail, PersonEngagementOut, PersonRow } from '@/api/generated/model'
 import { useGetPerson, useListPersons } from '@/api/generated/persons/persons'
-import { PersonEngageDialog, PersonRegisterDialog } from '@/components/forms/person-forms'
+import {
+  AssignDialog,
+  AssignmentEndDialog,
+  PersonEngageDialog,
+  PersonNameDialog,
+  PersonRegisterDialog,
+  TransferDialog,
+  WorkNoDialog,
+} from '@/components/forms/person-forms'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
-import { ChangeLink, Section } from '@/components/kit/section'
+import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
@@ -33,7 +41,7 @@ import { Button } from '@/components/ui/button'
 import { Timeline, type TimelineEvent } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { DEPARTMENT_LIFECYCLE, period } from '@/lib/format'
+import { DEPARTMENT_LIFECYCLE, period, today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, WORK_NO_REASON } from '@/lib/person'
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
@@ -252,9 +260,11 @@ export function PersonDetailPage() {
   const { can } = useMe()
   const { data, isError } = useGetPerson(id, { as_of: asOf })
   const [engaging, setEngaging] = useState(false)
+  const [dialog, setDialog] = useState<PersonDialog | null>(null)
   useCrumb(data && `${data.code} ${data.name}`)
   if (!data) return isError || !Number.isInteger(id) ? <Missing what="人员" back={{ to: '/persons', label: '返回人员名册' }} /> : null
 
+  const close = (o: boolean) => !o && setDialog(null)
   const live = data.engagements.filter((e) => !e.void)
   const current = live.filter((e) => covers(e.valid_from, e.valid_to, asOf))
   const formerNames = data.versions.filter((v, i) => !v.void && i > 0 && data.versions[i - 1].revise_reason === 'RENAME')
@@ -267,9 +277,14 @@ export function PersonDetailPage() {
         description={`人员代码 ${data.code} · 按 ${asOf} 显示 · 人员代码由系统分配、永不改变，与业务工号无关`}
         actions={
           can('person.change') && (
-            <Button variant="outline" onClick={() => setEngaging(true)}>
-              建立任用（再次任用）
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setDialog({ kind: 'name' })}>
+                改姓名
+              </Button>
+              <Button variant="outline" onClick={() => setEngaging(true)}>
+                建立任用（再次任用）
+              </Button>
+            </>
           )
         }
       />
@@ -327,7 +342,7 @@ export function PersonDetailPage() {
           ) : (
             <div className="grid gap-4">
               {data.engagements.map((e) => (
-                <EngagementCard key={e.id} e={e} asOf={asOf} />
+                <EngagementCard key={e.id} e={e} asOf={asOf} onAction={can('person.change') ? setDialog : undefined} />
               ))}
             </div>
           )}
@@ -337,11 +352,24 @@ export function PersonDetailPage() {
         </Section>
       </div>
       {engaging && <PersonEngageDialog open onOpenChange={setEngaging} personCode={data.code} name={data.name} />}
+      {dialog?.kind === 'name' && <PersonNameDialog open onOpenChange={close} person={data} />}
+      {dialog?.kind === 'work_no' && <WorkNoDialog open onOpenChange={close} engagement={dialog.engagement} />}
+      {dialog?.kind === 'assign' && <AssignDialog open onOpenChange={close} engagement={dialog.engagement} />}
+      {dialog?.kind === 'transfer' && <TransferDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
+      {dialog?.kind === 'end' && <AssignmentEndDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
     </div>
   )
 }
 
-function EngagementCard({ e, asOf }: { e: PersonEngagementOut; asOf: string }) {
+type PersonDialog =
+  | { kind: 'name' }
+  | { kind: 'work_no' | 'assign'; engagement: PersonEngagementOut }
+  | { kind: 'transfer' | 'end'; assignment: PersonAssignmentOut }
+
+/** 还能调整的一段：未撤销，结束日为空或尚未过去（结束日到达前可改，人员设计 P-3） */
+const adjustable = (r: { void: boolean; valid_to?: string | null }) => !r.void && (!r.valid_to || r.valid_to >= today())
+
+function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: string; onAction?: (d: PersonDialog) => void }) {
   const { optionLabels } = useApp()
   const type = optionLabels.engagement_type?.[e.engagement_type] ?? e.engagement_type
   const state = e.void
@@ -359,7 +387,15 @@ function EngagementCard({ e, asOf }: { e: PersonEngagementOut; asOf: string }) {
         <Tag tone={state.tone}>{state.label}</Tag>
         <span className="text-fg-secondary tabular-nums">{period(e.valid_from, e.valid_to)}</span>
         {e.note && <span className="text-fg-muted text-caption">· {e.note}</span>}
-        <span className="ml-auto flex gap-2">
+        <span className="ml-auto flex items-center gap-2">
+          {onAction && adjustable(e) && (
+            <>
+              <InlineAction onClick={() => onAction({ kind: 'work_no', engagement: e })}>
+                {e.work_nos.some((n) => !n.void) ? '换工号' : '登记工号'}
+              </InlineAction>
+              <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>补归属</InlineAction>
+            </>
+          )}
           <ChangeLink id={e.change_id} />
           {e.closed_change_id && <ChangeLink id={e.closed_change_id} />}
         </span>
@@ -380,6 +416,12 @@ function EngagementCard({ e, asOf }: { e: PersonEngagementOut; asOf: string }) {
                 </Link>
                 {a.department_lifecycle && a.department_lifecycle !== 'ACTIVE' && (
                   <Tag tone={DEPARTMENT_LIFECYCLE_TONE[a.department_lifecycle]}>{DEPARTMENT_LIFECYCLE[a.department_lifecycle as keyof typeof DEPARTMENT_LIFECYCLE]}</Tag>
+                )}
+                {onAction && adjustable(a) && (
+                  <span className="order-last">
+                    <InlineAction onClick={() => onAction({ kind: 'transfer', assignment: a })}>调科</InlineAction>
+                    <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>
+                  </span>
                 )}
               </>
             ),

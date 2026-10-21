@@ -295,7 +295,9 @@ def is_void(v) -> bool:
     return v.valid_to is not None and v.valid_to < v.valid_from
 
 
-def _next_version(ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date, content: dict):
+def _next_version(
+    ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date, content: dict, extra=None
+):
     """修订在 day 生效：旧版结束日 = day 前一日，新版从 day 开始（闭区间）。
 
     最新版本尚未生效（开始日晚于今天）时，可以在它的开始日当天修订 = 更正：
@@ -332,6 +334,7 @@ def _next_version(ctx: Ctx, model, fk_name: str, obj_id: int, latest, day: date,
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
         **content,
+        **(extra or {}),  # 不参与“内容有无变化”比较的列（如人员姓名的修订原因）
     )
     ctx.session.add(new)
     ctx.session.flush()

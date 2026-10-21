@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0016**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0017**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -1241,9 +1241,12 @@ $function$
 | institution | revise | confirmer | 是 |
 | operator_relation | close | confirmer | 是 |
 | operator_relation | create | confirmer | 是 |
+| person | assign | confirmer | 是 |
 | person | assignment_set_end | confirmer | 是 |
+| person | change_work_no | confirmer | 是 |
 | person | create | confirmer | 是 |
 | person | engage | confirmer | 是 |
+| person | revise | confirmer | 是 |
 | person | transfer | confirmer | 是 |
 | service_unit | change_department | confirmer | 是 |
 | service_unit | change_status | confirmer | 是 |

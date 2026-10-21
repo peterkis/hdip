@@ -315,7 +315,7 @@ hdip_guard_open_end()  -- 用于 person_engagement、person_work_no、person_ass
 | 步 | 交付 | 剧本 |
 | --- | --- | --- |
 | **P1.1 登记与查询**（2026-10-21 已实施） | 迁移（五张表、约束、`hdip_guard_open_end`、人员代码序列、`option_item` 与 `approval_rule` 种子）；`person.create`、`person.engage`；组织变更承接人员所需的 `person.transfer`、`person.assignment_set_end`（后端与向导，人员详情上的独立表单留到 P1.2）；“建立任用（再次任用）”入口；`_check_persons`；部门撤销 / 被替代的人员依赖（阻止 + 清单 + 组织变更向导的人员承接）；确认串行锁；名册、详情、登记向导、部门“人员”区块；两份导出 | PERS-01、02（登记部分）、07、08 |
-| **P1.2 变化与历史** | `person.revise`（更名 / 更正）、`person.change_work_no`、`person.assign`；人员详情上的调科、结束归属表单；预演 `notices`；`expected_valid_to` 并发拒绝 | PERS-03、04、09 |
+| **P1.2 变化与历史**（2026-10-21 已实施，迁移 0017） | `person.revise`（更名 / 更正）、`person.change_work_no`、`person.assign`；人员详情上的调科、结束归属表单；预演 `notices`；`expected_valid_to` 并发拒绝 | PERS-03、04、09 |
 | **P1.3 结束与再次任用** | `person.engagement_set_end`（结束、提前、推后、撤回、撤销计划）；再次任用入口；结束日调整记录 | PERS-02（撤销部分）、05、06 |
 | P2 名单导入 | 触发条件：逐人登记成为瓶颈。一个来源、最小 `person_source_link`（来源系统 + 来源实体 + 记录键 → 人员，带期间）；预览 → 人工匹配 → 批量草稿 | PERS-10、11 |
 | P3 附加归属与部门职务 | 触发条件：确需兼任或负责人展示。`ADDITIONAL` 归属；`person_duty` 部门职务（10.1）；部门详情按日期派生负责人 | PERS-12、13 |

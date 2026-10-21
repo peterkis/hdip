@@ -2,11 +2,13 @@
 // - 登记人员：一个弹窗里先查重（输入姓名即在全部人员里找，含已离开、未来入职的人），
 //   有同名时须明确“是不同的人”才能保存；保存时生成“登记人员 + 建立任用（含主部门、工号）”两项。
 // - 建立任用：给已有人员新建一项任用（再次任用、返聘），人员身份与代码不变。
+// - 改姓名（先选更名 / 更正误录）、换工号、调科、结束归属、补归属（P1.2）：都自生效日起，不改写已生效的历史；
+//   改结束日、调科、换号都带“发起时看到的值”，确认时与库里不一致就拒绝，提示刷新。
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useListPersons } from '@/api/generated/persons/persons'
-import type { PersonRow } from '@/api/generated/model'
-import type { DialogProps } from '@/components/forms/change-forms'
+import type { PersonAssignmentOut, PersonDetail, PersonEngagementOut, PersonRow } from '@/api/generated/model'
+import { useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
 import { orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
 import { ItemDialog, type ChangeItemInput } from '@/components/forms/item-dialog'
@@ -230,6 +232,271 @@ export function PersonEngageDialog({ personCode, name, ...props }: DialogProps &
       build={() => requireFields(engagementChecks(f)) ?? engageItem(personCode, f)}
     >
       <EngagementFields f={f} set={set} />
+    </ItemDialog>
+  )
+}
+
+// ------------------------------------------------------------------ P1.2：姓名、工号、归属
+function dayBefore(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+const REASONS = [
+  { value: 'RENAME', label: '本人改名（旧名记为曾用名）' },
+  { value: 'CORRECTION', label: '更正录入错误（旧值标“误录”）' },
+]
+
+export function PersonNameDialog({ person, ...props }: DialogProps & { person: PersonDetail }) {
+  const latest = person.versions.find((v) => !v.void) ?? person.versions[0]
+  const [reason, setReason] = useState('')
+  const [name, setName] = useState(latest.name)
+  const [pinyin, setPinyin] = useState(latest.pinyin ?? '')
+  const [day, setDay] = useEffectiveDate(latest.valid_from)
+  const future = latest.valid_from > today()
+  return (
+    <ItemDialog
+      {...props}
+      title={`改姓名：${latest.name}`}
+      description={
+        future
+          ? `当前姓名自 ${latest.valid_from} 起，尚未生效：生效日填 ${latest.valid_from} 即直接更正，不留误录期间。`
+          : '自生效日起使用新姓名，旧日期仍显示旧姓名；人员代码不变。已生效的姓名不改写历史。'
+      }
+      build={() =>
+        requireFields([
+          ['reason', !!reason, '请选择为什么改：本人改名，还是更正录入错误'],
+          ['name', !!name.trim(), '请填写姓名'],
+          pinyinCheck(pinyin),
+          ['effective_date', !!day, '请填写生效日'],
+        ]) ?? {
+          kind: 'person.revise',
+          code: person.code,
+          reason: reason as 'RENAME' | 'CORRECTION',
+          effective_date: day,
+          name: name.trim(),
+          pinyin: orNull(pinyin),
+        }
+      }
+    >
+      <SelectField label="为什么改" name="reason" required placeholder="请选择" value={reason} onChange={setReason} options={REASONS} />
+      <div className="grid grid-cols-[3fr_2fr] gap-3">
+        <TextField label="新姓名" name="name" required value={name} onChange={setName} />
+        <PinyinField source={name} value={pinyin} onChange={setPinyin} mode="person" initialFollow={false} />
+      </div>
+      <TextField
+        label="生效日"
+        name="effective_date"
+        type="date"
+        required
+        value={day}
+        onChange={setDay}
+        hint={reason === 'RENAME' ? '改名的实际日期，可以是过去或将来' : '更正通常从今天起；须晚于当前姓名的开始日'}
+      />
+    </ItemDialog>
+  )
+}
+
+/** 某日有效的一段（工号、归属）；没有时取最近一段 */
+function onDay<T extends { valid_from: string; valid_to?: string | null; void: boolean }>(rows: T[], day: string): T | undefined {
+  const live = rows.filter((r) => !r.void)
+  return live.find((r) => r.valid_from <= day && (!r.valid_to || r.valid_to >= day)) ?? live.filter((r) => !r.valid_to || r.valid_to >= day).at(0)
+}
+
+export function WorkNoDialog({ engagement, ...props }: DialogProps & { engagement: PersonEngagementOut }) {
+  const current = onDay(engagement.work_nos, today())
+  const [reason, setReason] = useState('')
+  const [workNo, setWorkNo] = useState('')
+  const [day, setDay] = useState(() => {
+    const t = today()
+    return engagement.valid_from > t ? engagement.valid_from : t
+  })
+  return (
+    <ItemDialog
+      {...props}
+      title={current ? `变更工号：${current.work_no ?? ''}` : '登记工号'}
+      description="工号是人事系统发的号，可能更换（如实习转正）。旧号止于生效日前一日，新号自生效日起；人员代码不变，按旧号仍能找到此人。"
+      build={() =>
+        requireFields([
+          ['reason', !!reason, '请选择是换号还是更正录入错误'],
+          ['work_no', !!workNo.trim() || !!current, '请填写新工号'],
+          ['effective_date', !!day, '请填写生效日'],
+        ]) ?? {
+          kind: 'person.change_work_no',
+          engagement_id: engagement.id,
+          expected_work_no: current?.work_no ?? null,
+          reason: reason as 'CHANGE' | 'CORRECTION',
+          work_no: orNull(workNo),
+          effective_date: day,
+        }
+      }
+    >
+      <SelectField
+        label="为什么变"
+        name="reason"
+        required
+        placeholder="请选择"
+        value={reason}
+        onChange={setReason}
+        options={[
+          { value: 'CHANGE', label: '换号（如实习转正、人事系统改号）' },
+          { value: 'CORRECTION', label: '更正录入错误（旧值标“误录”）' },
+        ]}
+      />
+      <TextField
+        label="新工号"
+        name="work_no"
+        required={!current}
+        value={workNo}
+        onChange={setWorkNo}
+        hint={current ? '按原样保存（0007 不丢前导零）；留空 = 此后不再有工号' : '按原样保存（0007 不丢前导零）'}
+      />
+      <TextField
+        label="生效日"
+        name="effective_date"
+        type="date"
+        required
+        value={day}
+        onChange={setDay}
+        hint={`须在任用期间（${period(engagement.valid_from, engagement.valid_to)}）内${current ? `，晚于当前工号的开始日 ${current.valid_from}` : ''}`}
+      />
+    </ItemDialog>
+  )
+}
+
+export function TransferDialog({ person, assignment, ...props }: DialogProps & { person: string; assignment: PersonAssignmentOut }) {
+  const planned = assignment.valid_from > today()
+  const [dept, setDept] = useState('')
+  const [day, setDay] = useState(() => (planned ? assignment.valid_from : today()))
+  return (
+    <ItemDialog
+      {...props}
+      title={`调科：${person}`}
+      description="原部门的归属止于生效日前一日，新部门自生效日起，两端同一天一起成立；新归属沿用原归属的结束日。只换部门，人员与任用不变。"
+      build={() =>
+        requireFields([
+          ['department', !!dept, '请选择调到哪个部门'],
+          ['effective_date', !!day, '请填写生效日'],
+        ]) ?? {
+          kind: 'person.transfer',
+          assignment_id: assignment.id,
+          expected_valid_to: assignment.valid_to ?? null,
+          department_code: dept,
+          effective_date: day,
+        }
+      }
+    >
+      <DepartmentSelect label="调到" name="department" required value={dept} onChange={setDept} exclude={assignment.department.code} />
+      <TextField
+        label="生效日"
+        name="effective_date"
+        type="date"
+        required
+        value={day}
+        onChange={setDay}
+        hint={
+          planned
+            ? `这条归属自 ${assignment.valid_from} 起，尚未开始：填这一天即直接改为新部门`
+            : `须晚于这条归属的开始日 ${assignment.valid_from}`
+        }
+      />
+      {day && (
+        <Callout tone="info">
+          {day > assignment.valid_from && `${dayBefore(day)} 仍在${assignment.department.name}；`}
+          {day} 起在新部门{assignment.valid_to ? `，至 ${assignment.valid_to}` : ''}。
+        </Callout>
+      )}
+    </ItemDialog>
+  )
+}
+
+export function AssignmentEndDialog({ person, assignment, ...props }: DialogProps & { person: string; assignment: PersonAssignmentOut }) {
+  const planned = assignment.valid_from > today()
+  const [cancelPlan, setCancelPlan] = useState(false)
+  const [last, setLast] = useState(assignment.valid_to ?? today())
+  return (
+    <ItemDialog
+      {...props}
+      title={`结束归属：${person} · ${assignment.department.name}`}
+      description="最后有效日当天仍归属该部门，次日起这项任用暂未分配主部门（不是离职）；结束日到达前还可以再改。"
+      build={() => {
+        if (cancelPlan)
+          return {
+            kind: 'person.assignment_set_end',
+            assignment_id: assignment.id,
+            expected_valid_to: assignment.valid_to ?? null,
+            valid_to: dayBefore(assignment.valid_from),
+          }
+        return (
+          requireFields([
+            ['valid_to', !!last, '请填写最后有效日'],
+            ['valid_to', !last || last >= assignment.valid_from, `最后有效日不能早于开始日 ${assignment.valid_from}`],
+          ]) ?? {
+            kind: 'person.assignment_set_end',
+            assignment_id: assignment.id,
+            expected_valid_to: assignment.valid_to ?? null,
+            valid_to: last,
+          }
+        )
+      }}
+    >
+      {planned && (
+        <ToggleChip label={`撤销这条计划（原定 ${assignment.valid_from} 开始，从未生效）`} checked={cancelPlan} onChange={setCancelPlan} />
+      )}
+      {!cancelPlan && (
+        <TextField
+          label="最后有效日（含当日）"
+          name="valid_to"
+          type="date"
+          required
+          value={last}
+          onChange={setLast}
+          hint={assignment.valid_to ? `当前结束日 ${assignment.valid_to}` : '当前长期有效'}
+        />
+      )}
+    </ItemDialog>
+  )
+}
+
+export function AssignDialog({ engagement, ...props }: DialogProps & { engagement: PersonEngagementOut }) {
+  const [dept, setDept] = useState('')
+  const [from, setFrom] = useState(() => {
+    const t = today()
+    return engagement.valid_from > t ? engagement.valid_from : t
+  })
+  const [to, setTo] = useState('')
+  return (
+    <ItemDialog
+      {...props}
+      title="补主部门归属"
+      description="给这项任用里暂未分配的期间补上主部门。已有主部门的期间要换部门，请用“调科”。"
+      build={() =>
+        requireFields([
+          ['department', !!dept, '请选择主部门'],
+          ['valid_from', !!from, '请填写开始日'],
+          ['valid_to', !to || to >= from, '结束日不能早于开始日'],
+        ]) ?? {
+          kind: 'person.assign',
+          engagement_id: engagement.id,
+          department_code: dept,
+          valid_from: from,
+          valid_to: to || null,
+        }
+      }
+    >
+      <DepartmentSelect label="主部门" name="department" required value={dept} onChange={setDept} />
+      <div className="grid grid-cols-2 gap-3">
+        <TextField label="开始日" name="valid_from" type="date" required value={from} onChange={setFrom} />
+        <TextField
+          label="结束日（选填）"
+          name="valid_to"
+          type="date"
+          value={to}
+          onChange={setTo}
+          hint={`不填 = 到任用结束（${engagement.valid_to ?? '长期'}）`}
+        />
+      </div>
     </ItemDialog>
   )
 }

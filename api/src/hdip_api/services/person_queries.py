@@ -121,12 +121,17 @@ class _World:
                 return r
         return next((r for r in live if r.valid_from > day), None)
 
+    def on(self, rows, day: date):
+        return next((r for r in _live(rows) if covers(r.valid_from, r.valid_to, day)), None)
+
     def brief(self, e: PersonEngagement, day: date, hidden: set[str]) -> PersonEngagementBrief:
         anchor = max(day, e.valid_from)
         if e.valid_to is not None and anchor > e.valid_to:
             anchor = e.valid_to
-        a = self.on_or_first(self.assignments[e.id], anchor)
-        w = self.on_or_first(self.work_nos[e.id], anchor)
+        # 任用当天有效：只取当天的归属与工号（没有就是暂未分配）；任用尚未开始：取最早的计划
+        pick = self.on_or_first if e.valid_from > day else self.on
+        a = pick(self.assignments[e.id], anchor)
+        w = pick(self.work_nos[e.id], anchor)
         return PersonEngagementBrief(
             id=e.id,
             institution_id=e.institution_id,

@@ -34,3 +34,13 @@ def assignment_ids(detail):
         for a in e["assignments"]
         if not a["void"]
     ]
+
+
+def engagement_id(api, code, day=None):
+    """人员的第一项（未撤销的）任用 id。"""
+    return next(e["id"] for e in person(api, code, day)["engagements"] if not e["void"])
+
+
+def notices(cr):
+    """申请预演结果里各项的提示（不阻止提交）。"""
+    return [n for o in cr.get("outcomes") or [] for n in o.get("notices", [])]

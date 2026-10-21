@@ -280,3 +280,37 @@ def assignment_end(assignment_id, valid_to, expected=None):
         "expected_valid_to": expected,
         "valid_to": valid_to,
     }
+
+
+def person_revise(code, name, day, reason="RENAME", **kw):
+    return {
+        "kind": "person.revise",
+        "code": code,
+        "reason": reason,
+        "effective_date": day,
+        "name": name,
+        **kw,
+    }
+
+
+def change_work_no(engagement_id, expected, new, day, reason="CHANGE"):
+    return {
+        "kind": "person.change_work_no",
+        "engagement_id": engagement_id,
+        "expected_work_no": expected,
+        "reason": reason,
+        "work_no": new,
+        "effective_date": day,
+    }
+
+
+def assign(engagement_id, dept, valid_from, valid_to=None):
+    item = {
+        "kind": "person.assign",
+        "engagement_id": engagement_id,
+        "department_code": dept,
+        "valid_from": valid_from,
+    }
+    if valid_to:
+        item["valid_to"] = valid_to
+    return item

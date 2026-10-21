@@ -261,6 +261,12 @@ function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: num
           <ProblemCard problem={p} compact />
         </div>
       ))}
+      {/* 提示：不阻止提交与确认（同名人员、部门筹备 / 暂停履职、暂未分配主部门…） */}
+      {outcomes.flatMap((o) => o.notices ?? []).map((n, k) => (
+        <p key={`n${k}`} className="text-warning-text px-3 text-caption">
+          提示：{n}
+        </p>
+      ))}
       {open && <div className="grid gap-3 px-3 pb-2">{outcomes.map((o) => <div key={o.index}>{renderDiff(o)}</div>)}</div>}
     </div>
   )

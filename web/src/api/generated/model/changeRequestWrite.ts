@@ -28,9 +28,12 @@ import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
+import type { PersonAssign } from './personAssign';
 import type { PersonAssignmentSetEnd } from './personAssignmentSetEnd';
+import type { PersonChangeWorkNo } from './personChangeWorkNo';
 import type { PersonCreate } from './personCreate';
 import type { PersonEngage } from './personEngage';
+import type { PersonRevise } from './personRevise';
 import type { PersonTransfer } from './personTransfer';
 import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
 import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
@@ -44,6 +47,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonTransfer | PersonAssignmentSetEnd)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonRevise | PersonChangeWorkNo | PersonAssign | PersonTransfer | PersonAssignmentSetEnd)[];
   note?: string | null;
 }

@@ -431,6 +431,8 @@ class ItemOutcome(BaseModel):
     target: str
     before: dict[str, Any] | None
     after: dict[str, Any] | None
+    notices: list[str] = []
+    """提示（不阻止提交与确认）：同名人员、部门筹备 / 暂停履职、暂未分配主部门等。"""
 
 
 class Permissions(BaseModel):

@@ -4936,6 +4936,15 @@
                   "$ref": "#/components/schemas/PersonEngage"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonChangeWorkNo"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonAssign"
+                },
+                {
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
@@ -4969,9 +4978,12 @@
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "person.assign": "#/components/schemas/PersonAssign",
                   "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
+                  "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
                   "person.engage": "#/components/schemas/PersonEngage",
+                  "person.revise": "#/components/schemas/PersonRevise",
                   "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
@@ -5419,6 +5431,15 @@
                   "$ref": "#/components/schemas/PersonEngage"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonRevise"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonChangeWorkNo"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonAssign"
+                },
+                {
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
@@ -5452,9 +5473,12 @@
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "person.assign": "#/components/schemas/PersonAssign",
                   "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
+                  "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
                   "person.engage": "#/components/schemas/PersonEngage",
+                  "person.revise": "#/components/schemas/PersonRevise",
                   "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
@@ -8762,6 +8786,14 @@
               }
             ],
             "title": "After"
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": []
           }
         },
         "type": "object",
@@ -9229,6 +9261,51 @@
         ],
         "title": "Permissions"
       },
+      "PersonAssign": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.assign",
+            "title": "Kind"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "department_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Department Code"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "engagement_id",
+          "department_code",
+          "valid_from"
+        ],
+        "title": "PersonAssign",
+        "description": "给任用里暂未分配的期间补主归属；valid_to 为空时到任用结束（或长期）。"
+      },
       "PersonAssignmentOut": {
         "properties": {
           "id": {
@@ -9350,6 +9427,70 @@
         ],
         "title": "PersonAssignmentSetEnd",
         "description": "结束一条归属、调整它尚未到达的结束日（valid_to 为最后有效日；空 = 清除结束日），\n或撤销尚未开始的归属（valid_to = 开始日前一日）。"
+      },
+      "PersonChangeWorkNo": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.change_work_no",
+            "title": "Kind"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "expected_work_no": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Work No"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "CHANGE",
+              "CORRECTION"
+            ],
+            "title": "Reason"
+          },
+          "work_no": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work No"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "engagement_id",
+          "expected_work_no",
+          "reason",
+          "work_no",
+          "effective_date"
+        ],
+        "title": "PersonChangeWorkNo",
+        "description": "换工号（实习转正、人事系统改号）或更正误录的工号：旧号止于生效日前一日，新号自生效日起。\n\nwork_no 为空 = 此后不再有工号。expected_work_no 是发起时看到的当前工号（没有时为空）。"
       },
       "PersonCreate": {
         "properties": {
@@ -9756,6 +9897,62 @@
           "assignments"
         ],
         "title": "PersonEngagementOut"
+      },
+      "PersonRevise": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.revise",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "RENAME",
+              "CORRECTION"
+            ],
+            "title": "Reason"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "reason",
+          "effective_date",
+          "name"
+        ],
+        "title": "PersonRevise",
+        "description": "姓名修订：RENAME 本人改名（旧名是曾用名）/ CORRECTION 更正录入错误（旧值标“误录”）。\n\n都自生效日起产生新版本，不改写已生效的历史；最新版本尚未生效时可在其开始日当天直接更正。\n改名未给拼音码时按新名称生成。"
       },
       "PersonRow": {
         "properties": {

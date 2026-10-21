@@ -14,4 +14,5 @@ export interface ItemOutcome {
   target: string;
   before: ItemOutcomeBefore;
   after: ItemOutcomeAfter;
+  notices?: string[];
 }

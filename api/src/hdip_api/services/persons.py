@@ -27,9 +27,12 @@ from hdip_api.models import (
     PersonWorkNo,
 )
 from hdip_api.schemas.items import (
+    PersonAssign,
     PersonAssignmentSetEnd,
+    PersonChangeWorkNo,
     PersonCreate,
     PersonEngage,
+    PersonRevise,
     PersonTransfer,
 )
 from hdip_api.services import codes
@@ -42,6 +45,8 @@ from hdip_api.services.apply import (
     _department,
     _institution,
     _json,
+    _latest,
+    _next_version,
     _require_issued,
     _today,
     is_void,
@@ -198,6 +203,35 @@ def _set_end(ctx: Ctx, row, valid_to: date | None) -> None:
     ctx.session.flush()
 
 
+# ------------------------------------------------------------------ 提示（不阻止）
+def dept_notices(s: Session, dept_id: int, start: date, end: date | None) -> list[str]:
+    """归属期间与部门筹备、暂停履职段相交时提示：归属照常成立，只是提醒核对。"""
+    out = []
+    for v in _versions(s, DepartmentVersion, DepartmentVersion.department_id, dept_id):
+        if v.lifecycle not in ("PREPARING", "SUSPENDED"):
+            continue
+        if v.valid_from <= (end or date.max) and start <= (v.valid_to or date.max):
+            out.append(
+                f"{v.name}在 {_period(v.valid_from, v.valid_to)}{LIFECYCLE_LABELS[v.lifecycle]}；"
+                "归属照常成立，请核对"
+            )
+    return out
+
+
+def _same_name_notice(s: Session, name: str, except_id: int) -> list[str]:
+    others = sorted(
+        {
+            v.person_id
+            for v in s.scalars(select(PersonVersion).where(PersonVersion.name == name))
+            if v.person_id != except_id and not is_void(v)
+        }
+    )
+    if not others:
+        return []
+    who = "、".join(person_label(s, pid) for pid in others[:5])
+    return [f"已有 {len(others)} 位同名人员：{who}。系统不会合并，请确认不是同一人"]
+
+
 # ------------------------------------------------------------------ 处理各类变更
 def person_create(ctx: Ctx, item: PersonCreate) -> dict:
     s = ctx.session
@@ -221,7 +255,12 @@ def person_create(ctx: Ctx, item: PersonCreate) -> dict:
     s.add(v)
     s.flush()
     after = {"code": p.code, "name": v.name, "pinyin": v.pinyin, "valid_from": _json(v.valid_from)}
-    return {"target": f"人员 {p.code} {v.name}", "before": None, "after": after}
+    return {
+        "target": f"人员 {p.code} {v.name}",
+        "before": None,
+        "after": after,
+        "notices": _same_name_notice(s, v.name, p.id),
+    }
 
 
 def person_engage(ctx: Ctx, item: PersonEngage) -> dict:
@@ -335,9 +374,11 @@ def person_engage(ctx: Ctx, item: PersonEngage) -> dict:
         ctx.new_assignments[a.id] = ctx.index
         after["department"] = d.code
         after["department_name"] = _dept_name(s, d.id, e.valid_from)
+        notices = dept_notices(s, d.id, e.valid_from, e.valid_to)
     else:
         after["department"] = None
-    return {"target": f"人员 {p.code} {name}", "before": None, "after": after}
+        notices = ["暂未分配主部门" + (f"：{item.note}" if item.note else "")]
+    return {"target": f"人员 {p.code} {name}", "before": None, "after": after, "notices": notices}
 
 
 def person_transfer(ctx: Ctx, item: PersonTransfer) -> dict:
@@ -383,6 +424,7 @@ def person_transfer(ctx: Ctx, item: PersonTransfer) -> dict:
         "target": f"人员 {before['person']} {who}",
         "before": before,
         "after": assignment_snapshot(s, new),
+        "notices": dept_notices(s, d.id, new.valid_from, new.valid_to),
     }
 
 
@@ -403,15 +445,191 @@ def person_assignment_set_end(ctx: Ctx, item: PersonAssignmentSetEnd) -> dict:
         )
     _set_end(ctx, a, end)
     ctx.new_assignments[a.id] = ctx.index
+    e = s.get(PersonEngagement, a.engagement_id)
+    gap = end is not None and (e.valid_to is None or end < e.valid_to)
     return {
         "target": f"人员 {before['person']} {before['person_name']}",
         "before": before,
         "after": assignment_snapshot(s, a),
+        "notices": ["之后这项任用暂未分配主部门；需要时用“补归属”处理"] if gap else [],
+    }
+
+
+def person_revise(ctx: Ctx, item: PersonRevise) -> dict:
+    s = ctx.session
+    p = _person(s, item.code, "code")
+    latest = _latest(s, PersonVersion, PersonVersion.person_id, p.id)
+    before = {"name": latest.name, "pinyin": latest.pinyin, "valid_from": _json(latest.valid_from)}
+    pinyin = item.pinyin
+    if pinyin is None:
+        pinyin = latest.pinyin if item.name == latest.name else codes.pinyin_of(item.name)
+    new = _next_version(
+        ctx,
+        PersonVersion,
+        "person_id",
+        p.id,
+        latest,
+        item.effective_date,
+        {"name": item.name, "pinyin": pinyin},
+        extra={"revise_reason": item.reason},
+    )
+    after = {"name": new.name, "pinyin": new.pinyin, "valid_from": _json(new.valid_from)}
+    return {
+        "target": f"人员 {p.code} {new.name}",
+        "before": before,
+        "after": after | {"reason": item.reason},
+        "notices": _same_name_notice(s, new.name, p.id) if new.name != latest.name else [],
+    }
+
+
+def _locked_engagement(s: Session, engagement_id: int) -> PersonEngagement:
+    e = s.get(PersonEngagement, engagement_id, with_for_update=True)
+    if e is None:
+        raise ItemError(f"任用 #{engagement_id} 不存在", "engagement_id")
+    if is_void(e):
+        raise ItemError("这项任用已在生效前撤销，不能再调整", "engagement_id")
+    return e
+
+
+def _within(e: PersonEngagement, day: date, field_name: str) -> None:
+    if day < e.valid_from or (e.valid_to is not None and day > e.valid_to):
+        raise ItemError(
+            f"{day.isoformat()} 不在任用期间（{_period(e.valid_from, e.valid_to)}）内",
+            field_name,
+            facts=[("任用开始", e.valid_from, "info"), ("你填的日期", day, "bad")],
+        )
+
+
+def person_change_work_no(ctx: Ctx, item: PersonChangeWorkNo) -> dict:
+    s = ctx.session
+    e = _locked_engagement(s, item.engagement_id)
+    day = item.effective_date
+    _within(e, day, "effective_date")
+    rows = sorted(
+        (
+            r
+            for r in s.scalars(
+                select(PersonWorkNo).where(PersonWorkNo.engagement_id == e.id).with_for_update()
+            )
+            if not is_void(r)
+        ),
+        key=lambda r: r.valid_from,
+    )
+    if any(r.valid_from > day for r in rows):
+        later = next(r for r in rows if r.valid_from > day)
+        raise ItemError(
+            f"这项任用自 {later.valid_from.isoformat()} 起已登记工号 {later.work_no}，"
+            "不能在它之前再换号",
+            "effective_date",
+        )
+    current = next((r for r in rows if r.valid_to is None or r.valid_to >= day), None)
+    if (current.work_no if current else None) != item.expected_work_no:
+        now = current.work_no if current else "（无）"
+        raise ItemError(
+            f"这项任用当前的工号是 {now}，与发起时看到的不同",
+            "engagement_id",
+            hint="请刷新人员详情，按现在的情况重新发起。",
+        )
+    if current is not None and current.work_no == item.work_no:
+        raise ItemError("工号没有变化", "work_no")
+    if current is None and item.work_no is None:
+        raise ItemError("这项任用没有工号，无需清除", "work_no")
+    who = person_name(s, e.person_id, day)
+    before = {"work_no": current.work_no if current else None}
+    if current is not None:
+        if day <= current.valid_from:
+            if not (day == current.valid_from and current.valid_from > _today(s)):
+                raise ItemError(
+                    f"工号 {current.work_no} 自 {current.valid_from.isoformat()} 起，"
+                    "换号的生效日须晚于这一天",
+                    "effective_date",
+                    facts=[("当前工号开始", current.valid_from, "info"), ("生效日", day, "bad")],
+                )
+        _set_end(ctx, current, day - DAY)
+    if item.work_no:
+        owner = s.scalar(
+            select(PersonWorkNo.person_id).where(
+                PersonWorkNo.institution_id == e.institution_id,
+                PersonWorkNo.work_no == item.work_no,
+                PersonWorkNo.person_id != e.person_id,
+            )
+        )
+        if owner is not None:
+            raise ItemError(
+                f"工号 {item.work_no} 已属于{person_label(s, owner)}",
+                "work_no",
+                hint="同一主体内一个工号只属于一个人，离开后也不再发给别人。请核对工号。",
+            )
+        s.add(
+            PersonWorkNo(
+                engagement_id=e.id,
+                person_id=e.person_id,
+                institution_id=e.institution_id,
+                work_no=item.work_no,
+                revise_reason=item.reason,
+                valid_from=day,
+                valid_to=e.valid_to,
+                change_id=ctx.change_id,
+                recorded_by=ctx.user_id,
+            )
+        )
+        s.flush()
+    p = s.get(Person, e.person_id)
+    return {
+        "target": f"人员 {p.code} {who}",
+        "before": before,
+        "after": {"work_no": item.work_no, "valid_from": _json(day), "reason": item.reason},
+    }
+
+
+def person_assign(ctx: Ctx, item: PersonAssign) -> dict:
+    s = ctx.session
+    e = _locked_engagement(s, item.engagement_id)
+    d = _department(s, item.department_code, "department_code")
+    end = item.valid_to if item.valid_to is not None else e.valid_to
+    for other in s.scalars(
+        select(PersonAssignment).where(
+            PersonAssignment.engagement_id == e.id, PersonAssignment.kind == "PRIMARY"
+        )
+    ):
+        if is_void(other):
+            continue
+        if other.valid_from <= (end or date.max) and item.valid_from <= (
+            other.valid_to or date.max
+        ):
+            raise ItemError(
+                f"这项任用在 {_period(other.valid_from, other.valid_to)} 已归属"
+                f"{_dept_name(s, other.department_id, other.valid_from)}，同一时期只能有一个主部门",
+                "valid_from",
+                hint="要换部门请用“调科”；补归属只用于暂未分配的期间。",
+            )
+    a = PersonAssignment(
+        engagement_id=e.id,
+        department_id=d.id,
+        kind="PRIMARY",
+        valid_from=item.valid_from,
+        valid_to=end,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(a)
+    s.flush()
+    _require_assignment_ok(s, a, "department_code")
+    ctx.new_assignments[a.id] = ctx.index
+    snap = assignment_snapshot(s, a)
+    return {
+        "target": f"人员 {snap['person']} {snap['person_name']}",
+        "before": None,
+        "after": snap,
+        "notices": dept_notices(s, d.id, a.valid_from, a.valid_to),
     }
 
 
 HANDLERS = {
     "person.create": person_create,
+    "person.revise": person_revise,
+    "person.change_work_no": person_change_work_no,
+    "person.assign": person_assign,
     "person.engage": person_engage,
     "person.transfer": person_transfer,
     "person.assignment_set_end": person_assignment_set_end,

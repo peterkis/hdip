@@ -666,6 +666,51 @@ class PersonEngage(_Item):
         return self
 
 
+class PersonRevise(_Item):
+    """姓名修订：RENAME 本人改名（旧名是曾用名）/ CORRECTION 更正录入错误（旧值标“误录”）。
+
+    都自生效日起产生新版本，不改写已生效的历史；最新版本尚未生效时可在其开始日当天直接更正。
+    改名未给拼音码时按新名称生成。
+    """
+
+    kind: Literal["person.revise"]
+    code: Code
+    reason: Literal["RENAME", "CORRECTION"]
+    effective_date: date
+    name: Name
+    pinyin: Pinyin | None = None
+
+
+class PersonChangeWorkNo(_Item):
+    """换工号（实习转正、人事系统改号）或更正误录的工号：旧号止于生效日前一日，新号自生效日起。
+
+    work_no 为空 = 此后不再有工号。expected_work_no 是发起时看到的当前工号（没有时为空）。
+    """
+
+    kind: Literal["person.change_work_no"]
+    engagement_id: int
+    expected_work_no: WorkNo | None
+    reason: Literal["CHANGE", "CORRECTION"]
+    work_no: WorkNo | None
+    effective_date: date
+
+
+class PersonAssign(_Item):
+    """给任用里暂未分配的期间补主归属；valid_to 为空时到任用结束（或长期）。"""
+
+    kind: Literal["person.assign"]
+    engagement_id: int
+    department_code: Code
+    valid_from: date
+    valid_to: date | None = None
+
+    @model_validator(mode="after")
+    def _period(self):
+        if self.valid_to is not None and self.valid_to < self.valid_from:
+            raise ValueError("归属结束日不能早于开始日")
+        return self
+
+
 class PersonTransfer(_Item):
     """调科：原归属止于生效日前一日，新归属自生效日起，结束日沿用原归属的结束日。
 
@@ -726,6 +771,9 @@ ChangeItem = Annotated[
     | ExternalCodeAssignmentClose
     | PersonCreate
     | PersonEngage
+    | PersonRevise
+    | PersonChangeWorkNo
+    | PersonAssign
     | PersonTransfer
     | PersonAssignmentSetEnd,
     Field(discriminator="kind"),
@@ -770,6 +818,9 @@ KIND_LABELS: dict[str, str] = {
     "external_code.assignment_close": "结束外部代码解释",
     "person.create": "登记人员",
     "person.engage": "建立任用",
+    "person.revise": "修订人员姓名",
+    "person.change_work_no": "变更业务工号",
+    "person.assign": "补主部门归属",
     "person.transfer": "调科",
     "person.assignment_set_end": "结束部门归属",
 }

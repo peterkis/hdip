@@ -112,6 +112,14 @@ class _Names:
                 .join(Department, Department.id == PersonAssignment.department_id)
             )
         }
+        # 任用 id → 人员代码
+        self.engagement_person = dict(
+            s.execute(
+                select(PersonEngagement.id, Person.code).join(
+                    Person, Person.id == PersonEngagement.person_id
+                )
+            ).all()
+        )
         self.engagement_types = {
             o.code: o.name
             for o in s.scalars(select(OptionItem).where(OptionItem.category == "engagement_type"))
@@ -145,6 +153,10 @@ class _Names:
 
     def p(self, code: str) -> str:
         return self.person.get(code, code)
+
+    def pe(self, engagement_id: int) -> str:
+        """任用 → 人员姓名。"""
+        return self.p(self.engagement_person.get(engagement_id, f"#{engagement_id}"))
 
     def pa(self, assignment_id: int) -> tuple[str, str, date | None, date | None]:
         """归属 → (人员姓名, 部门名, 开始日, 结束日)。"""
@@ -264,6 +276,17 @@ def describe(n: _Names, i: dict) -> str:
         case "person.transfer":
             who, dept, _, _ = n.pa(i["assignment_id"])
             return f"“{who}”从{dept}调到“{n.d(i['department_code'])}”{since()}"
+        case "person.revise":
+            what = "更名为" if i["reason"] == "RENAME" else "姓名更正为"
+            return f"“{n.p(i['code'])}”{what}“{i['name']}”{since()}"
+        case "person.change_work_no":
+            what = "换号" if i["reason"] == "CHANGE" else "更正工号"
+            old = i.get("expected_work_no") or "（无）"
+            new = i.get("work_no") or "（不再有工号）"
+            return f"“{n.pe(i['engagement_id'])}”{what}：{old} → {new}{since()}"
+        case "person.assign":
+            until = f"，至 {_day(i['valid_to'])}" if i.get("valid_to") else ""
+            return f"“{n.pe(i['engagement_id'])}”补主部门“{n.d(i['department_code'])}”{since('valid_from')}{until}"
         case "person.assignment_set_end":
             who, dept, start, _ = n.pa(i["assignment_id"])
             if not i.get("valid_to"):
@@ -545,6 +568,41 @@ def _view(
                 *_engage_parts(n, i),
                 _p("text", f"自 {day('valid_from')}"),
             ], (f"工号 {i['work_no']}" if i.get("work_no") else None)
+        case "person.revise":
+            return [
+                _p("chip", n.p(i["code"])),
+                _p("arrow", "→"),
+                _p(
+                    "tag",
+                    "更名" if i["reason"] == "RENAME" else "更正误录",
+                    "blue" if i["reason"] == "RENAME" else "yellow",
+                ),
+                _p("chip", i["name"]),
+                _p("text", f"自 {day()}"),
+            ], i["code"]
+        case "person.change_work_no":
+            return [
+                _p("chip", n.pe(i["engagement_id"])),
+                _p("text", f"工号 {i.get('expected_work_no') or '（无）'}"),
+                _p("arrow", "→"),
+                _p(
+                    "tag",
+                    "换号" if i["reason"] == "CHANGE" else "更正误录",
+                    "blue" if i["reason"] == "CHANGE" else "yellow",
+                ),
+                _p("text", f"{i.get('work_no') or '（不再有工号）'} · 自 {day()}"),
+            ], None
+        case "person.assign":
+            return [
+                _p("chip", n.pe(i["engagement_id"])),
+                _p("tag", "补主部门", "green"),
+                dept_chip(i["department_code"]),
+                _p(
+                    "text",
+                    f"自 {day('valid_from')}"
+                    + (f" 至 {_day(i['valid_to'])}" if i.get("valid_to") else ""),
+                ),
+            ], None
         case "person.transfer":
             who, dept, _, _ = n.pa(i["assignment_id"])
             return [
