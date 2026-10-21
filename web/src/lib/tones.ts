@@ -1,6 +1,9 @@
 // 业务状态 → 标签色。全应用统一从这里取，保证同一状态在任何页面颜色一致。
 import type { Tone } from '@/components/kit/tag'
 
+/** 尚未生效的计划对象（“计划中”“某日 起”）：浅黄，表示“还没开始、已经定了”（2026-10-21 Peter） */
+export const PLANNED_TONE: Tone = 'yellow'
+
 /** 院区运营状态：筹建 → 试运行 → 运行 → 停用 */
 export const OPERATING_STATUS_TONE: Record<string, Tone> = {
   PLANNING: 'gray',

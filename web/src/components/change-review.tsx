@@ -259,20 +259,22 @@ function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: num
   )
 }
 
-/** 行内片段：名称标签（普通 / 新设 / 退出 / 关联对象）、状态标签、箭头、文字 */
+/**
+ * 行内片段，按“主语 → 谓语 → 宾语”分层（2026-10-21 Peter：名称和动作同色时分不清主次）：
+ * - 主语（本项的对象，chip / new）：粗体正文色，不加底色；新设与否由后面的动作标签说明
+ * - 退出的对象（out）：弱化色 + 删除线
+ * - 谓语（动作、去向、状态，tag）：唯一着色的实底标签
+ * - 宾语（关联对象，如隶属的上级部门，ref）：细边框、无底色
+ */
 function RowPart({ kind, text, tone }: { kind: string; text: string; tone?: string }) {
   switch (kind) {
     case 'chip':
-      return <span className="bg-surface-subtle text-fg-strong rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
-    case 'ref':
-      // 关联对象（如隶属的上级部门）：浅蓝标签，与正文和本项的对象区分开
-      return <span className="bg-tag-blue-bg text-tag-blue-text rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
     case 'new':
-      return <span className="bg-tag-green-bg text-tag-green-text rounded-md px-2 py-px text-xs font-medium whitespace-nowrap">{text}</span>
+      return <span className="text-fg-strong text-sm font-semibold whitespace-nowrap">{text}</span>
+    case 'ref':
+      return <span className="border-line text-fg rounded-md border px-1.5 py-px text-xs whitespace-nowrap">{text}</span>
     case 'out':
-      return (
-        <span className="bg-tag-gray-bg text-fg-secondary decoration-fg-disabled rounded-md px-2 py-px text-xs font-medium whitespace-nowrap line-through">{text}</span>
-      )
+      return <span className="text-fg-muted decoration-fg-disabled text-sm font-semibold whitespace-nowrap line-through">{text}</span>
     case 'tag':
       return (
         <Tag tone={TAG_TONE[tone ?? 'gray'] ?? 'gray'} className="text-caption">

@@ -83,8 +83,8 @@ def test_script13_create_with_parent_in_one_request(api):
     org = _org(api, "2026-03-01")
     assert org["RJK"] == (2, "XXZX")
     assert org["KFZ"] == (3, "RJK")
-    # 申请页逐行呈现：隶属的上级部门是单独的着色标签（ref）；同申请里新设的上级用新设标签
+    # 申请页逐行呈现：隶属的上级部门是关联对象（ref），同申请里新设的上级也一样
     cr = api.get(f"/api/change-requests/{done['id']}").json()
     rows = [[(p["kind"], p["text"]) for p in v["parts"]] for v in cr["item_views"]]
     assert ("ref", "信息中心") in rows[0] and ("text", "· 隶属") in rows[0]
-    assert ("new", "软件科") in rows[2]
+    assert ("new", "开发组") in rows[2] and ("ref", "软件科") in rows[2]

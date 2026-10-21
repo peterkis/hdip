@@ -44,7 +44,7 @@ import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
 import { notify } from '@/lib/notify'
 import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
-import { UNIT_STATUS_TONE } from '@/lib/tones'
+import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 
 const COLUMNS: DbColumn[] = [
@@ -246,7 +246,7 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
           >
             {v.name}
           </Link>
-          {u.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+          {u.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
           {u.has_later_versions && (
             <span title="之后还有已确认的版本" className="text-fg-muted inline-flex">
               <Icon icon={Clock01Icon} className="size-3.5" strokeWidth={1.75} />

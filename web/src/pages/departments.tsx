@@ -61,7 +61,7 @@ import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
-import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone } from '@/lib/tones'
+import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -267,7 +267,7 @@ export function DepartmentsPage() {
                   >
                     {d.version.name}
                   </Link>
-                  {d.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+                  {d.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
                   {d.tree?.closed && <span className="text-fg-muted text-caption">+{d.tree.descendants}</span>}
                 </span>
               </DbCell>

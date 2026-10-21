@@ -19,6 +19,7 @@ import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
+import { PLANNED_TONE } from '@/lib/tones'
 
 export function InstitutionsPage() {
   const { asOf } = useApp()
@@ -63,7 +64,7 @@ export function InstitutionsPage() {
                   >
                     {r.version.name}
                   </Link>
-                  {r.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+                  {r.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
                   {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
                 </span>
               </DbCell>

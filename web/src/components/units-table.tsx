@@ -6,6 +6,7 @@ import { DbCell, DbEmpty, DbRow, DbTable } from '@/components/kit/database'
 import { Tag } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period } from '@/lib/format'
+import { PLANNED_TONE } from '@/lib/tones'
 
 export function UnitsTable({ rows, hide = [] }: { rows: ServiceUnitRow[]; hide?: ('department' | 'campus')[] }) {
   const { optionLabels } = useApp()
@@ -30,7 +31,7 @@ export function UnitsTable({ rows, hide = [] }: { rows: ServiceUnitRow[]; hide?:
               <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/service-units/${r.id}`}>
                 {r.version.name}
               </Link>
-              {r.not_yet_effective && <Tag tone="gray">计划中</Tag>}
+              {r.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
               {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
             </span>
           </DbCell>

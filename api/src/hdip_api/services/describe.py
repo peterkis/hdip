@@ -290,8 +290,9 @@ def item_views(s: Session, items: list[dict]) -> list[dict]:
 
 
 def _parent_chip(n: _Names, code: str) -> Part:
-    """隶属的上级部门：同一申请里新设的用新设标签，其余用关联对象标签（着色，与正文区分）。"""
-    return _p("new" if code in n.new_depts else "ref", n.dept.get(code, code))
+    """隶属的上级部门是本行的关联对象（宾语），不论是否在同一申请里新设，都用关联对象标签：
+    新设与否由它自己那一行的“新设”说明，不在这里重复（否则主语、宾语同色，分不清层次）。"""
+    return _p("ref", n.dept.get(code, code))
 
 
 def _view(

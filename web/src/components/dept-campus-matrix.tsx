@@ -6,7 +6,7 @@ import { Tag } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
 import { OPERATING_STATUS, type OperatingStatus } from '@/lib/format'
 import type { MatrixRow } from '@/lib/org-overview'
-import { OPERATING_STATUS_TONE } from '@/lib/tones'
+import { OPERATING_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 export function DeptCampusMatrix({
@@ -33,7 +33,7 @@ export function DeptCampusMatrix({
               <th key={c.id} className="border-line-subtle min-w-32 border-l px-3 py-2 text-left font-normal">
                 <span className="text-fg-secondary flex items-center gap-1.5 whitespace-nowrap">
                   {c.version.name}
-                  <Tag tone={c.not_yet_effective ? 'gray' : OPERATING_STATUS_TONE[c.version.operating_status]}>
+                  <Tag tone={c.not_yet_effective ? PLANNED_TONE : OPERATING_STATUS_TONE[c.version.operating_status]}>
                     {c.not_yet_effective
                       ? `${c.version.valid_from} 起`
                       : (OPERATING_STATUS[c.version.operating_status as OperatingStatus] ?? c.version.operating_status)}

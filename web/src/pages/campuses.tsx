@@ -33,6 +33,7 @@ import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period, type OperatingStatus } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
+import { PLANNED_TONE } from '@/lib/tones'
 
 export function CampusesPage() {
   const { asOf } = useApp()
@@ -76,7 +77,7 @@ export function CampusesPage() {
                     {r.version.name}
                   </Link>
                   {r.version.public_name && <span className="text-fg-muted text-caption">对外称 {r.version.public_name}</span>}
-                  {r.not_yet_effective && <Tag tone="gray">{r.version.valid_from} 起</Tag>}
+                  {r.not_yet_effective && <Tag tone={PLANNED_TONE}>{r.version.valid_from} 起</Tag>}
                   {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
                 </span>
               </DbCell>

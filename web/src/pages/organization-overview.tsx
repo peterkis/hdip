@@ -48,7 +48,7 @@ import {
   type Flow,
   type Scope,
 } from '@/lib/org-overview'
-import { UNIT_STATUS_TONE } from '@/lib/tones'
+import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { cn } from '@/lib/utils'
 
 type TabKey = 'layout' | 'matrix' | 'codes'
@@ -638,7 +638,7 @@ function SelectionPanel({ sel, onClose, tab }: { sel: Selection | null; onClose:
                     {u.version.name}
                   </Link>
                   {u.not_yet_effective ? (
-                    <Tag tone="gray">计划 {u.version.valid_from} 起</Tag>
+                    <Tag tone={PLANNED_TONE}>计划 {u.version.valid_from} 起</Tag>
                   ) : (
                     u.version.status !== 'ACTIVE' && (
                       <Tag tone={UNIT_STATUS_TONE[u.version.status]}>{UNIT_STATUS[u.version.status as UnitStatus] ?? u.version.status}</Tag>
