@@ -1,4 +1,6 @@
 // 业务状态 → 标签色。全应用统一从这里取，保证同一状态在任何页面颜色一致。
+// 颜色含义（2026-10-21 Peter）：浅黄 = 计划（尚未开始、已经定了：计划中、筹建、筹备），橙 = 暂停，
+// 绿 = 在用 / 生效，红 = 停用 / 撤销，灰 = 已结束，蓝 = 进行中。
 import type { Tone } from '@/components/kit/tag'
 
 /** 尚未生效的计划对象（“计划中”“某日 起”）：浅黄，表示“还没开始、已经定了”（2026-10-21 Peter） */
@@ -6,7 +8,7 @@ export const PLANNED_TONE: Tone = 'yellow'
 
 /** 院区运营状态：筹建 → 试运行 → 运行 → 停用 */
 export const OPERATING_STATUS_TONE: Record<string, Tone> = {
-  PLANNING: 'gray',
+  PLANNING: PLANNED_TONE,
   TRIAL_RUNNING: 'blue',
   RUNNING: 'green',
   SUSPENDED: 'red',
@@ -15,15 +17,15 @@ export const OPERATING_STATUS_TONE: Record<string, Tone> = {
 /** 服务单元状态；“已退出”不是版本状态，由最后有效日推出 */
 export const UNIT_STATUS_TONE: Record<string, Tone> = {
   ACTIVE: 'green',
-  SUSPENDED: 'yellow',
+  SUSPENDED: 'orange',
   RETIRED: 'gray',
 }
 
 /** 部门组织生命周期（被替代为拆并预留） */
 export const DEPARTMENT_LIFECYCLE_TONE: Record<string, Tone> = {
-  PREPARING: 'gray',
+  PREPARING: PLANNED_TONE,
   ACTIVE: 'green',
-  SUSPENDED: 'yellow',
+  SUSPENDED: 'orange',
   REVOKED: 'red',
   SUPERSEDED: 'brown',
 }
