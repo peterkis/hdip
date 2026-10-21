@@ -30,7 +30,12 @@ Dataset = Literal[
     "external-codes",
     "classifications",
     "department-lineage",
+    "persons",
+    "person-relations",
 ]
+
+# 人员数据集：需要“导出人员数据”权限，敏感字段按当前用户隐去（人员设计第 7.3、8 节）
+PERSON_DATASETS = {"persons", "person-relations"}
 
 OPERATING_STATUS = {
     "PLANNING": "筹建",
@@ -239,6 +244,28 @@ def _lineage(s: Session, day: date) -> Iterable[dict]:
         }
 
 
+def _persons(s: Session, day: date, user) -> Iterable[dict]:
+    """当天有有效任用的人员，一人一行（按人去重）。"""
+    from hdip_api.services import person_queries
+
+    statuses = _options(s, "person_relation_status")
+    for r in person_queries.export_persons(s, user, day):
+        yield r | {"relation_status_name": statuses.get(r["relation_status"])}
+
+
+def _person_relations(s: Session, day: date, user) -> Iterable[dict]:
+    """当天有效的任用 × 当天的主归属；暂未分配时部门列为空（不写成“离职”）。"""
+    from hdip_api.services import person_queries
+
+    types = _options(s, "engagement_type")
+    kinds = _options(s, "assignment_kind")
+    for r in person_queries.export_relations(s, user, day):
+        yield r | {
+            "engagement_type_name": types.get(r["engagement_type"]),
+            "assignment_kind_name": kinds.get(r["assignment_kind"]),
+        }
+
+
 def _department_lineage(s: Session, day: date) -> Iterable[dict]:
     """查看日期及之前已生效的部门组织变更，一行一个参与部门（沿革是累积的历史事实）。"""
     from hdip_api.models import Department, DepartmentChangeEvent, DepartmentChangeParticipant
@@ -410,6 +437,16 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
         "object_type", "object_code", "object_name", "scheme_code", "scheme_name",
         "class_code", "class_name", "valid_from", "valid_to",
     ]),
+    "persons": (_persons, [
+        "person_code", "name", "pinyin", "relation_status", "relation_status_name",
+    ]),
+    "person-relations": (_person_relations, [
+        "person_code", "name", "institution_code", "institution_name",
+        "engagement_type", "engagement_type_name", "work_no",
+        "engagement_valid_from", "engagement_valid_to",
+        "assignment_kind", "assignment_kind_name", "department_code", "department_name",
+        "assignment_valid_from", "assignment_valid_to",
+    ]),
 }
 # fmt: on
 
@@ -424,12 +461,13 @@ def _cell(value) -> str:
     return str(value)
 
 
-def to_csv(s: Session, dataset: Dataset, day: date) -> str:
+def to_csv(s: Session, dataset: Dataset, day: date, user=None) -> str:
     fn, columns = BUILDERS[dataset]
     buf = io.StringIO()
     buf.write("﻿")
     writer = csv.writer(buf, lineterminator="\r\n")
     writer.writerow(columns)
-    for row in fn(s, day):
+    rows = fn(s, day, user) if dataset in PERSON_DATASETS else fn(s, day)
+    for row in rows:
         writer.writerow([_cell(row[c]) for c in columns])
     return buf.getvalue()

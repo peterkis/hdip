@@ -11,6 +11,7 @@ export const CODE_RULE: Record<CodeObject, { prefix: string; width: number; labe
   campus: { prefix: 'C', width: 3, label: '院区' },
   department: { prefix: 'D', width: 6, label: '部门' },
   service_unit: { prefix: 'SU', width: 6, label: '服务单元' },
+  person: { prefix: 'P', width: 6, label: '人员' },
 }
 
 export function codeRuleText(type: CodeObject): string {
@@ -18,7 +19,7 @@ export function codeRuleText(type: CodeObject): string {
   return `${r.prefix} 加 ${r.width} 位数字`
 }
 
-const TOKEN = /@@new:(campus|department|service_unit):(\d+)@@/g
+const TOKEN = /@@new:(campus|department|service_unit|person):(\d+)@@/g
 
 /** 占位符：保存时换成系统分配的代码。slot 区分同一表单里的多个新对象 */
 export function newCode(type: CodeObject, slot = 0): string {

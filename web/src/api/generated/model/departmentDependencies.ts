@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DepartmentClassificationOut } from './departmentClassificationOut';
+import type { DepartmentPersonRow } from './departmentPersonRow';
 import type { DepartmentRelationOut } from './departmentRelationOut';
 import type { DeptRef } from './deptRef';
 import type { ExternalCodeLink } from './externalCodeLink';
@@ -20,4 +21,5 @@ export interface DepartmentDependencies {
   code_links: ExternalCodeLink[];
   classifications: DepartmentClassificationOut[];
   relations: DepartmentRelationOut[];
+  persons?: DepartmentPersonRow[];
 }

@@ -227,3 +227,56 @@ def ledger(api, as_of=None, **params):
         )
         for r in page["rows"]
     }
+
+
+# ------------------------------------------------------------------ 人员（迁移 0016）
+def person_create(code="P000001", name="张伟", valid_from="2020-01-01", **fields):
+    return {"kind": "person.create", "code": code, "name": name, "valid_from": valid_from, **fields}
+
+
+def engage(
+    person="P000001",
+    dept="XNK",
+    valid_from="2020-01-01",
+    inst="CD3",
+    type_="CONTRACT",
+    valid_to=None,
+    work_no=None,
+):
+    item = {
+        "kind": "person.engage",
+        "person_code": person,
+        "institution_code": inst,
+        "engagement_type": type_,
+        "valid_from": valid_from,
+        "department_code": dept,
+    }
+    if valid_to:
+        item["valid_to"] = valid_to
+    if work_no:
+        item["work_no"] = work_no
+    return item
+
+
+def register(code="P000001", name="张伟", dept="XNK", valid_from="2020-01-01", **kw):
+    """登记向导生成的两项：人员 + 任用与主归属（同一开始日）。"""
+    return [person_create(code, name, valid_from), engage(code, dept, valid_from, **kw)]
+
+
+def transfer(assignment_id, dept, day, expected=None):
+    return {
+        "kind": "person.transfer",
+        "assignment_id": assignment_id,
+        "expected_valid_to": expected,
+        "department_code": dept,
+        "effective_date": day,
+    }
+
+
+def assignment_end(assignment_id, valid_to, expected=None):
+    return {
+        "kind": "person.assignment_set_end",
+        "assignment_id": assignment_id,
+        "expected_valid_to": expected,
+        "valid_to": valid_to,
+    }

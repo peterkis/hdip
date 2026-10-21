@@ -9,6 +9,7 @@ import { DesignPage } from '@/pages/design'
 import { DictionaryPage } from '@/pages/dictionary'
 import { CodeLedgerPage } from '@/pages/code-ledger'
 import { InstitutionDetailPage, InstitutionsPage } from '@/pages/institutions'
+import { PersonDetailPage, PersonsPage } from '@/pages/persons'
 import { PlannedPage } from '@/pages/planned'
 
 // 组织总览带桑基图库，按路由单独加载，不进首屏
@@ -42,6 +43,8 @@ export function App() {
             <Route path="departments/:id" element={<DepartmentDetailPage />} />
             <Route path="service-units" element={<ServiceUnitsPage />} />
             <Route path="service-units/:id" element={<ServiceUnitDetailPage />} />
+            <Route path="persons" element={<PersonsPage />} />
+            <Route path="persons/:id" element={<PersonDetailPage />} />
             <Route path="changes" element={<ChangesPage />} />
             <Route path="changes/:id" element={<ChangeDetailPage />} />
             <Route path="dictionary/classification" element={<DictionaryPage />} />

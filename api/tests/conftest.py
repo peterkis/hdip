@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
+    "person_assignment, person_work_no, person_engagement, person_version, person, "
     "department_change_participant, department_change_event, "
     "external_code_assignment, external_code, service_unit_classification, "
     "service_unit_lineage, service_unit_version, service_unit, "
@@ -37,7 +38,12 @@ BUSINESS_TABLES = (
     "operator_relation, campus_version, campus, institution_version, institution, change_request, "
     "code_reservation"
 )
-CODE_SEQUENCES = ("campus_code_seq", "department_code_seq", "service_unit_code_seq")
+CODE_SEQUENCES = (
+    "campus_code_seq",
+    "department_code_seq",
+    "service_unit_code_seq",
+    "person_code_seq",
+)
 
 
 @pytest.fixture(scope="session")
@@ -86,6 +92,7 @@ CREATE_TYPES = {
     "campus.create": "campus",
     "department.create": "department",
     "service_unit.create": "service_unit",
+    "person.create": "person",
 }
 
 

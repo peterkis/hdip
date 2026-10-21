@@ -482,3 +482,59 @@ class CodeReservation(Base):
     slot: Mapped[int] = mapped_column(Integer)
     reserved_at: Mapped[datetime] = mapped_column(server_default=NOW)
     reserved_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+
+
+# ------------------------------------------------------------------ 人员（迁移 0016）
+class Person(_Identity, Base):
+    """人员身份：代码 P + 6 位数字，系统分配、永不复用。姓名在 PersonVersion。"""
+
+    __tablename__ = "person"
+    __mapper_args__ = {"eager_defaults": True}
+
+
+class PersonVersion(_Version, Base):
+    __tablename__ = "person_version"
+    __mapper_args__ = {"eager_defaults": True}
+
+    person_id: Mapped[int] = mapped_column(ForeignKey("person.id"))
+    name: Mapped[str] = mapped_column(Text)
+    pinyin: Mapped[str | None] = mapped_column(Text)
+    revise_reason: Mapped[str] = mapped_column(Text)
+
+    CONTENT = ("name", "pinyin")
+
+
+class PersonEngagement(_Period, Base):
+    """任用：人员与主体的关系，带期间。结束日在到达前可改（hdip_guard_open_end）。"""
+
+    __tablename__ = "person_engagement"
+    __mapper_args__ = {"eager_defaults": True}
+
+    person_id: Mapped[int] = mapped_column(ForeignKey("person.id"))
+    institution_id: Mapped[int] = mapped_column(ForeignKey("institution.id"))
+    engagement_type: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class PersonWorkNo(_Period, Base):
+    """业务工号：挂在任用上、带期间，可换号；同一主体内一个工号只属于一个人。"""
+
+    __tablename__ = "person_work_no"
+    __mapper_args__ = {"eager_defaults": True}
+
+    engagement_id: Mapped[int] = mapped_column(BigInteger)
+    person_id: Mapped[int] = mapped_column(BigInteger)
+    institution_id: Mapped[int] = mapped_column(BigInteger)
+    work_no: Mapped[str] = mapped_column(Text)
+    revise_reason: Mapped[str] = mapped_column(Text)
+
+
+class PersonAssignment(_Period, Base):
+    """部门归属：任用下按期间归属哪个部门；P1 只有主归属。"""
+
+    __tablename__ = "person_assignment"
+    __mapper_args__ = {"eager_defaults": True}
+
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("person_engagement.id"))
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    kind: Mapped[str] = mapped_column(Text)

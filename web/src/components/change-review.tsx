@@ -52,6 +52,12 @@ const GROUP_DEFS: GroupDef[] = [
     match: (k) => k.startsWith('external_code.'),
   },
   {
+    key: 'persons',
+    title: '人员',
+    rule: '人员身份不变；任用、归属按期间生效，调科的两端同一天一起成立',
+    match: (k) => k.startsWith('person.'),
+  },
+  {
     key: 'base',
     title: '主体、院区与运营关系',
     rule: '院区不等于法人；同一主体与同一院区同一时期只有一条关系',
@@ -72,6 +78,7 @@ const REORG_TEXT: Record<string, { title?: string; rule: string }> = {
   units: { title: '服务单元去向', rule: '单元身份不变，只换所属部门' },
   hierarchy: { title: '下级部门', rule: '上级退出，下级不跟着退出' },
   codes: { rule: '历史仍指向原部门，不改指向' },
+  persons: { title: '人员去向', rule: '人员身份不变，只换归属部门；不按单元或名称自动迁人' },
 }
 
 export function groupItems(cr: ChangeRequestOut): ReviewGroup[] {

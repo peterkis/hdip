@@ -161,6 +161,18 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "department_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
     "service_unit_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
     "code_reservation_code_uniq": "这个代码已经发出过，代码永不复用",
+    "hdip_period_passed": "结束日已经过去，不能再改",
+    "person_code_uniq": "人员代码已被使用，代码永不复用",
+    "person_version_no_overlap": "与该人员已有姓名版本的期间重叠",
+    "person_version_name_check": "姓名不能为空",
+    "person_version_pinyin_check": "拼音码只能是大写字母和数字（1–64 位）",
+    "person_engagement_no_overlap": "该人员在这个主体同一时期已有任用，同一时期只能有一项",
+    "person_engagement_period_check": "任用结束日不能早于开始日",
+    "person_work_no_one_owner": "这个工号已属于同一主体的另一个人，工号不复用",
+    "person_work_no_no_overlap": "这项任用在这段期间已有工号，同一时点只能有一个",
+    "person_work_no_value_check": "工号不能为空，最长 64 个字符",
+    "person_assignment_primary_no_overlap": "这项任用在这段期间已有主归属，同一时点只能有一个",
+    "person_assignment_period_check": "归属结束日不能早于开始日",
 }
 
 
@@ -211,6 +223,8 @@ class Ctx:
     ended_departments: dict[int, tuple[int, date]] = field(default_factory=dict)
     # 新增过解释的源记录 id → 项序号（检查院区条件是否一致）
     touched_codes: dict[int, int] = field(default_factory=dict)
+    # 本申请新写或改过结束日的人员归属 id → 项序号（按完整期间检查，见 services/persons.py）
+    new_assignments: dict[int, int] = field(default_factory=dict)
 
 
 def _json(value: Any) -> Any:
@@ -2089,6 +2103,9 @@ def _check_units(ctx: Ctx) -> list[ProblemItem]:
     return problems
 
 
+# 人员处理函数引用本模块里的 Ctx、ItemError 等，所以在这里（本模块定义完之后）导入
+from hdip_api.services import persons as _persons  # noqa: E402
+
 HANDLERS = {
     "institution.create": _institution_create,
     "institution.revise": _institution_revise,
@@ -2124,6 +2141,7 @@ HANDLERS = {
     "external_code.register": _external_code_register,
     "external_code.assign": _external_code_assign,
     "external_code.assignment_close": _external_code_assignment_close,
+    **_persons.HANDLERS,
 }
 
 
@@ -2181,6 +2199,7 @@ def apply_items(
             sp.commit()
         outcomes.append({"index": index, "kind": item.kind, "label": label, **out})
     problems += _check_units(ctx) + _check_org(ctx) + _check_codes(ctx) + _check_ended_codes(ctx)
+    problems += _persons.check_persons(ctx)
     if problems:
         first = problems[0]
         label = KIND_LABELS[items[first.item_index].kind]

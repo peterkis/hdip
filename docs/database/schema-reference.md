@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0015**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0016**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)
+- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -846,7 +846,7 @@
 - `code_reservation_request_uniq`（唯一）：`UNIQUE (request_key, object_type, slot)`
 - `code_reservation_key_check`（检查）：`CHECK (((length(request_key) >= 8) AND (length(request_key) <= 100)))`
 - `code_reservation_slot_check`（检查）：`CHECK ((slot >= 0))`
-- `code_reservation_type_check`（检查）：`CHECK ((object_type = ANY (ARRAY['campus'::text, 'department'::text, 'service_unit'::text])))`
+- `code_reservation_type_check`（检查）：`CHECK ((object_type = ANY (ARRAY['campus'::text, 'department'::text, 'service_unit'::text, 'person'::text])))`
 
 触发器：
 
@@ -902,6 +902,156 @@
 
 - `department_change_participant_guard`：`CREATE TRIGGER department_change_participant_guard BEFORE UPDATE ON public.department_change_participant FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
+### person
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `code` | text | 是 |  |  |
+| `created_change_id` | bigint | 是 |  | → `change_request` |
+| `created_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `person_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_code_uniq`（唯一）：`UNIQUE (code)`
+- `person_code_check`（检查）：`CHECK ((code ~ '^P[0-9]{6}$'::text))`
+
+触发器：
+
+- `person_guard`：`CREATE TRIGGER person_guard BEFORE UPDATE ON public.person FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### person_assignment
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `engagement_id` | bigint | 是 |  | → `person_engagement` |
+| `department_id` | bigint | 是 |  | → `department` |
+| `kind` | text | 是 | 'PRIMARY'::text |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `person_assignment_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_assignment_primary_no_overlap`（排他）：`EXCLUDE USING gist (engagement_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE ((kind = 'PRIMARY'::text))`
+- `person_assignment_kind_check`（检查）：`CHECK ((kind = 'PRIMARY'::text))`
+- `person_assignment_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+
+索引：
+
+- `person_assignment_department_idx`：`CREATE INDEX person_assignment_department_idx ON public.person_assignment USING btree (department_id)`
+- `person_assignment_engagement_idx`：`CREATE INDEX person_assignment_engagement_idx ON public.person_assignment USING btree (engagement_id)`
+
+触发器：
+
+- `person_assignment_guard`：`CREATE TRIGGER person_assignment_guard BEFORE UPDATE ON public.person_assignment FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
+
+### person_engagement
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `person_id` | bigint | 是 |  | → `person` |
+| `institution_id` | bigint | 是 |  | → `institution` |
+| `engagement_type` | text | 是 |  |  |
+| `note` | text |  |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `person_engagement_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_engagement_owner_uniq`（唯一）：`UNIQUE (id, person_id, institution_id)`
+- `person_engagement_no_overlap`（排他）：`EXCLUDE USING gist (person_id WITH =, institution_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
+- `person_engagement_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+
+索引：
+
+- `person_engagement_person_idx`：`CREATE INDEX person_engagement_person_idx ON public.person_engagement USING btree (person_id)`
+
+触发器：
+
+- `person_engagement_guard`：`CREATE TRIGGER person_engagement_guard BEFORE UPDATE ON public.person_engagement FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
+
+### person_version
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `person_id` | bigint | 是 |  | → `person` |
+| `version_no` | integer | 是 |  |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `name` | text | 是 |  |  |
+| `pinyin` | text |  |  |  |
+| `revise_reason` | text | 是 | 'INITIAL'::text |  |
+
+约束：
+
+- `person_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_version_no_uniq`（唯一）：`UNIQUE (person_id, version_no)`
+- `person_version_no_overlap`（排他）：`EXCLUDE USING gist (person_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
+- `person_version_name_check`（检查）：`CHECK ((btrim(name) <> ''::text))`
+- `person_version_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+- `person_version_pinyin_check`（检查）：`CHECK ((pinyin ~ '^[A-Z0-9]{1,64}$'::text))`
+- `person_version_reason_check`（检查）：`CHECK ((revise_reason = ANY (ARRAY['INITIAL'::text, 'RENAME'::text, 'CORRECTION'::text])))`
+
+索引：
+
+- `person_version_person_idx`：`CREATE INDEX person_version_person_idx ON public.person_version USING btree (person_id)`
+
+触发器：
+
+- `person_version_guard`：`CREATE TRIGGER person_version_guard BEFORE UPDATE ON public.person_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update('valid_to')`
+
+### person_work_no
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `engagement_id` | bigint | 是 |  |  |
+| `person_id` | bigint | 是 |  |  |
+| `institution_id` | bigint | 是 |  |  |
+| `work_no` | text | 是 |  |  |
+| `revise_reason` | text | 是 | 'INITIAL'::text |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `person_work_no_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_work_no_no_overlap`（排他）：`EXCLUDE USING gist (engagement_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
+- `person_work_no_one_owner`（排他）：`EXCLUDE USING gist (institution_id WITH =, work_no WITH =, person_id WITH <>)`
+- `person_work_no_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+- `person_work_no_reason_check`（检查）：`CHECK ((revise_reason = ANY (ARRAY['INITIAL'::text, 'CHANGE'::text, 'CORRECTION'::text])))`
+- `person_work_no_value_check`（检查）：`CHECK (((work_no = btrim(work_no)) AND ((length(work_no) >= 1) AND (length(work_no) <= 64))))`
+
+索引：
+
+- `person_work_no_engagement_idx`：`CREATE INDEX person_work_no_engagement_idx ON public.person_work_no USING btree (engagement_id)`
+- `person_work_no_value_idx`：`CREATE INDEX person_work_no_value_idx ON public.person_work_no USING btree (work_no)`
+
+触发器：
+
+- `person_work_no_guard`：`CREATE TRIGGER person_work_no_guard BEFORE UPDATE ON public.person_work_no FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
+
 ## 触发器函数
 
 ### hdip_guard_change_request
@@ -914,6 +1064,43 @@ AS $function$
 BEGIN
   IF OLD.status IN ('confirmed', 'returned', 'cancelled') THEN
     RAISE EXCEPTION '变更申请已结束，不可修改'
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+  END IF;
+  RETURN NEW;
+END
+$function$
+```
+
+### hdip_guard_open_end
+
+```sql
+CREATE OR REPLACE FUNCTION public.hdip_guard_open_end()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF (to_jsonb(NEW) - 'valid_to' - 'closed_change_id')
+     IS DISTINCT FROM (to_jsonb(OLD) - 'valid_to' - 'closed_change_id') THEN
+    RAISE EXCEPTION '历史记录不可修改（%）', TG_TABLE_NAME
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+  END IF;
+  IF NEW.valid_to IS NOT DISTINCT FROM OLD.valid_to THEN
+    IF NEW.closed_change_id IS DISTINCT FROM OLD.closed_change_id THEN
+      RAISE EXCEPTION '关闭信息只能随结束日一起写入（%）', TG_TABLE_NAME
+        USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+    END IF;
+    RETURN NEW;
+  END IF;
+  IF OLD.valid_to IS NOT NULL AND OLD.valid_to < OLD.valid_from THEN
+    RAISE EXCEPTION '生效前已撤销的记录不可再改（%）', TG_TABLE_NAME
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
+  END IF;
+  IF OLD.valid_to IS NOT NULL AND OLD.valid_to < current_date THEN
+    RAISE EXCEPTION '结束日已经过去，不能再改（%）', TG_TABLE_NAME
+      USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_period_passed';
+  END IF;
+  IF NEW.closed_change_id IS NULL THEN
+    RAISE EXCEPTION '改结束日须记下本次申请（%）', TG_TABLE_NAME
       USING ERRCODE = 'integrity_constraint_violation', CONSTRAINT = 'hdip_history_immutable';
   END IF;
   RETURN NEW;
@@ -985,6 +1172,11 @@ $function$
 | `operator_relation` | INSERT、SELECT、UPDATE |
 | `option_item` | INSERT、SELECT、UPDATE |
 | `org_view` | INSERT、SELECT、UPDATE |
+| `person` | INSERT、SELECT、UPDATE |
+| `person_assignment` | INSERT、SELECT、UPDATE |
+| `person_engagement` | INSERT、SELECT、UPDATE |
+| `person_version` | INSERT、SELECT、UPDATE |
+| `person_work_no` | INSERT、SELECT、UPDATE |
 | `service_unit` | INSERT、SELECT、UPDATE |
 | `service_unit_classification` | INSERT、SELECT、UPDATE |
 | `service_unit_lineage` | INSERT、SELECT、UPDATE |
@@ -997,9 +1189,21 @@ $function$
 
 | 类别 | 代码 | 名称 | 排序 | 启用 |
 | --- | --- | --- | --- | --- |
+| assignment_kind | `PRIMARY` | 主归属 | 10 | 是 |
 | campus_node_role | `HEADQUARTERS` | 本部院区 | 10 | 是 |
 | campus_node_role | `HIGH_TECH` | 高新院区 | 20 | 是 |
 | campus_node_role | `CITY_CENTER` | 中心院区 | 30 | 是 |
+| engagement_type | `STAFF` | 在编 | 10 | 是 |
+| engagement_type | `CONTRACT` | 合同（人事代理） | 20 | 是 |
+| engagement_type | `DISPATCH` | 劳务派遣 | 30 | 是 |
+| engagement_type | `REHIRE` | 退休返聘 | 40 | 是 |
+| engagement_type | `EXTERNAL` | 外聘专家 | 50 | 是 |
+| engagement_type | `RESIDENT` | 规培 | 60 | 是 |
+| engagement_type | `VISITING` | 进修 | 70 | 是 |
+| engagement_type | `INTERN` | 实习 | 80 | 是 |
+| person_relation_status | `ENGAGED` | 有有效任用 | 10 | 是 |
+| person_relation_status | `PLANNED` | 仅有计划任用 | 20 | 是 |
+| person_relation_status | `NONE` | 无有效任用 | 30 | 是 |
 | service_unit_type | `OPD` | 门诊单元 | 10 | 是 |
 | service_unit_type | `IPD` | 住院单元 | 20 | 是 |
 | service_unit_type | `ED` | 急诊单元 | 30 | 是 |
@@ -1037,6 +1241,10 @@ $function$
 | institution | revise | confirmer | 是 |
 | operator_relation | close | confirmer | 是 |
 | operator_relation | create | confirmer | 是 |
+| person | assignment_set_end | confirmer | 是 |
+| person | create | confirmer | 是 |
+| person | engage | confirmer | 是 |
+| person | transfer | confirmer | 是 |
 | service_unit | change_department | confirmer | 是 |
 | service_unit | change_status | confirmer | 是 |
 | service_unit | classification_close | confirmer | 是 |

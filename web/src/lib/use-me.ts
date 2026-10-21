@@ -6,9 +6,12 @@ export function useMe() {
   const username = useCurrentUsername()
   const { data } = useGetMe({ query: { queryKey: ['me', username] } })
   const roles = data?.roles ?? []
+  const permissions = new Set(data?.permissions ?? [])
   return {
     me: data,
     isMaintainer: roles.includes('maintainer'),
     isConfirmer: roles.includes('confirmer'),
+    /** 按权限键判断（core/permissions.py），如 can('person.view') */
+    can: (key: string) => permissions.has(key),
   }
 }

@@ -28,6 +28,10 @@ import type { InstitutionCreate } from './institutionCreate';
 import type { InstitutionRevise } from './institutionRevise';
 import type { OperatorRelationClose } from './operatorRelationClose';
 import type { OperatorRelationCreate } from './operatorRelationCreate';
+import type { PersonAssignmentSetEnd } from './personAssignmentSetEnd';
+import type { PersonCreate } from './personCreate';
+import type { PersonEngage } from './personEngage';
+import type { PersonTransfer } from './personTransfer';
 import type { ServiceUnitChangeDepartment } from './serviceUnitChangeDepartment';
 import type { ServiceUnitChangeStatus } from './serviceUnitChangeStatus';
 import type { ServiceUnitClassificationClose } from './serviceUnitClassificationClose';
@@ -40,6 +44,6 @@ import type { ServiceUnitRevise } from './serviceUnitRevise';
 import type { ServiceUnitSplit } from './serviceUnitSplit';
 
 export interface ChangeRequestWrite {
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonTransfer | PersonAssignmentSetEnd)[];
   note?: string | null;
 }

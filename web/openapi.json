@@ -953,7 +953,7 @@
           "master"
         ],
         "summary": "Get Department Dependencies",
-        "description": "承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、\n分类与管理关系。组织变更向导据此逐项处置。",
+        "description": "承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、\n分类与管理关系，以及归属本部门的人员（有“查看人员”权限时）。组织变更向导据此逐项处置。",
         "operationId": "getDepartmentDependencies",
         "parameters": [
           {
@@ -3601,7 +3601,9 @@
                 "department-relations",
                 "external-codes",
                 "classifications",
-                "department-lineage"
+                "department-lineage",
+                "persons",
+                "person-relations"
               ],
               "type": "string",
               "title": "Dataset"
@@ -3650,6 +3652,431 @@
               "text/csv": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/persons": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "List Persons",
+        "description": "名册每人一行（按人去重）；任用与当天的工号、主归属作为子项。",
+        "operationId": "listPersons",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "姓名、曾用名、拼音码、人员代码或工号（含旧工号）",
+              "default": "",
+              "title": "Q"
+            },
+            "description": "姓名、曾用名、拼音码、人员代码或工号（含旧工号）"
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "as_of",
+                "all"
+              ],
+              "type": "string",
+              "description": "as_of = 名册（按查看日期）；all = 查重，含历史、未来、无有效任用的人",
+              "default": "as_of",
+              "title": "Scope"
+            },
+            "description": "as_of = 名册（按查看日期）；all = 查重，含历史、未来、无有效任用的人"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ENGAGED",
+                    "PLANNED",
+                    "NONE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "institution_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Institution Id"
+            }
+          },
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "名册是否加上仅有计划任用的人",
+              "default": false,
+              "title": "Include Future"
+            },
+            "description": "名册是否加上仅有计划任用的人"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PersonRow"
+                  },
+                  "title": "Response Listpersons"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/persons/{person_id}": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "Get Person",
+        "operationId": "getPerson",
+        "parameters": [
+          {
+            "name": "person_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Person Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/departments/{department_id}/persons": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "List Department Persons",
+        "description": "查看日期归属该部门的人员（主归属，不含下级部门）。",
+        "operationId": "listDepartmentPersons",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Future"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DepartmentPersonRow"
+                  },
+                  "title": "Response Listdepartmentpersons"
                 }
               }
             }
@@ -4501,6 +4928,18 @@
                 },
                 {
                   "$ref": "#/components/schemas/ExternalCodeAssignmentClose"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonEngage"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonTransfer"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonAssignmentSetEnd"
                 }
               ],
               "discriminator": {
@@ -4530,6 +4969,10 @@
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
+                  "person.create": "#/components/schemas/PersonCreate",
+                  "person.engage": "#/components/schemas/PersonEngage",
+                  "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
                   "service_unit.classification_close": "#/components/schemas/ServiceUnitClassificationClose",
@@ -4968,6 +5411,18 @@
                 },
                 {
                   "$ref": "#/components/schemas/ExternalCodeAssignmentClose"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonCreate"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonEngage"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonTransfer"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonAssignmentSetEnd"
                 }
               ],
               "discriminator": {
@@ -4997,6 +5452,10 @@
                   "institution.revise": "#/components/schemas/InstitutionRevise",
                   "operator_relation.close": "#/components/schemas/OperatorRelationClose",
                   "operator_relation.create": "#/components/schemas/OperatorRelationCreate",
+                  "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
+                  "person.create": "#/components/schemas/PersonCreate",
+                  "person.engage": "#/components/schemas/PersonEngage",
+                  "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
                   "service_unit.change_status": "#/components/schemas/ServiceUnitChangeStatus",
                   "service_unit.classification_close": "#/components/schemas/ServiceUnitClassificationClose",
@@ -6141,6 +6600,14 @@
             },
             "type": "array",
             "title": "Relations"
+          },
+          "persons": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentPersonRow"
+            },
+            "type": "array",
+            "title": "Persons",
+            "default": []
           }
         },
         "type": "object",
@@ -6480,6 +6947,79 @@
         "type": "object",
         "title": "DepartmentPatch",
         "description": "只写要改的字段；写 null 表示清空。名称、设立形式不能清空。改名未给拼音码时按新名称生成。"
+      },
+      "DepartmentPersonRow": {
+        "properties": {
+          "person_id": {
+            "type": "integer",
+            "title": "Person Id"
+          },
+          "person_code": {
+            "type": "string",
+            "title": "Person Code"
+          },
+          "person_name": {
+            "type": "string",
+            "title": "Person Name"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "engagement_type": {
+            "type": "string",
+            "title": "Engagement Type"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          }
+        },
+        "type": "object",
+        "required": [
+          "person_id",
+          "person_code",
+          "person_name",
+          "engagement_id",
+          "engagement_type",
+          "institution_name",
+          "assignment_id",
+          "kind",
+          "valid_from",
+          "valid_to",
+          "not_yet_effective"
+        ],
+        "title": "DepartmentPersonRow",
+        "description": "归属某部门的一条人员归属（部门详情的人员区块、承接清单）。"
       },
       "DepartmentRelationClose": {
         "properties": {
@@ -8689,6 +9229,803 @@
         ],
         "title": "Permissions"
       },
+      "PersonAssignmentOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "department_lifecycle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Lifecycle"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          },
+          "void": {
+            "type": "boolean",
+            "title": "Void"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "department",
+          "department_lifecycle",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id",
+          "void"
+        ],
+        "title": "PersonAssignmentOut"
+      },
+      "PersonAssignmentSetEnd": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.assignment_set_end",
+            "title": "Kind"
+          },
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "expected_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Valid To"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "assignment_id",
+          "expected_valid_to",
+          "valid_to"
+        ],
+        "title": "PersonAssignmentSetEnd",
+        "description": "结束一条归属、调整它尚未到达的结束日（valid_to 为最后有效日；空 = 清除结束日），\n或撤销尚未开始的归属（valid_to = 开始日前一日）。"
+      },
+      "PersonCreate": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.create",
+            "title": "Kind"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "code",
+          "name",
+          "valid_from"
+        ],
+        "title": "PersonCreate",
+        "description": "登记人员身份与第一个姓名版本；开始日 = 首项任用的开始日（登记向导自动带上）。"
+      },
+      "PersonDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENGAGED",
+              "PLANNED",
+              "NONE"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "created_change_id": {
+            "type": "integer",
+            "title": "Created Change Id"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/PersonVersionOut"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "engagements": {
+            "items": {
+              "$ref": "#/components/schemas/PersonEngagementOut"
+            },
+            "type": "array",
+            "title": "Engagements"
+          },
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "pinyin",
+          "status",
+          "created_at",
+          "created_change_id",
+          "versions",
+          "engagements"
+        ],
+        "title": "PersonDetail"
+      },
+      "PersonEngage": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.engage",
+            "title": "Kind"
+          },
+          "person_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Person Code"
+          },
+          "institution_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Institution Code"
+          },
+          "engagement_type": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Engagement Type"
+          },
+          "work_no": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work No"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "department_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department Code"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "person_code",
+          "institution_code",
+          "engagement_type",
+          "valid_from"
+        ],
+        "title": "PersonEngage",
+        "description": "建立任用（新登记或再次任用）：同期间的业务工号（选填）与主归属。\n\ndepartment_code 为空 = 暂未分配（表单须明确选择）。valid_to 选填（医院常提前填写结束日）。"
+      },
+      "PersonEngagementBrief": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "engagement_type": {
+            "type": "string",
+            "title": "Engagement Type"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          },
+          "work_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work No"
+          },
+          "assignment_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assignment Id"
+          },
+          "department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "institution_id",
+          "institution_name",
+          "engagement_type",
+          "valid_from",
+          "valid_to",
+          "not_yet_effective",
+          "work_no",
+          "assignment_id",
+          "department"
+        ],
+        "title": "PersonEngagementBrief",
+        "description": "名册一行里的一项任用：当天（或最早计划）的工号与主归属。"
+      },
+      "PersonEngagementOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "institution_id": {
+            "type": "integer",
+            "title": "Institution Id"
+          },
+          "institution_code": {
+            "type": "string",
+            "title": "Institution Code"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "engagement_type": {
+            "type": "string",
+            "title": "Engagement Type"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          },
+          "void": {
+            "type": "boolean",
+            "title": "Void"
+          },
+          "work_nos": {
+            "items": {
+              "$ref": "#/components/schemas/PersonWorkNoOut"
+            },
+            "type": "array",
+            "title": "Work Nos"
+          },
+          "assignments": {
+            "items": {
+              "$ref": "#/components/schemas/PersonAssignmentOut"
+            },
+            "type": "array",
+            "title": "Assignments"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "institution_id",
+          "institution_code",
+          "institution_name",
+          "engagement_type",
+          "note",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id",
+          "void",
+          "work_nos",
+          "assignments"
+        ],
+        "title": "PersonEngagementOut"
+      },
+      "PersonRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENGAGED",
+              "PLANNED",
+              "NONE"
+            ],
+            "title": "Status"
+          },
+          "engagements": {
+            "items": {
+              "$ref": "#/components/schemas/PersonEngagementBrief"
+            },
+            "type": "array",
+            "title": "Engagements"
+          },
+          "matched": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched"
+          },
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "pinyin",
+          "status",
+          "engagements"
+        ],
+        "title": "PersonRow"
+      },
+      "PersonTransfer": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.transfer",
+            "title": "Kind"
+          },
+          "assignment_id": {
+            "type": "integer",
+            "title": "Assignment Id"
+          },
+          "expected_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Valid To"
+          },
+          "department_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Department Code"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "assignment_id",
+          "expected_valid_to",
+          "department_code",
+          "effective_date"
+        ],
+        "title": "PersonTransfer",
+        "description": "调科：原归属止于生效日前一日，新归属自生效日起，结束日沿用原归属的结束日。\n\nexpected_valid_to 是发起时看到的原归属结束日；确认时已被别的申请改过就拒绝，不覆盖。"
+      },
+      "PersonVersionOut": {
+        "properties": {
+          "version_no": {
+            "type": "integer",
+            "title": "Version No"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "pinyin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinyin"
+          },
+          "revise_reason": {
+            "type": "string",
+            "enum": [
+              "INITIAL",
+              "RENAME",
+              "CORRECTION"
+            ],
+            "title": "Revise Reason"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          },
+          "void": {
+            "type": "boolean",
+            "title": "Void"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version_no",
+          "valid_from",
+          "valid_to",
+          "name",
+          "pinyin",
+          "revise_reason",
+          "change_id",
+          "recorded_at",
+          "void"
+        ],
+        "title": "PersonVersionOut"
+      },
+      "PersonWorkNoOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "work_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Work No"
+          },
+          "revise_reason": {
+            "type": "string",
+            "enum": [
+              "INITIAL",
+              "CHANGE",
+              "CORRECTION"
+            ],
+            "title": "Revise Reason"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          },
+          "void": {
+            "type": "boolean",
+            "title": "Void"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "work_no",
+          "revise_reason",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id",
+          "void"
+        ],
+        "title": "PersonWorkNoOut"
+      },
       "PrimaryOperator": {
         "properties": {
           "institution_id": {
@@ -9038,7 +10375,8 @@
             "enum": [
               "campus",
               "department",
-              "service_unit"
+              "service_unit",
+              "person"
             ],
             "title": "Object Type"
           },

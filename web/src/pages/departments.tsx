@@ -53,6 +53,8 @@ import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useListDepartmentPersons } from '@/api/generated/persons/persons'
+import { DepartmentPersons } from '@/components/department-persons'
 import { ExternalCodeLinks } from '@/components/external-code-links'
 import { ClassificationCloseDialog, ClassifyDialog } from '@/components/forms/code-forms'
 import { UnitsTable } from '@/components/units-table'
@@ -460,13 +462,18 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
 ]
 
 type Dialog = 'revise' | 'lifecycle' | 'classify' | 'otherClass' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation' | 'reorg'
-type TabKey = 'props' | 'class' | 'org' | 'units' | 'history' | 'codes'
+type TabKey = 'props' | 'class' | 'org' | 'units' | 'persons' | 'history' | 'codes'
 
 export function DepartmentDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
-  const { isMaintainer } = useMe()
+  const { isMaintainer, can } = useMe()
   const { data, isError } = useGetDepartment(id, { as_of: asOf })
+  const { data: persons = [] } = useListDepartmentPersons(
+    id,
+    { as_of: asOf, include_future: true },
+    { query: { enabled: can('person.view') && Number.isInteger(id) } },
+  )
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
@@ -610,6 +617,9 @@ export function DepartmentDetailPage() {
           <TabsTrigger value="class">分类与归属</TabsTrigger>
           <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
           <TabsTrigger value="units">服务单元（{data.units.length}）</TabsTrigger>
+          {can('person.view') && (
+            <TabsTrigger value="persons">人员（{persons.filter((p) => !p.not_yet_effective).length}）</TabsTrigger>
+          )}
           <TabsTrigger value="codes">外部编码（{data.external_codes.length}）</TabsTrigger>
           <TabsTrigger value="history">版本与事件</TabsTrigger>
         </TabsList>
@@ -813,6 +823,12 @@ export function DepartmentDetailPage() {
           >
             <UnitsTable rows={data.units} hide={['department']} />
             <p className="text-fg-muted text-caption">部门在新院区开展服务 = 新建或重新绑定服务单元，部门身份不变。</p>
+          </Section>
+        )}
+
+        {tab === 'persons' && (
+          <Section title={`人员（${asOf}）`}>
+            <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
           </Section>
         )}
 

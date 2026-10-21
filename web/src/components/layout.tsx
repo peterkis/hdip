@@ -25,6 +25,7 @@ import { today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
+import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
 export function Layout() {
@@ -95,6 +96,8 @@ const sideItem =
 /** 一个主题域分组：标题可折叠（Notion 侧栏分区）；没有条目的分组显示“规划中” */
 function SideGroup({ group, counts }: { group: NavGroup; counts: Record<string, number> }) {
   const [open, setOpen] = useState(true)
+  const { can } = useMe()
+  const items = group.items.filter((i) => !i.permission || can(i.permission))
   return (
     <div className="mt-3 grid gap-px">
       <button
@@ -106,10 +109,10 @@ function SideGroup({ group, counts }: { group: NavGroup; counts: Record<string, 
         <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3 opacity-0 group-hover/label:opacity-100" />
       </button>
       {open &&
-        (group.items.length === 0 ? (
+        (items.length === 0 ? (
           <SideLink item={{ label: '规划中', icon: group.icon }} to={`/planned/${group.key}`} planned />
         ) : (
-          group.items.map((item) => (
+          items.map((item) => (
             <SideLink
               key={item.label}
               item={item}

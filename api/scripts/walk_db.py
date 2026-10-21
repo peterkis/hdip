@@ -8,7 +8,8 @@
 部门心血管内科，都自 2020-01-01 起。默认再加一张申请：高新 / 中心院区（筹建）、呼吸内科
 （带下级部门与三个单元）、放射科与核医学科、几个未分类部门、HIS 科室字典的待裁决代码，
 供剧本 18–20 与批量操作实测；第三张申请是组织总览（剧本 21）的演示数据：带二级部门的一级部门、
-高新 / 中心院区的计划单元、HRP 与病区字典的编码。`--minimal` 只建最小起点（剧本 1–17）。
+高新 / 中心院区的计划单元、HRP 与病区字典的编码；第四张申请是人员模块 P1.1 的合成人员
+（同名、计划入职、暂未分配、已填结束日的返聘、姓氏读音）。`--minimal` 只建最小起点（剧本 1–17）。
 """
 
 import os
@@ -381,6 +382,48 @@ OVERVIEW = [
 ]
 
 
+def _person(temp, name, dept, valid_from, type_="CONTRACT", **kw):
+    """登记向导生成的两项：人员 + 任用与主归属。temp 是临时代码，写入时换成系统代码（P + 6 位）。"""
+    pinyin = kw.pop("pinyin", None)
+    return [
+        {
+            "kind": "person.create",
+            "code": temp,
+            "name": name,
+            "valid_from": valid_from,
+            **({"pinyin": pinyin} if pinyin else {}),
+        },
+        {
+            "kind": "person.engage",
+            "person_code": temp,
+            "institution_code": "CD3",
+            "engagement_type": type_,
+            "valid_from": valid_from,
+            "department_code": dept,
+            **kw,
+        },
+    ]
+
+
+# 人员模块 P1.1 的走查数据（合成人员，不含任何真实身份信息）
+PERSONS = [
+    # 呼吸内科两人：组织变更（剧本 18–20）的承接清单里会列出他们
+    *_person("PT-ZW", "张伟", "HXNK", "2020-01-01", work_no="0007"),
+    *_person("PT-LXY", "刘晓燕", "HXNK", "2022-07-01", "STAFF", work_no="0215"),
+    # 同名不同人
+    *_person("PT-ZW2", "张伟", "XNK", "2021-03-01", "STAFF", work_no="1031"),
+    # 下月入职（计划中）
+    *_person("PT-ZM", "赵敏", "SJNK", "2027-03-01", "RESIDENT"),
+    # 暂未分配主部门
+    *_person("PT-LN", "李娜", None, "2026-09-01", note="待定岗"),
+    # 已填结束日的返聘
+    *_person("PT-WF", "王芳", "SJNK", "2025-01-01", "REHIRE", valid_to="2027-06-30"),
+    # 姓氏读音：单 S、区 O（拼音码由登记表单按姓氏读音生成，这里照样写出）
+    *_person("PT-SXX", "单雄信", "GK", "2020-09-01", "STAFF", pinyin="SXX"),
+    *_person("PT-OZQ", "区志强", "EK", "2023-02-01", "STAFF", pinyin="OZQ"),
+]
+
+
 def _register_more(s, user) -> None:
     """组织总览的编码治理图：HIS 再加病区字典，另加 HRP 组织机构字典（配置，直接维护）。"""
     from hdip_api.models import CodeNamespace, SourceSystem
@@ -457,9 +500,10 @@ with SessionLocal() as s:
         second = _apply(s, user, PLUS, "走查起点数据：组织变更、批量裁决、批量分类、关系图（模拟）")
         _register_more(s, user)
         third = _apply(s, user, OVERVIEW, "走查起点数据：组织总览的跨院区单元与编码治理（模拟）")
+        fourth = _apply(s, user, PERSONS, "走查起点数据：人员登记（合成人员，模拟）")
     s.commit()
 suffix = (
-    f"、#{second}（组织变更与批量操作）、#{third}（组织总览）"
+    f"、#{second}（组织变更与批量操作）、#{third}（组织总览）、#{fourth}（人员）"
     if second
     else "；只含最小起点（--minimal）"
 )

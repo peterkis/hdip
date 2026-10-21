@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民医院“一院两区一中心”的主数据维护，首版做**主体、院区、主体—院区运营关系、部门、服务单元**的维护与按日期查询。部门已深化为部门主数据（设计文档第 13 节、`docs/部门主数据深化-实施计划.md`）。下一模块是人员（`docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md`）。
+HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民医院“一院两区一中心”的主数据维护，首版做**主体、院区、主体—院区运营关系、部门、服务单元**的维护与按日期查询。部门已深化为部门主数据（设计文档第 13 节、`docs/部门主数据深化-实施计划.md`）。人员模块按 `docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md`（下称“人员设计”）推进，P1.1（登记、名册、详情、组织退出的人员依赖）已实施。
 
 **设计依据**：`docs/HDIP 轻量 MVP 设计：主体、院区、服务单元维护.md`（下称“设计文档”）。本文件只摘出写代码时不能违反的规则；两者冲突时以设计文档为准，并提醒维护者同步本文件。
 
@@ -8,7 +8,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 
 - **剧本驱动**：设计文档第 7 节的 8 条验收剧本是唯一的完成标准。新增对象、表、字段的唯一理由，是某条剧本因缺它而失败。不要“顺手”加范围外的东西（见下方“范围外”）。
 - **按实施顺序推进**（设计文档第 9 节）：① 院区 + 主体 + 运营关系 + 变更申请流 → ② 部门引用 + 服务单元基础动作 → ③ 拆分、合并、按日期查询、只读导出。每一步结束都要是能用的闭环。
-- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–21 都已在浏览器里走通（18–20 部门组织变更于 2026-10-21 修复后补走查）（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`（含组织变更、批量操作与组织总览演示数据的起点，`make walk-db-minimal` 只建最小起点）、`make api-walk`、`make web-walk`；重建前先停掉 api-walk）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），全部业务页面已按新规范迁移（主体、院区、部门、服务单元、变更申请、分类方案、编码映射台账），并适配手机宽度（375px 无横向溢出）。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树（连线、可折叠）、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。主体详情有主体—院区运营关系图（主体列表不再放图）；部门详情“隶属与管理关系”有关系图；各详情页的版本时间线为竖向进度式；变更申请列表合并同类变更项计数、详情分批显示。“组织与关系”第一项是组织总览（`/organization-overview`）：服务布局桑基图（`@nivo/sankey`，按分类 / 按院区）、部门 × 院区矩阵、编码治理图，汇报模式与图片导出待第二步。批量操作：编码映射台账“批量裁决”（按源名称给候选，人勾选确认）、部门列表勾选后批量设置主分类 / 行政上级——都只是生成一张多项草稿。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库于 2026-10-19 按新代码规则重建（迁移 0015）：起点（主体、三院区与运营关系）与部门树在一张申请（#1）里，确认后再运行一次脚本生成服务单元与 HIS 申请；部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（C001，运行）、高新院区（C002，筹建）、中心院区（C003，筹建）。走查库同样重建，脚本里的 BY、XNK、SU-101 只是临时代码，写入时换成系统代码（`make walk-db` 末尾打印对照）。
+- **进度**：第 ①②③ 步的后端、接口契约与生成的 hooks 已完成，剧本都有后端测试（`api/tests/test_scriptN.py`）；剧本 1–21 都已在浏览器里走通（18–20 部门组织变更于 2026-10-21 修复后补走查）；人员 P1.1（PERS-01、02 登记部分、07、08）有后端测试（`test_persXX.py`、`test_rules_persons.py`）并已在浏览器走通（`docs/剧本走查记录.md`，走查用独立库：`make walk-db`（含组织变更、批量操作、组织总览与合成人员的起点，`make walk-db-minimal` 只建最小起点）、`make api-walk`、`make web-walk`；重建前先停掉 api-walk）。拆分、合并表单在服务单元详情页，用 `components/evolve-flow.tsx`（React Flow，只展示与点选）画“前身 → 生效日 → 后继”，申请页与单元演变关系共用。UI 规范已定（Notion 风格），全部业务页面已按新规范迁移（主体、院区、部门、服务单元、变更申请、分类方案、编码映射台账），并适配手机宽度（375px 无横向溢出）。部门深化 D1、D2、D3 已完成（剧本 9–17 有测试；部门列表含层级树（连线、可折叠）、详情含隶属与管理关系与外部编码、分类方案页、编码映射台账页）。主体详情有主体—院区运营关系图（主体列表不再放图）；部门详情“隶属与管理关系”有关系图；各详情页的版本时间线为竖向进度式；变更申请列表合并同类变更项计数、详情分批显示。“组织与关系”第一项是组织总览（`/organization-overview`）：服务布局桑基图（`@nivo/sankey`，按分类 / 按院区）、部门 × 院区矩阵、编码治理图，汇报模式与图片导出待第二步。批量操作：编码映射台账“批量裁决”（按源名称给候选，人勾选确认）、部门列表勾选后批量设置主分类 / 行政上级——都只是生成一张多项草稿。院方资料包经 `api/scripts/import_sample.py` 生成样例数据：配置直接登记，业务数据生成变更申请待确认人确认（院区、部门申请确认后再运行一次，才生成服务单元与 HIS 科室字典申请）；开发库于 2026-10-19 按新代码规则重建（迁移 0015）：起点（主体、三院区与运营关系）与部门树在一张申请（#1）里，确认后再运行一次脚本生成服务单元与 HIS 申请；部门与服务单元自 2020-01-01，中心院区（筹建）自 2027-12-27。直属院区三个：本部院区（C001，运行）、高新院区（C002，筹建）、中心院区（C003，筹建）。走查库同样重建，脚本里的 BY、XNK、SU-101 只是临时代码，写入时换成系统代码（`make walk-db` 末尾打印对照）。
 - 每条剧本都要有对应的后端测试（`test_scriptN.py`）；新约束要有 `test_rules.py` 里的反例。
 - **文档与改动同步（Peter 2026-10-18 要求）**：迁移、表结构、接口、导出数据集或业务规则有任何改动，**在同一次提交里**同步：`make db-doc`（结构参考）、`docs/database/README.md`（全景表、写入表、读取与导出、迁移史、相应章节）、本文件的规则速查与文档索引，以及相关业务文档（设计文档、实施计划、评估与分期、走查记录）。新定的规则当场写进对应文档，不留到以后。
 - 剧本走不通时用三分法定位：事实有分歧 → 找责任人定；系统表达不了 → 改模型；操作不顺 → 改页面。
@@ -76,6 +76,13 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
   - 变更项：`external_code.register/.assign/.assignment_close`（源记录按“系统 + 字典 + 代码”引用）、`service_unit.classify`。“要么都带院区条件、要么都不带”在申请全部应用后检查（`apply.py` 的 `_check_codes`）。
   - 待裁决不存储：某日没有解释即待裁决；裁决 = 新增解释（开始日可在过去）。待裁决与对象未建模都不进导出。
   - 分类方案写明 `meaning_for_department` / `meaning_for_unit`，为空即不适用于该对象；外部分类代码按正式代码表原样书写（如 `03.05`），不臆造。
+- 人员（P1.1，迁移 0016，人员设计）：`person` 只留身份（代码 `P` + 6 位，系统分配，与医院业务工号无关）；姓名在 `person_version`（`revise_reason` 区分登记 / 更名 / 更正误录）；任用 `person_engagement`、业务工号 `person_work_no`、部门归属 `person_assignment` 都带期间。人员上**不存当前部门、不存在职 / 离职状态**（按日期从任用派生）。
+  - 任用、工号、归属的结束日**到达前可改**（`hdip_guard_open_end`），到达后不可改、不“接续”，再次任用 = 新任用；组织表仍是“结束日只写一次”。改结束日的变更项带 `expected_valid_to`，与库里不一致即拒绝。
+  - 同一人员 + 同一主体任用期间不重叠（P1 限制，可撤掉的约束）；同一任用同一时点最多一条主归属；同一主体内一个工号永远只属于一个人（本人返聘可沿用）。
+  - 归属完整期间落在任用期间内；部门已设立且无撤销 / 被替代段；筹备、暂停履职可以。部门撤销 / 被替代时，与退出日及以后相交的人员归属（含预约调入）阻止确认并列出，在同一申请里调科或结束归属；不随服务单元或名称自动迁人。
+  - 变更项：`person.create`、`.engage`（新建任用 + 工号 + 主归属；暂未分配须写原因）、`.transfer`（调科：旧止于 D−1、新自 D 起）、`.assignment_set_end`；处理在 `services/persons.py`，最终检查 `check_persons`。确认在咨询锁下串行执行。
+  - 权限键 `person.view / .view_sensitive / .export / .change`（`core/permissions.py`，P1 与组织模块等价）；无 `person.view` 时含人员项的申请整张隐藏；敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（工号不敏感；身份证号、电话将来登记），后端统一置空。人员 ≠ `app_user`。
+  - 人名拼音码首字按姓氏读音（`lib/pinyin.ts` 的 `person` 模式），“区 → Q”只用于组织名称。
 - 为将来守住：部门上不写院区和管理方式；名称与代码不拼院区；单元代码不由“部门代码 + 院区”拼出；管理归属与核算归属分开。
 
 ## 范围外（不要实现，除非某条剧本因此失败）
@@ -93,7 +100,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 | UI 视觉规范与操作动线原则 | `docs/design/ui-tokens.md`（应用内 `/design`） |
 | 剧本走查结果与发现的问题 | `docs/剧本走查记录.md` |
 | 部门拆分、合并等组织变更的评估与分期（第一期已实施） | `docs/部门组织变更-评估与分期.md` |
-| **人员模块**：人员、任用、部门归属的对象、规则、动作、验收剧本 PERS-xx 与分期（设计已定，P1 待实施） | `docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md` |
+| **人员模块**：人员、任用、部门归属的对象、规则、动作、验收剧本 PERS-xx 与分期（P1.1 已实施，P1.2、P1.3 待实施） | `docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md` |
 
 改了迁移就执行 `make migrate && make db-doc`，并同步 `docs/database/README.md` 里相应的说明。
 
@@ -105,8 +112,8 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
     core/           配置（HDIP_ 前缀环境变量）、数据库连接、错误、开发期身份
     models.py       ORM 映射（表结构以迁移为准）
     schemas/        items.py 变更项；read.py 查询与申请的响应
-    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出；codes.py 代码分配与拼音码
-    routes/         路由，前缀 /api；master.py 只读，changes.py 是唯一写入口；codes.py 只做代码预留（不改主数据）
+    services/       apply.py 应用变更；workflow.py 申请流；queries.py 只读查询；export.py CSV 导出；codes.py 代码分配与拼音码；persons.py 人员变更项与最终检查；person_queries.py 人员只读查询
+    routes/         路由，前缀 /api；master.py、persons.py 只读，changes.py 是唯一写入口；codes.py 只做代码预留（不改主数据）
   scripts/export_openapi.py   导出 web/openapi.json
   scripts/export_schema_doc.py  从数据库生成 docs/database/schema-reference.md（make db-doc）
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
@@ -122,6 +129,7 @@ web/                Vite + React 19 + TypeScript + Tailwind v4 + TanStack Query 
   src/components/             图示：flow-kit.tsx（关系图共用的卡片、带标签直角折线、自动适配）、org-flow.tsx（部门隶属与管理关系图）、evolve-flow.tsx（拆分 / 合并 / 部门沿革，React Flow）、flow-sankey.tsx（组织总览的桑基图，nivo，颜色取 `--hd-chart-*` 令牌）、dept-campus-matrix.tsx（部门 × 院区矩阵）、operator-flow.tsx（主体—院区运营关系图：直角折线、黑色端点，运行中 = 流动虚线，其他状态 = 实线 + 标签）、version-timeline.tsx（版本与事件时间线：按原型的竖线 + 蓝点 + 日期 / 事件名 / 说明）；细节见 docs/design/ui-tokens.md 第 8.1 节
   src/components/shell/       外壳辅助：nav.ts 侧栏按业务主题域分组的配置（规划中条目进 /planned/:key）、面包屑 useCrumb；外壳本身在 components/layout.tsx
   src/components/forms/       各类变更的表单；每个表单只拼一个变更项，保存到新的或已有草稿；fields.tsx 字段与字段级校验，ref-selects.tsx 按名称选择引用对象，new-code.ts 新建对象的代码占位与预留，code-fields.tsx 代码（只读）与拼音码字段
+  src/pages/persons.tsx       人员名册与人员详情；表单在 components/forms/person-forms.tsx（登记即查重），部门详情“人员”标签用 components/department-persons.tsx
   src/pages/                  各页面（均按新规范：PageHeader + PropertyList + kit/section 的 Section，列表用 kit/database）；design.tsx 为 /design 视觉规范页
   src/lib/                    组织总览聚合（org-overview.ts）、拼音码（pinyin.ts）、码值中文名（format.ts）、状态标签色（tones.ts）、主题（theme.ts）、查看日期（app-context.tsx）、开发期身份（session.ts）
 docs/               设计文档；docs/database/ 数据库设计；docs/design/ 视觉规范；docs/refer/ 参考资料（不入库）

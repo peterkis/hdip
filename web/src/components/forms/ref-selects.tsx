@@ -109,7 +109,7 @@ export function InstitutionSelect({ campusCode, ...p }: RefProps & { campusCode?
         onChange(v)
       }}
       options={withExclude(options, p.exclude)}
-      placeholder="请选择运营主体"
+      placeholder={p.placeholder ?? '请选择运营主体'}
       hint={p.hint ?? (isAuto && campusCode ? '已按所属院区带出主要运营方，可改选' : undefined)}
     />
   )

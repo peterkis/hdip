@@ -868,7 +868,7 @@ export const getGetDepartmentDependenciesUrl = (departmentId: number,
 
 /**
  * 承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、
- * 分类与管理关系。组织变更向导据此逐项处置。
+ * 分类与管理关系，以及归属本部门的人员（有“查看人员”权限时）。组织变更向导据此逐项处置。
  * @summary Get Department Dependencies
  */
 export const getDepartmentDependencies = async (departmentId: number,

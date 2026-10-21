@@ -358,6 +358,8 @@ class DepartmentDependencies(BaseModel):
     """该日仍有效的分类赋值：退出时自动结束，结果部门的分类另行确认（可作候选）。"""
     relations: list[DepartmentRelationOut]
     """该日仍有效的管理关系：退出时自动结束，需要的为结果部门重建。"""
+    persons: list["DepartmentPersonRow"] = []
+    """该日及以后归属本部门的人员（含计划中、预约调入的）：部门退出时须逐个调走或结束归属。"""
 
 
 class ClassificationCodeOut(BaseModel):
@@ -659,3 +661,124 @@ class NamespaceWrite(BaseModel):
 
 ServiceUnitDetail.model_rebuild()
 DepartmentDetail.model_rebuild()
+
+
+# ------------------------------------------------------------------ 人员（迁移 0016）
+PersonStatus = Literal["ENGAGED", "PLANNED", "NONE"]
+"""按查看日期派生，不存储：有有效任用 / 仅有计划任用 / 无有效任用。"""
+
+
+class PersonVersionOut(BaseModel):
+    version_no: int
+    valid_from: date
+    valid_to: date | None
+    name: str
+    pinyin: str | None
+    revise_reason: Literal["INITIAL", "RENAME", "CORRECTION"]
+    change_id: int
+    recorded_at: datetime
+    void: bool
+    """生效前已撤销（空期间）。"""
+
+
+class PersonWorkNoOut(BaseModel):
+    id: int
+    work_no: str | None
+    """无权查看时为空（见 masked_fields）。"""
+    revise_reason: Literal["INITIAL", "CHANGE", "CORRECTION"]
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+    void: bool
+
+
+class PersonAssignmentOut(BaseModel):
+    id: int
+    kind: str
+    department: DeptRef
+    """部门名称取查看日期（落在归属期间内时）或归属开始日的名称。"""
+    department_lifecycle: str | None
+    """部门在查看日期（或归属开始日）的组织生命周期，用于提示筹备 / 暂停履职。"""
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+    void: bool
+
+
+class PersonEngagementOut(BaseModel):
+    id: int
+    institution_id: int
+    institution_code: str
+    institution_name: str
+    engagement_type: str
+    note: str | None
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+    void: bool
+    work_nos: list[PersonWorkNoOut]
+    assignments: list[PersonAssignmentOut]
+
+
+class PersonEngagementBrief(BaseModel):
+    """名册一行里的一项任用：当天（或最早计划）的工号与主归属。"""
+
+    id: int
+    institution_id: int
+    institution_name: str
+    engagement_type: str
+    valid_from: date
+    valid_to: date | None
+    not_yet_effective: bool
+    work_no: str | None
+    assignment_id: int | None
+    department: DeptRef | None
+    """为空 = 暂未分配主部门。"""
+
+
+class PersonRow(BaseModel):
+    id: int
+    code: str
+    name: str
+    pinyin: str | None
+    status: PersonStatus
+    engagements: list[PersonEngagementBrief]
+    matched: str | None = None
+    """检索命中的不是当前姓名时说明命中了什么（曾用名、误录、旧工号…）。"""
+    masked_fields: list[str] = []
+
+
+class PersonDetail(BaseModel):
+    id: int
+    code: str
+    name: str
+    """查看日期的姓名（尚未开始时取最早一版）。"""
+    pinyin: str | None
+    status: PersonStatus
+    created_at: datetime
+    created_change_id: int
+    versions: list[PersonVersionOut]
+    engagements: list[PersonEngagementOut]
+    masked_fields: list[str] = []
+
+
+class DepartmentPersonRow(BaseModel):
+    """归属某部门的一条人员归属（部门详情的人员区块、承接清单）。"""
+
+    person_id: int
+    person_code: str
+    person_name: str
+    engagement_id: int
+    engagement_type: str
+    institution_name: str
+    assignment_id: int
+    kind: str
+    valid_from: date
+    valid_to: date | None
+    not_yet_effective: bool
+
+
+DepartmentDependencies.model_rebuild()

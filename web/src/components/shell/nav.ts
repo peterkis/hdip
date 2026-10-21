@@ -1,7 +1,6 @@
 // 侧栏导航配置：按业务主题域分组。新增主题域 = 在 NAV_GROUPS 里加一组，不改外壳代码。
 // planned = 规划中（不在当前 MVP 范围，设计文档第 1 节），进入统一的“规划中”页面。
 import {
-  Agreement01Icon,
   Briefcase01Icon,
   Building03Icon,
   Certificate01Icon,
@@ -28,6 +27,8 @@ export interface NavItem {
   to?: string
   /** 规划中条目的标识，对应 /planned/:key */
   planned?: string
+  /** 需要的权限键（/api/me 的 permissions）；没有时侧栏不显示这一项 */
+  permission?: string
 }
 
 export interface NavGroup {
@@ -61,8 +62,8 @@ export const NAV_GROUPS: NavGroup[] = [
     label: '人员、资质与任职',
     icon: IdentityCardIcon,
     items: [
-      { label: '人员与身份', icon: IdentityCardIcon, planned: 'person-identity' },
-      { label: '聘用与合作关系', icon: Agreement01Icon, planned: 'engagement' },
+      // 人员、任用、部门归属（人员模块 P1，docs/HDIP 轻量人员模块设计…）
+      { label: '人员名册', icon: IdentityCardIcon, to: '/persons', permission: 'person.view' },
       { label: '岗位与任职', icon: Briefcase01Icon, planned: 'position-appointment' },
       { label: '执业资质', icon: Certificate01Icon, planned: 'practice-qualification' },
       { label: '临床授权', icon: Stethoscope02Icon, planned: 'clinical-privilege' },

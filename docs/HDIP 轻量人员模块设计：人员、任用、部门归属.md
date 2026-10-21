@@ -151,7 +151,7 @@ hdip_guard_open_end()  -- 用于 person_engagement、person_work_no、person_ass
 
 问题提示沿用 `ItemError(message, field, hint=..., facts=[...])` 写法（短句、先事实后操作、用名称不用 id）。下表“拒绝”列是会出现的典型提示。
 
-### 5.1 登记新人员（向导：查重 → 姓名 → 任用与主部门）
+### 5.1 登记新人员（一个弹窗：输入姓名即查重，再填任用与主部门）
 
 - **先查重**：按姓名 / 拼音码 / 人员代码 / 工号检索**全部**人员，含历史、未来、无有效任用的人；结果显示代码、各项任用（主体、类型、期间、工号）和当时主部门。操作员可以选“就是此人”（转去再次任用）或“同名不同人，继续登记”。
 - 生成两项：`person.create` + `person.engage`；人员开始日 = 任用开始日。
@@ -246,7 +246,7 @@ hdip_guard_open_end()  -- 用于 person_engagement、person_work_no、person_ass
 - **导航**：“人员、资质与任职”组里，“人员与身份”“聘用与合作关系”两个规划条目合并为已实现的“人员名册”（`/persons`）；“岗位与任职”“执业资质”“临床授权”仍是规划中。
 - **人员名册**（`kit/database`）：检索框（姓名 / 拼音码 / 代码 / 工号）；主体、部门、状态筛选；“含计划”开关；表头写明查看日期；右上“登记人员”“导出”。人数 = 当日有效任用下按人去重。
 - **人员详情**：PageHeader（姓名、代码、状态 Tag）；PropertyList（当日主体、类型、工号、主部门；曾用名）；“任用与归属”用竖向时间线（`version-timeline.tsx`）按任用分段画出归属与换号；每项任用旁的轻量操作：调科、换工号、结束 / 调整结束日、补归属；页头操作：改姓名（先选更名 / 更正）、再次任用。
-- **登记向导**（弹窗，三步，`kit/steps`）：①查重 ②姓名（拼音码可改）③任用与主部门（主体只有一个时直接带出、不显示选择；类型；开始日；结束日选填；工号选填；主部门按名称下拉，或明确选“暂未分配”）→ 保存到申请。
+- **登记弹窗**（2026-10-21 实施时改为一屏）：输入姓名即在全部人员里查重（含已离开、未来入职、无有效任用的人，列出部门、期间、工号），有相近的人时须点“已核对，是不同的人”才能保存；同一屏填任用与主部门（主体只有一个时直接带出、不显示选择；类型；开始日；结束日选填；工号选填；主部门按名称下拉，或明确选“暂未分配”）→ 保存到申请。
 - **部门详情**：新增“人员”区块，列当日直属人员（姓名、任用类型、归属起止），计数与名册同口径。
 - **申请页**：`item_views` 按“主语 → 谓语 → 宾语”：“张三（P000001）调到 心内科，自 2027-01-01 起；原 神经内科 止于 2026-12-31”。结束任用一行下面列出被一起处理的归属。
 - **拼音码**：人名首字按姓氏读音（pinyin-pro 的姓氏模式：单 Shan、曾 Zeng、解 Xie、仇 Qiu、区 Ou），**`lib/pinyin.ts` 的 FIXED（区 → Q）只用于组织名称，不用于人名**；多音字照常提示核对。后端 pypinyin 没有姓氏模式，所以人员的拼音码以前端提交为准，后端只在缺失时兜底。
@@ -258,7 +258,7 @@ hdip_guard_open_end()  -- 用于 person_engagement、person_work_no、person_ass
 | `persons` | 一个人（该日有姓名版本的人） | person_code, name, pinyin, relation_status, relation_status_name |
 
 `work_no` 取该日有效的工号段。以后加入的敏感字段按第 8 节处理：无权限则导出空值，列不删，契约不变。
-| `person_relations` | 该日有效的一项任用 × 当日主归属（暂未分配时部门列为空） | person_code, name, institution_code, institution_name, engagement_type, engagement_type_name, work_no, engagement_valid_from, engagement_valid_to, assignment_kind, assignment_kind_name, department_code, department_name, assignment_valid_from, assignment_valid_to |
+| `person-relations` | 该日有效的一项任用 × 当日主归属（暂未分配时部门列为空） | person_code, name, institution_code, institution_name, engagement_type, engagement_type_name, work_no, engagement_valid_from, engagement_valid_to, assignment_kind, assignment_kind_name, department_code, department_name, assignment_valid_from, assignment_valid_to |
 
 “暂无主归属”不写成“离职”；“任用有效”不写成“可执业”。
 
@@ -314,8 +314,8 @@ hdip_guard_open_end()  -- 用于 person_engagement、person_work_no、person_ass
 
 | 步 | 交付 | 剧本 |
 | --- | --- | --- |
-| **P1.1 登记与查询** | 迁移（五张表、约束、`hdip_guard_open_end`、人员代码序列、`option_item` 与 `approval_rule` 种子）；`person.create`、`person.engage`；`_check_persons`；部门撤销 / 被替代的人员依赖（阻止 + 清单 + 组织变更向导的人员承接）；确认串行锁；名册、详情、登记向导、部门“人员”区块；两份导出 | PERS-01、02（登记部分）、07、08 |
-| **P1.2 变化与历史** | `person.revise`（更名 / 更正）、`person.change_work_no`、`person.transfer`、`person.assign`、`person.assignment_set_end`；预演 `notices`；`expected_valid_to` 并发拒绝 | PERS-03、04、09 |
+| **P1.1 登记与查询**（2026-10-21 已实施） | 迁移（五张表、约束、`hdip_guard_open_end`、人员代码序列、`option_item` 与 `approval_rule` 种子）；`person.create`、`person.engage`；组织变更承接人员所需的 `person.transfer`、`person.assignment_set_end`（后端与向导，人员详情上的独立表单留到 P1.2）；“建立任用（再次任用）”入口；`_check_persons`；部门撤销 / 被替代的人员依赖（阻止 + 清单 + 组织变更向导的人员承接）；确认串行锁；名册、详情、登记向导、部门“人员”区块；两份导出 | PERS-01、02（登记部分）、07、08 |
+| **P1.2 变化与历史** | `person.revise`（更名 / 更正）、`person.change_work_no`、`person.assign`；人员详情上的调科、结束归属表单；预演 `notices`；`expected_valid_to` 并发拒绝 | PERS-03、04、09 |
 | **P1.3 结束与再次任用** | `person.engagement_set_end`（结束、提前、推后、撤回、撤销计划）；再次任用入口；结束日调整记录 | PERS-02（撤销部分）、05、06 |
 | P2 名单导入 | 触发条件：逐人登记成为瓶颈。一个来源、最小 `person_source_link`（来源系统 + 来源实体 + 记录键 → 人员，带期间）；预览 → 人工匹配 → 批量草稿 | PERS-10、11 |
 | P3 附加归属与部门职务 | 触发条件：确需兼任或负责人展示。`ADDITIONAL` 归属；`person_duty` 部门职务（10.1）；部门详情按日期派生负责人 | PERS-12、13 |

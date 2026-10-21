@@ -22,6 +22,11 @@ from hdip_api.models import (
     ExternalCodeAssignment,
     Institution,
     InstitutionVersion,
+    OptionItem,
+    Person,
+    PersonAssignment,
+    PersonEngagement,
+    PersonVersion,
     ServiceUnit,
     ServiceUnitVersion,
 )
@@ -90,6 +95,28 @@ class _Names:
                 .join(CodeNamespace, CodeNamespace.id == ExternalCode.namespace_id)
             ).all()
         )
+        # 人员：代码 → 最新姓名；归属 id → (人员代码, 部门代码, 开始日, 结束日)；任用类型名
+        self.person = _latest_names(s, Person, PersonVersion, "person_id")
+        self.person_assignments = {
+            a_id: (pcode, dcode, start, end)
+            for a_id, pcode, dcode, start, end in s.execute(
+                select(
+                    PersonAssignment.id,
+                    Person.code,
+                    Department.code,
+                    PersonAssignment.valid_from,
+                    PersonAssignment.valid_to,
+                )
+                .join(PersonEngagement, PersonEngagement.id == PersonAssignment.engagement_id)
+                .join(Person, Person.id == PersonEngagement.person_id)
+                .join(Department, Department.id == PersonAssignment.department_id)
+            )
+        }
+        self.engagement_types = {
+            o.code: o.name
+            for o in s.scalars(select(OptionItem).where(OptionItem.category == "engagement_type"))
+        }
+        self.new_persons: set[str] = set()
         self.new_depts: set[str] = set()
         # 同一张申请里新建的对象
         for i in items:
@@ -103,6 +130,9 @@ class _Names:
                 self.campus[i["code"]] = i["fields"]["name"]
             elif k == "institution.create":
                 self.inst[i["code"]] = i["fields"]["name"]
+            elif k == "person.create":
+                self.person[i["code"]] = i["name"]
+                self.new_persons.add(i["code"])
 
     def d(self, code: str | None) -> str:
         if not code:
@@ -112,6 +142,16 @@ class _Names:
 
     def u(self, code: str) -> str:
         return self.unit.get(code, code)
+
+    def p(self, code: str) -> str:
+        return self.person.get(code, code)
+
+    def pa(self, assignment_id: int) -> tuple[str, str, date | None, date | None]:
+        """归属 → (人员姓名, 部门名, 开始日, 结束日)。"""
+        pcode, dcode, start, end = self.person_assignments.get(
+            assignment_id, (f"#{assignment_id}", "", None, None)
+        )
+        return self.p(pcode), self.dept.get(dcode, dcode), start, end
 
 
 def _day(v) -> str:
@@ -206,6 +246,32 @@ def describe(n: _Names, i: dict) -> str:
             return (
                 f"结束代码 {code}“{src or ''}”的解释，最后有效日 {_day(i['valid_to'])}（历史保留）"
             )
+        case "person.create":
+            return f"登记人员“{i['name']}”{since('valid_from')}"
+        case "person.engage":
+            kind = n.engagement_types.get(i["engagement_type"], i["engagement_type"])
+            dept = (
+                f"主部门“{n.d(i['department_code'])}”"
+                if i.get("department_code")
+                else "暂未分配主部门"
+            )
+            until = f"，至 {_day(i['valid_to'])}" if i.get("valid_to") else ""
+            no = f"，工号 {i['work_no']}" if i.get("work_no") else ""
+            return (
+                f"“{n.p(i['person_code'])}”在{n.inst.get(i['institution_code'], i['institution_code'])}"
+                f"任用（{kind}），{dept}{no}{since('valid_from')}{until}"
+            )
+        case "person.transfer":
+            who, dept, _, _ = n.pa(i["assignment_id"])
+            return f"“{who}”从{dept}调到“{n.d(i['department_code'])}”{since()}"
+        case "person.assignment_set_end":
+            who, dept, start, _ = n.pa(i["assignment_id"])
+            if not i.get("valid_to"):
+                return f"清除“{who}”在{dept}的归属结束日"
+            last = date.fromisoformat(_day(i["valid_to"]))
+            if start and last < start:
+                return f"撤销“{who}”在{dept}的计划归属（原定 {start.isoformat()} 开始，从未生效）"
+            return f"“{who}”在{dept}的归属最后有效日 {last.isoformat()}"
     return KIND_LABELS.get(k, k)
 
 
@@ -258,6 +324,7 @@ def item_views(s: Session, items: list[dict]) -> list[dict]:
     created = {
         i["code"]: idx for idx, i in enumerate(items) if i.get("kind") == "department.create"
     }
+    new_people = {i["code"]: idx for idx, i in enumerate(items) if i.get("kind") == "person.create"}
     # 新设部门的主分类、隶属：并进“新设”那一行（每条一组片段，前面加“·”）
     extra: dict[str, list[list[Part]]] = {}
     has_parent: set[str] = set()
@@ -279,6 +346,14 @@ def item_views(s: Session, items: list[dict]) -> list[dict]:
                 else [_p("text", "· 一级部门")]
             )
             covered[idx] = created[code]
+        elif k == "person.engage" and i.get("person_code") in new_people:
+            # 登记新人：任用与主部门并进“登记”那一行
+            person_code = i["person_code"]
+            parts = _engage_parts(n, i)
+            if i.get("work_no"):
+                parts.append(_p("text", f"· 工号 {i['work_no']}"))
+            extra.setdefault(person_code, []).append(parts)
+            covered[idx] = new_people[person_code]
     views = []
     for idx, i in enumerate(items):
         try:
@@ -287,6 +362,19 @@ def item_views(s: Session, items: list[dict]) -> list[dict]:
             parts, meta = [_p("text", KIND_LABELS.get(i.get("kind", ""), ""))], None
         views.append({"parts": parts, "meta": meta, "covered_by": covered.get(idx)})
     return views
+
+
+def _engage_parts(n: _Names, i: dict) -> list[Part]:
+    """任用的片段：类型 · 主部门（或“暂未分配”）· 至某日；工号放在行尾的 meta 里。"""
+    kind = n.engagement_types.get(i["engagement_type"], i["engagement_type"])
+    parts = [_p("text", f"· {kind}")]
+    if i.get("department_code"):
+        parts += [_p("text", "·"), _p("ref", n.d(i["department_code"]))]
+    else:
+        parts.append(_p("tag", "暂未分配主部门", "yellow"))
+    if i.get("valid_to"):
+        parts.append(_p("text", f"· 至 {_day(i['valid_to'])}"))
+    return parts
 
 
 def _parent_chip(n: _Names, code: str) -> Part:
@@ -441,4 +529,51 @@ def _view(
                 target,
                 _p("text", f"自 {day('valid_from')}"),
             ], n.namespaces.get(i["namespace_code"], i["namespace_code"])
+        case "person.create":
+            engage = next(iter(extra.get(i["code"], [])), [])
+            return [
+                _p("new", i["name"]),
+                _p("tag", "登记", "green"),
+                _p("text", f"自 {day('valid_from')}"),
+                *engage,
+            ], i["code"]
+        case "person.engage":
+            return [
+                _p("chip", n.p(i["person_code"])),
+                _p("text", f"在{n.inst.get(i['institution_code'], i['institution_code'])}任用"),
+                _p("tag", "再次任用" if i["person_code"] not in n.new_persons else "任用", "green"),
+                *_engage_parts(n, i),
+                _p("text", f"自 {day('valid_from')}"),
+            ], (f"工号 {i['work_no']}" if i.get("work_no") else None)
+        case "person.transfer":
+            who, dept, _, _ = n.pa(i["assignment_id"])
+            return [
+                _p("chip", who),
+                _p("text", f"从 {dept}"),
+                _p("arrow", "→"),
+                dept_chip(i["department_code"]),
+                _p("text", f"自 {day()}"),
+            ], None
+        case "person.assignment_set_end":
+            who, dept, start, _ = n.pa(i["assignment_id"])
+            if not i.get("valid_to"):
+                return [
+                    _p("chip", who),
+                    _p("text", f"在 {dept} 的归属"),
+                    _p("tag", "清除结束日", "blue"),
+                ], None
+            last = date.fromisoformat(_day(i["valid_to"]))
+            if start and last < start:
+                return [
+                    _p("chip", who),
+                    _p("text", f"在 {dept} 的归属"),
+                    _p("tag", "取消计划", "yellow"),
+                    _p("text", f"原定 {start.isoformat()} 开始，取消后从未生效"),
+                ], None
+            return [
+                _p("chip", who),
+                _p("text", f"在 {dept} 的归属"),
+                _p("arrow", "→"),
+                _p("text", f"最后有效日 {last.isoformat()}"),
+            ], None
     return [_p("text", describe(n, i))], None

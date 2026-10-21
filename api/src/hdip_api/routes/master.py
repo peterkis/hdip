@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 
-from hdip_api.core.auth import current_user
+from hdip_api.core.auth import CurrentUser, current_user
 from hdip_api.core.db import SessionDep
 from hdip_api.core.errors import ERROR_RESPONSES
 from hdip_api.schemas.read import (
@@ -108,10 +108,12 @@ def get_department(session: SessionDep, department_id: int, as_of: AsOf = None):
     response_model=DepartmentDependencies,
     operation_id="getDepartmentDependencies",
 )
-def get_department_dependencies(session: SessionDep, department_id: int, day: date):
+def get_department_dependencies(
+    session: SessionDep, user: CurrentUser, department_id: int, day: date
+):
     """承接清单：部门在 day（组织变更生效日）及以后仍有效的服务单元、下级部门、外部编码解释、
-    分类与管理关系。组织变更向导据此逐项处置。"""
-    return queries.department_dependencies(session, department_id, day)
+    分类与管理关系，以及归属本部门的人员（有“查看人员”权限时）。组织变更向导据此逐项处置。"""
+    return queries.department_dependencies(session, department_id, day, user)
 
 
 @router.get("/service-units", response_model=list[ServiceUnitRow], operation_id="listServiceUnits")

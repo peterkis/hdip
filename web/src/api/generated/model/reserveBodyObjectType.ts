@@ -12,4 +12,5 @@ export const ReserveBodyObjectType = {
   campus: 'campus',
   department: 'department',
   service_unit: 'service_unit',
+  person: 'person',
 } as const;

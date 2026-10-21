@@ -1,4 +1,4 @@
-"""院区、部门、服务单元的代码分配与拼音码（迁移 0015）。
+"""院区、部门、服务单元、人员的代码分配与拼音码（迁移 0015；人员 P + 6 位，迁移 0016）。
 
 - 代码由系统按规则发号：院区 C + 3 位、部门 D + 6 位、服务单元 SU + 6 位数字。
   表单在“保存到申请”时为要新建的对象预留代码（同一次保存用同一个请求键，重试拿回同一个号），
@@ -19,13 +19,14 @@ from sqlalchemy.orm import Session
 from hdip_api.core.errors import BusinessError
 from hdip_api.models import AppUser, CodeReservation
 
-ObjectType = Literal["campus", "department", "service_unit"]
+ObjectType = Literal["campus", "department", "service_unit", "person"]
 
 # 类型 → (前缀, 数字位数, 序列, 中文名)
 RULES: dict[str, tuple[str, int, str, str]] = {
     "campus": ("C", 3, "campus_code_seq", "院区"),
     "department": ("D", 6, "department_code_seq", "部门"),
     "service_unit": ("SU", 6, "service_unit_code_seq", "服务单元"),
+    "person": ("P", 6, "person_code_seq", "人员"),
 }
 
 
@@ -101,6 +102,7 @@ _CREATES = {
     "campus.create": "campus",
     "department.create": "department",
     "service_unit.create": "service_unit",
+    "person.create": "person",
 }
 
 
@@ -149,6 +151,7 @@ _REF_KEYS = {
     "codes",
     "campus_code",
     "department_code",
+    "person_code",
     "service_unit_code",
     "parent_code",
     "from_code",

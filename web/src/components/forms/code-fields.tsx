@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { TextField } from '@/components/forms/fields'
 import { codeRuleText, isNewCode, type CodeObject } from '@/components/forms/new-code'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
-import { PINYIN_RE, pinyinCode, polyphones } from '@/lib/pinyin'
+import { PINYIN_RE, pinyinCode, polyphones, type PinyinMode } from '@/lib/pinyin'
 
 /** 代码（只读）：未分配时说明规则，保存到申请时由系统分配 */
 export function AutoCodeField({ type, code, label = '代码' }: { type: CodeObject; code?: string; label?: string }) {
@@ -41,16 +41,19 @@ export function PinyinField({
   onChange,
   name = 'pinyin',
   initialFollow = true,
+  mode = 'org',
 }: {
   source: string
   value: string
   onChange: (v: string) => void
   name?: string
   initialFollow?: boolean
+  /** person：人名，首字按姓氏读音 */
+  mode?: PinyinMode
 }) {
   // 用户手改过拼音码就不再自动覆盖；“按名称重新生成”恢复跟随
   const [edited, setEdited] = useState(false)
-  const auto = useMemo(() => pinyinCode(source), [source])
+  const auto = useMemo(() => pinyinCode(source, mode), [source, mode])
   const first = useRef(true)
   useEffect(() => {
     const mount = first.current
@@ -59,7 +62,7 @@ export function PinyinField({
     if (edited || (mount && !initialFollow)) return
     if (value !== auto) onChange(auto)
   }, [auto]) // 只在名称变化时跟随
-  const multi = useMemo(() => polyphones(source), [source])
+  const multi = useMemo(() => polyphones(source, mode), [source, mode])
   const hint = (
     <span className="grid gap-0.5">
       {multi.length > 0 && (

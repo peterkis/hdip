@@ -37,10 +37,10 @@ def _done(session, cr_id: int, user) -> JSONResponse:
 @router.get("", response_model=list[ChangeRequestSummary], operation_id="listChangeRequests")
 def list_changes(
     session: SessionDep,
-    _user: CurrentUser,
+    user: CurrentUser,
     status: Literal["draft", "submitted", "confirmed", "returned", "cancelled"] | None = None,
 ):
-    return queries.list_changes(session, status)
+    return queries.list_changes(session, status, user)
 
 
 @router.post("", response_model=ChangeRequestOut, operation_id="createChangeRequest")

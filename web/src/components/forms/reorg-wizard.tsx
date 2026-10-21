@@ -1,6 +1,6 @@
 // 部门组织变更向导（docs/部门组织变更-评估与分期.md 第一期）：
 // ① 身份裁决 → ② 参与部门 → ③ 承接清单 → ④ 核对。一次生成一整张申请：新建部门、组织变更事件，
-// 以及逐项处置依赖的变更项（单元改挂 / 退出、下级部门改挂、结束指向原部门的编码解释、新部门的上级与主分类）。
+// 以及逐项处置依赖的变更项（单元改挂 / 退出、人员调科 / 结束归属、下级部门改挂、结束指向原部门的编码解释、新部门的上级与主分类）。
 // 空白不等于“全部跟着走”：退出部门的每个单元、每个下级部门都要明确选择，系统不按名称推断、不默认。
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useRef, useState } from 'react'
@@ -38,6 +38,8 @@ const STEP_LABELS = ['身份裁决', '参与部门', '承接清单', '核对']
 const KEEP = '__keep'
 const RETIRE = '__retire'
 const TOP = '__top'
+// 人员归属：结束（或取消尚未开始的调入），之后为“暂未分配”
+const END = '__end'
 const MAIN_SCHEME = 'DEPT_MAIN_CLASS'
 
 interface NewDept {
@@ -100,6 +102,11 @@ function fromDraft(draft: ReorgDraft | undefined, source: ReorgSource) {
     if (i.kind === 'service_unit.change_department') unitTo[i.code as string] = i.department_code as string
     if (i.kind === 'service_unit.retire') unitTo[i.code as string] = RETIRE
   }
+  const personTo: Record<string, string> = {}
+  for (const i of items) {
+    if (i.kind === 'person.transfer') personTo[String(i.assignment_id)] = i.department_code as string
+    if (i.kind === 'person.assignment_set_end') personTo[String(i.assignment_id)] = END
+  }
   const childTo: Record<string, string> = {}
   for (const i of items)
     if (i.kind === 'department.set_parent' && !created.has(i.code as string)) childTo[i.code as string] = (i.parent_code as string | null) ?? TOP
@@ -116,6 +123,7 @@ function fromDraft(draft: ReorgDraft | undefined, source: ReorgSource) {
     news,
     unitTo,
     childTo,
+    personTo,
   }
 }
 
@@ -151,6 +159,7 @@ export function DepartmentReorgWizard({
   const [news, setNews] = useState<NewDept[]>(init?.news.length ? init.news : [blank(), blank()])
   const [unitTo, setUnitTo] = useState<Record<string, string>>(init?.unitTo ?? {})
   const [childTo, setChildTo] = useState<Record<string, string>>(init?.childTo ?? {})
+  const [personTo, setPersonTo] = useState<Record<string, string>>(init?.personTo ?? {})
   const [otherMatters, setOtherMatters] = useState(init?.otherMatters ?? '')
 
   const { data: depts = [] } = useListDepartments({ as_of: asOf })
@@ -176,6 +185,8 @@ export function DepartmentReorgWizard({
   const allCodes = depsBySource.flatMap((d) => (d.data?.code_links ?? []).map((c) => ({ ...c, from: d.code })))
   const allClasses = depsBySource.flatMap((d) => (d.data?.classifications ?? []).map((c) => ({ ...c, from: d.code })))
   const allRelations = depsBySource.flatMap((d) => (d.data?.relations ?? []).map((r) => ({ ...r, from: d.code })))
+  // 人员归属（有“查看人员”权限时才列出）：生效日及以后归属原部门的，含预约调入的
+  const allPersons = depsBySource.flatMap((d) => (d.data?.persons ?? []).map((p) => ({ ...p, from: d.code })))
 
   // 承接方：新设部门，或吸收合并的已有部门；分设时原部门也可“保持”
   const resultOptions: Option[] = hasNew
@@ -207,6 +218,17 @@ export function DepartmentReorgWizard({
     ...resultOptions,
     { value: TOP, label: '改为一级部门' },
   ]
+  const personOptions = (p: { valid_from: string }): Option[] => {
+    const later = !!day && p.valid_from > day
+    return [
+      ...(type === 'SPLIT_OFF' ? [{ value: KEEP, label: `保持在${rename.trim() || source.name}（存续）` }] : []),
+      ...resultOptions.map((o) => (later ? { ...o, label: `${o.label}，原定 ${p.valid_from} 的调入改为调到这里` } : { ...o, label: `${o.label}，自 ${day} 起` })),
+      later
+        ? { value: END, label: `取消这次调入（原定 ${p.valid_from} 开始，取消后从未生效）` }
+        : { value: END, label: `结束归属（最后有效日 ${day ? dayBefore(day) : '—'}），之后暂未分配` },
+    ]
+  }
+  const personChoice = (id: number) => personTo[String(id)] ?? (type === 'SPLIT_OFF' ? KEEP : '')
   const unitChoice = (code: string) => unitTo[code] ?? (type === 'SPLIT_OFF' ? KEEP : '')
   const childChoice = (code: string) => childTo[code] ?? (type === 'SPLIT_OFF' ? KEEP : '')
 
@@ -234,6 +256,7 @@ export function DepartmentReorgWizard({
       const r = requireFields([
         ...allUnits.map((u): [string, boolean, string] => [`unit.${u.code}`, !!unitChoice(u.code), '请选择这个单元由谁承接']),
         ...allChildren.map((c): [string, boolean, string] => [`child.${c.code}`, !!childChoice(c.code), '请选择这个下级部门改挂到哪里']),
+        ...allPersons.map((p): [string, boolean, string] => [`person.${p.assignment_id}`, !!personChoice(p.assignment_id), '请选择这个人调到哪里，或结束归属']),
       ])
       return r?.fieldErrors ?? null
     }
@@ -287,6 +310,16 @@ export function DepartmentReorgWizard({
       const start = u.version.valid_from > day ? u.version.valid_from : null
       if (to === RETIRE) items.push({ kind: 'service_unit.retire', code: u.code, valid_to: start ? dayBefore(start) : last })
       else items.push({ kind: 'service_unit.change_department', code: u.code, effective_date: start ?? day, department_code: to })
+    }
+    // 人员：不按单元或名称自动迁人，每条归属由人选择（人员设计第 6 节）
+    for (const p of allPersons) {
+      const to = personChoice(p.assignment_id)
+      if (to === KEEP) continue
+      const start = p.valid_from > day ? p.valid_from : null
+      if (to === END)
+        items.push({ kind: 'person.assignment_set_end', assignment_id: p.assignment_id, expected_valid_to: p.valid_to ?? null, valid_to: start ? dayBefore(start) : last })
+      else
+        items.push({ kind: 'person.transfer', assignment_id: p.assignment_id, expected_valid_to: p.valid_to ?? null, department_code: to, effective_date: start ?? day })
     }
     for (const c of allChildren) {
       const to = childChoice(c.code)
@@ -511,6 +544,32 @@ export function DepartmentReorgWizard({
                     </ChecklistRow>
                   ))}
                 </ChecklistSection>
+                {allPersons.length > 0 && (
+                  <ChecklistSection
+                    title={`人员（${allPersons.length}）`}
+                    hint="人员身份不变，只换归属部门；不跟着服务单元走，也不按名称推断。每个都要选"
+                    empty=""
+                    bulk={exits ? resultOptions : []}
+                    onBulk={(to) => setPersonTo(Object.fromEntries(allPersons.map((p) => [String(p.assignment_id), to])))}
+                  >
+                    {allPersons.map((p) => (
+                      <ChecklistRow
+                        key={p.assignment_id}
+                        label={p.person_name}
+                        sub={`${p.person_code}${sourceCodes.length > 1 ? ` · 原属 ${deptName(p.from)}` : ''}${p.not_yet_effective ? ` · 预约 ${p.valid_from} 起调入` : ''}`}
+                      >
+                        <SelectField
+                          label="调到"
+                          name={`person.${p.assignment_id}`}
+                          value={personChoice(p.assignment_id)}
+                          onChange={(v) => setPersonTo({ ...personTo, [String(p.assignment_id)]: v })}
+                          options={personOptions(p)}
+                          placeholder="请选择"
+                        />
+                      </ChecklistRow>
+                    ))}
+                  </ChecklistSection>
+                )}
                 <ChecklistSection
                   title={`下级部门（${allChildren.length}）`}
                   hint="上级退出不代表下级退出；不会默认挂到第一个新部门"
@@ -655,6 +714,8 @@ const ITEM_GROUPS: [string, string][] = [
   ['department.reorganize', '组织变更事件'],
   ['service_unit.change_department', '单元改挂'],
   ['service_unit.retire', '单元退出'],
+  ['person.transfer', '人员调科'],
+  ['person.assignment_set_end', '人员结束归属'],
   ['department.set_parent', '调整行政隶属'],
   ['external_code.assignment_close', '结束编码解释'],
   ['department.classify', '新部门主分类'],

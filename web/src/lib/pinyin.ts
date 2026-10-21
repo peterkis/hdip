@@ -15,12 +15,20 @@ const FIXED: Record<string, string> = {
   区: 'Q',
 }
 
+/**
+ * 拼音码的两种用法：组织名称（院区、部门、服务单元，“区”固定取 Q）；
+ * 人名（首字按姓氏读音：单 S、曾 Z、解 X、仇 Q、区 O，FIXED 不适用；人员设计第 7.2 节）。
+ */
+export type PinyinMode = 'org' | 'person'
+
+const optsFor = (mode: PinyinMode) => (mode === 'person' ? ({ ...OPTS, surname: 'head' } as const) : OPTS)
+
 /** 名称 → 拼音码 */
-export function pinyinCode(name: string): string {
+export function pinyinCode(name: string, mode: PinyinMode = 'org'): string {
   const text = name.trim()
   const chars = [...text]
-  return pinyin(text, OPTS)
-    .map((x, i) => FIXED[chars[i]] ?? x)
+  return pinyin(text, optsFor(mode))
+    .map((x, i) => (mode === 'org' ? (FIXED[chars[i]] ?? x) : x))
     .join('')
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '')
@@ -36,13 +44,13 @@ export interface Polyphone {
 }
 
 /** 名称里首字母有歧义的多音字（如“行”X / H、“重”Z / C） */
-export function polyphones(name: string): Polyphone[] {
+export function polyphones(name: string, mode: PinyinMode = 'org'): Polyphone[] {
   const text = name.trim()
-  const chosen = pinyin(text, OPTS)
+  const chosen = pinyin(text, optsFor(mode))
   const all = polyphonic(text, OPTS)
   const out: Polyphone[] = []
   ;[...text].forEach((char, i) => {
-    if (FIXED[char]) return
+    if (mode === 'org' && FIXED[char]) return
     const letters = [...new Set((all[i] ?? []).map((x) => x.toUpperCase()))].filter((x) => /^[A-Z]$/.test(x))
     if (letters.length > 1) out.push({ char, letters, chosen: (chosen[i] ?? '').toUpperCase() })
   })

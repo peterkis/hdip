@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from hdip_api.core.config import get_settings
 from hdip_api.core.errors import install_error_handlers
-from hdip_api.routes import changes, codes, dictionary, export, health, master, meta
+from hdip_api.routes import changes, codes, dictionary, export, health, master, meta, persons
 
 
 def create_app() -> FastAPI:
@@ -24,6 +24,7 @@ def create_app() -> FastAPI:
         codes.router,
         dictionary.router,
         export.router,
+        persons.router,
     ):
         app.include_router(r, prefix="/api")
     return app

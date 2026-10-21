@@ -756,7 +756,9 @@ def _units_from(s: Session, department_id: int, day: date) -> list[ServiceUnitRo
     return rows
 
 
-def department_dependencies(s: Session, department_id: int, day: date) -> DepartmentDependencies:
+def department_dependencies(
+    s: Session, department_id: int, day: date, user: AppUser | None = None
+) -> DepartmentDependencies:
     """承接清单：部门在 day 及以后仍有效的依赖（组织变更向导据此逐项处置）。"""
     d = s.get(Department, department_id)
     if d is None:
@@ -819,7 +821,18 @@ def department_dependencies(s: Session, department_id: int, day: date) -> Depart
             )
             for r in relations
         ],
+        persons=_dependent_persons(s, d.id, day, user),
     )
+
+
+def _dependent_persons(s: Session, dept_id: int, day: date, user: AppUser | None):
+    """与 day 及以后相交的人员归属（含预约调入）；没有“查看人员”权限时不列出。"""
+    from hdip_api.core.permissions import PERSON_VIEW
+    from hdip_api.services import person_queries
+
+    if user is None or not has_permission(user, PERSON_VIEW):
+        return []
+    return person_queries.department_persons(s, dept_id, day, from_day=True)
 
 
 def _classifications_out(s: Session, rows, names: "_ClassNames | None" = None):
@@ -1205,7 +1218,7 @@ def _labels(cr: ChangeRequest) -> list[str]:
     return [KIND_LABELS.get(i.get("kind"), i.get("kind", "")) for i in cr.items]
 
 
-def list_changes(s: Session, status: str | None) -> list[ChangeRequestSummary]:
+def list_changes(s: Session, status: str | None, user: AppUser) -> list[ChangeRequestSummary]:
     users = _users(s)
     q = select(ChangeRequest).order_by(ChangeRequest.id.desc())
     if status:
@@ -1224,12 +1237,13 @@ def list_changes(s: Session, status: str | None) -> list[ChangeRequestSummary]:
             cancelled_at=cr.cancelled_at,
         )
         for cr in s.scalars(q)
+        if workflow.visible(cr, user)
     ]
 
 
 def get_change(s: Session, change_id: int, user: AppUser) -> ChangeRequestOut:
     cr = s.get(ChangeRequest, change_id)
-    if cr is None:
+    if cr is None or not workflow.visible(cr, user):
         raise NotFound(f"变更申请 #{change_id} 不存在")
     users = _users(s)
     items = workflow.parse_items(cr)

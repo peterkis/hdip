@@ -623,6 +623,72 @@ class ExternalCodeAssignmentClose(_Item):
     valid_to: date
 
 
+# ------------------------------------------------------------------ 人员（迁移 0016）
+# 人员用代码引用；任用、归属没有代码，用 id 引用（同运营关系）。
+# 选项码（任用类型）在 option_item 里，加码值不改代码，应用时校验
+OptionCode = Annotated[
+    str, StringConstraints(strip_whitespace=True, pattern=r"^[A-Z][A-Z0-9_]{0,63}$")
+]
+# 业务工号按字符串原样保存（0007 不丢前导零），只去掉首尾空白
+WorkNo = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=64)]
+
+
+class PersonCreate(_Item):
+    """登记人员身份与第一个姓名版本；开始日 = 首项任用的开始日（登记向导自动带上）。"""
+
+    kind: Literal["person.create"]
+    code: Code
+    name: Name
+    pinyin: Pinyin | None = None
+    valid_from: date
+
+
+class PersonEngage(_Item):
+    """建立任用（新登记或再次任用）：同期间的业务工号（选填）与主归属。
+
+    department_code 为空 = 暂未分配（表单须明确选择）。valid_to 选填（医院常提前填写结束日）。
+    """
+
+    kind: Literal["person.engage"]
+    person_code: Code
+    institution_code: Code
+    engagement_type: OptionCode
+    work_no: WorkNo | None = None
+    note: Text | None = None
+    valid_from: date
+    valid_to: date | None = None
+    department_code: Code | None = None
+
+    @model_validator(mode="after")
+    def _period(self):
+        if self.valid_to is not None and self.valid_to < self.valid_from:
+            raise ValueError("任用结束日不能早于开始日")
+        return self
+
+
+class PersonTransfer(_Item):
+    """调科：原归属止于生效日前一日，新归属自生效日起，结束日沿用原归属的结束日。
+
+    expected_valid_to 是发起时看到的原归属结束日；确认时已被别的申请改过就拒绝，不覆盖。
+    """
+
+    kind: Literal["person.transfer"]
+    assignment_id: int
+    expected_valid_to: date | None
+    department_code: Code
+    effective_date: date
+
+
+class PersonAssignmentSetEnd(_Item):
+    """结束一条归属、调整它尚未到达的结束日（valid_to 为最后有效日；空 = 清除结束日），
+    或撤销尚未开始的归属（valid_to = 开始日前一日）。"""
+
+    kind: Literal["person.assignment_set_end"]
+    assignment_id: int
+    expected_valid_to: date | None
+    valid_to: date | None
+
+
 ChangeItem = Annotated[
     InstitutionCreate
     | InstitutionRevise
@@ -657,7 +723,11 @@ ChangeItem = Annotated[
     | ServiceUnitClassificationClose
     | ExternalCodeRegister
     | ExternalCodeAssign
-    | ExternalCodeAssignmentClose,
+    | ExternalCodeAssignmentClose
+    | PersonCreate
+    | PersonEngage
+    | PersonTransfer
+    | PersonAssignmentSetEnd,
     Field(discriminator="kind"),
 ]
 
@@ -698,7 +768,14 @@ KIND_LABELS: dict[str, str] = {
     "external_code.register": "登记外部代码",
     "external_code.assign": "解释外部代码",
     "external_code.assignment_close": "结束外部代码解释",
+    "person.create": "登记人员",
+    "person.engage": "建立任用",
+    "person.transfer": "调科",
+    "person.assignment_set_end": "结束部门归属",
 }
+
+# 人员相关的变更项：没有 person.view 权限的人看不到含这些项的申请（core/permissions.py）
+PERSON_KINDS = frozenset(k for k in KIND_LABELS if k.startswith("person."))
 
 
 def dump_items(items: list[ChangeItem]) -> list[dict]:

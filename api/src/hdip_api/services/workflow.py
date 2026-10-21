@@ -5,11 +5,16 @@
 - 谁能确认由 approval_rule 决定（按 对象类型 × 动作）；一张申请含多类变更时须同时满足。
 """
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from hdip_api.core.errors import BusinessError, Forbidden, NotFound
-from hdip_api.core.permissions import CHANGE_CREATE, require_permission
+from hdip_api.core.permissions import (
+    CHANGE_CREATE,
+    PERSON_CHANGE,
+    can_see_items,
+    require_permission,
+)
 from hdip_api.models import ApprovalRule, AppUser, ChangeRequest
 from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
@@ -32,11 +37,22 @@ def _now(s: Session):
     return s.scalar(select(func.localtimestamp()))
 
 
-def get_for_update(s: Session, change_id: int) -> ChangeRequest:
+def visible(cr: ChangeRequest, user: AppUser) -> bool:
+    """含人员变更项的申请对没有“查看人员”权限的人整张隐藏（按号打开也说不存在）。"""
+    return can_see_items(user, (i.get("kind", "") for i in cr.items))
+
+
+def get_for_update(s: Session, change_id: int, user: AppUser | None = None) -> ChangeRequest:
     cr = s.get(ChangeRequest, change_id, with_for_update=True)
-    if cr is None:
+    if cr is None or (user is not None and not visible(cr, user)):
         raise NotFound(f"变更申请 #{change_id} 不存在")
     return cr
+
+
+def _require_item_permissions(user: AppUser, items: list[dict]) -> None:
+    """人员变更项另需“维护人员”权限（以后可只给部分维护人）。"""
+    if any(i.get("kind", "").startswith("person.") for i in items):
+        require_permission(user, PERSON_CHANGE)
 
 
 def _require_status(cr: ChangeRequest, *statuses: str) -> None:
@@ -83,11 +99,11 @@ def return_block_reason(s: Session, cr: ChangeRequest, user: AppUser) -> str | N
 
 # ------------------------------------------------------------------ 新建代码的持有
 def created_codes(items: list[dict]) -> list[str]:
-    """一张申请里要新建的院区、部门、服务单元代码（含拆分 / 合并的后继）。"""
+    """一张申请里要新建的院区、部门、服务单元、人员代码（含拆分 / 合并的后继）。"""
     out: list[str] = []
     for i in items:
         k = i.get("kind")
-        if k in ("campus.create", "department.create", "service_unit.create"):
+        if k in ("campus.create", "department.create", "service_unit.create", "person.create"):
             out.append(i["code"])
         elif k == "service_unit.split":
             out += [x["code"] for x in i.get("successors", [])]
@@ -123,6 +139,7 @@ def create_draft(
 ) -> ChangeRequest:
     require_permission(user, CHANGE_CREATE)
     dumped = dump_items(items)
+    _require_item_permissions(user, dumped)
     _check_code_holders(s, dumped, None)
     cr = ChangeRequest(items=dumped, note=_clean(note), created_by=user.id)
     s.add(cr)
@@ -133,7 +150,7 @@ def create_draft(
 def update_draft(
     s: Session, user: AppUser, change_id: int, items: list[ChangeItem], note: str | None
 ) -> ChangeRequest:
-    cr = get_for_update(s, change_id)
+    cr = get_for_update(s, change_id, user)
     _require_status(cr, "draft")
     _require_creator(cr, user)
     # 组织变更是一个整体：含组织变更事件的草稿，不能只留下它的部分变更项（会拆散原子变更）
@@ -144,6 +161,7 @@ def update_draft(
             "请回到组织变更向导调整；不再需要时，撤销整张草稿。"
         )
     dumped = dump_items(items)
+    _require_item_permissions(user, dumped)
     _check_code_holders(s, dumped, cr.id)
     cr.items = dumped
     cr.note = _clean(note)
@@ -153,10 +171,11 @@ def update_draft(
 
 
 def submit(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
-    cr = get_for_update(s, change_id)
+    cr = get_for_update(s, change_id, user)
     _require_status(cr, "draft")
     _require_creator(cr, user)
     require_permission(user, CHANGE_CREATE)
+    _require_item_permissions(user, cr.items)
     dry_run(s, parse_items(cr), cr.id, user.id)  # 不通过即抛错
     now = _now(s)
     cr.status, cr.submitted_by, cr.submitted_at, cr.updated_at = "submitted", user.id, now, now
@@ -164,8 +183,14 @@ def submit(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
     return cr
 
 
+# 所有确认串行执行：两张申请（如“撤销部门”与“把人调入该部门”）各自通过最终检查、合起来却不成立，
+# 靠这把事务级咨询锁避免。确认是低频动作，代价可忽略
+CONFIRM_LOCK = 0x48444950  # "HDIP"
+
+
 def confirm(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
-    cr = get_for_update(s, change_id)
+    s.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": CONFIRM_LOCK})
+    cr = get_for_update(s, change_id, user)
     _require_status(cr, "submitted")
     reason = confirm_block_reason(s, cr, user)
     if reason:
@@ -185,7 +210,7 @@ def confirm(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
 
 
 def return_request(s: Session, user: AppUser, change_id: int, reason: str) -> ChangeRequest:
-    cr = get_for_update(s, change_id)
+    cr = get_for_update(s, change_id, user)
     _require_status(cr, "submitted")
     reason_blocked = return_block_reason(s, cr, user)
     if reason_blocked:
@@ -201,7 +226,7 @@ def return_request(s: Session, user: AppUser, change_id: int, reason: str) -> Ch
 
 
 def cancel(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
-    cr = get_for_update(s, change_id)
+    cr = get_for_update(s, change_id, user)
     _require_status(cr, "draft", "submitted")
     _require_creator(cr, user)
     now = _now(s)
@@ -213,9 +238,10 @@ def cancel(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
 def copy_as_draft(s: Session, user: AppUser, change_id: int) -> ChangeRequest:
     require_permission(user, CHANGE_CREATE)
     src = s.get(ChangeRequest, change_id)
-    if src is None:
+    if src is None or not visible(src, user):
         raise NotFound(f"变更申请 #{change_id} 不存在")
     _require_status(src, "returned", "cancelled")
+    _require_item_permissions(user, src.items)
     # 退回 / 撤销后复制 = 继续办理原拟建对象，沿用其预留代码；已有一份进行中的副本时拒绝
     _check_code_holders(s, src.items, None)
     cr = ChangeRequest(items=src.items, note=src.note, created_by=user.id, copied_from_id=src.id)

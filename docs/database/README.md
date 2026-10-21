@@ -38,13 +38,19 @@ erDiagram
     service_unit ||--o{ service_unit_lineage : "前身 / 后继"
     department_change_event ||--|{ department_change_participant : "参与部门"
     department ||--o{ department_change_participant : "原部门 / 结果部门"
+    person ||--|{ person_version : "姓名版本"
+    person ||--o{ person_engagement : "任用"
+    institution ||--o{ person_engagement : "任用主体"
+    person_engagement ||--o{ person_work_no : "业务工号"
+    person_engagement ||--o{ person_assignment : "部门归属"
+    department ||--o{ person_assignment : "主归属"
 ```
 
 | 分组 | 表 | 说明 |
 | --- | --- | --- |
 | 配置 | `app_user`、`option_item`、`approval_rule` | 用户与角色、选项码值、确认规则。只由迁移维护，不经变更申请 |
 | 申请 | `change_request` | 唯一写入入口 |
-| 代码分配 | `code_reservation`；序列 `campus_code_seq`、`department_code_seq`、`service_unit_code_seq` | 系统发出的院区 / 部门 / 服务单元代码，只追加、不可修改（迁移 0015，见第 3.1 节） |
+| 代码分配 | `code_reservation`；序列 `campus_code_seq`、`department_code_seq`、`service_unit_code_seq`、`person_code_seq` | 系统发出的院区 / 部门 / 服务单元 / 人员代码，只追加、不可修改（迁移 0015、0016，见第 3.1 节） |
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
 | 字典 | `classification_scheme`、`classification_code`、`org_view` | 配置：分类方案与代码（维护人可直接维护）、组织视图 |
@@ -52,6 +58,7 @@ erDiagram
 | 外部标识 | `source_system`、`code_namespace`、`external_code`、`external_code_assignment` | 来源系统与字典（配置）；源记录与按期间的解释（编码映射台账，D3，迁移 0008） |
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage`、`service_unit_classification` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系；单元分类（D3） |
 | 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
+| 人员 | `person` / `person_version`、`person_engagement`、`person_work_no`、`person_assignment` | 人员身份 + 姓名版本；任用、业务工号、部门归属自带期间，结束日在到达前可改（迁移 0016，见第 8 节） |
 
 院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
 
@@ -88,6 +95,7 @@ erDiagram
    - 部门的赋值、归属、别名放开 `closed_change_id`，同样只能随结束日写入一次。
    - **配置字典例外**：`classification_scheme`、`classification_code` 放开名称、说明、排序、启用和维护记录列，供维护人直接维护；代码值与单选属性不可改。（迁移 0006 起，`department` 身份行整行不可更新，原先的过渡例外已收回。）
 3. **变更申请终态**：`hdip_guard_change_request` 禁止修改已确认、已退回、已撤销的申请。
+4. **人员的期间（迁移 0016）**：任用、业务工号、部门归属用另一个触发器 `hdip_guard_open_end()`：只有 `valid_to`、`closed_change_id` 可改；**结束日在到达前可以改**（提前、推后、清空、撤销计划），改时必须同时记下本次申请；原结束日早于今天（`current_date`，会话时区）或原行是空期间时整行不可再改（约束名 `hdip_period_passed` / `hdip_history_immutable`）。组织各表仍用 `hdip_guard_update`（结束日只写一次），两者互不影响。
 
 ### 2.4 数据库强制与应用校验
 
@@ -124,11 +132,13 @@ stateDiagram-v2
 
   所以“停用院区 + 改挂单元”可以放在同一张申请里，不论先后。
 - 同样在全部变更项应用后进行的还有：`_check_org`（视图不成环；撤销 / 被替代的部门不能还有下级）、`_check_codes`（同一代码重叠期间的解释要么都带院区条件、要么都不带）、`_check_ended_codes`（退出的部门在退出日及以后不能还有外部编码解释指向它）。
+- 人员归属在全部变更项应用后由 `persons.check_persons` 按完整期间检查：本申请新写或改过的归属，以及本申请改过生命周期的部门下的**全部**归属（含未来才开始的）。部门撤销 / 被替代而仍有人员归属时阻止确认并列出。
+- 确认串行：`workflow.confirm` 在事务开头取事务级咨询锁 `pg_advisory_xact_lock`，所有确认依次执行，避免两张申请各自通过最终检查、合起来却不成立（如“撤销部门”与“调入该部门”）。
 - 确认权限：`approval_rule`（对象类型 × 动作 → 确认角色、是否允许提交人自确认）。改规则不改代码。
 
 ### 3.1 代码由系统分配（迁移 0015）
 
-- 规则：院区 `C` + 3 位数字（`C001`），部门 `D` + 6 位数字（`D000001`），服务单元 `SU` + 6 位数字（`SU000001`）。院内代码大小写等价，一律存大写（变更项里的 `Code` 类型自动转大写）。主体代码不在此列，仍由人填写。
+- 规则：院区 `C` + 3 位数字（`C001`），部门 `D` + 6 位数字（`D000001`），服务单元 `SU` + 6 位数字（`SU000001`），人员 `P` + 6 位数字（`P000001`，迁移 0016；人员代码与医院业务工号无关，`person_code_check` 在库里约束格式）。院内代码大小写等价，一律存大写（变更项里的 `Code` 类型自动转大写）。主体代码不在此列，仍由人填写。
 - 取号：表单点“保存到申请”时调用 `POST /api/code-reservations`（`object_type`、`request_key`、`count`），由序列发号并登记到 `code_reservation`。同一个请求键 + 槽位只发一次：网络重试、校验失败后再保存都拿回同一个号。号码不回收，撤销或退回的草稿留下空号，不影响识别。
 - 新建院区、部门、服务单元（含拆分 / 合并的后继、组织变更新设的部门）只能用已登记的**同类型**代码，否则预演与确认都拒绝（`apply._require_issued`）。代码格式由发号保证，表里没有格式检查约束，以便测试沿用 XNK 这类可读代码。
 - 同一个代码同时只能由一张进行中的申请（草稿 / 已提交）用来新建（`workflow._check_code_holders`，保存草稿、复制为新草稿时检查）。退回或撤销后“复制为新草稿”= 继续办理原拟建对象，沿用其代码；再复制一份会被拒绝。
@@ -145,7 +155,8 @@ stateDiagram-v2
 | 服务单元 | `service_unit.create`、`.revise`、`.rebind`、`.change_department`、`.change_status`、`.retire` | `service_unit`、`service_unit_version` |
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
 | 分类与外部标识 | `department.classification_close`、`service_unit.classify`、`service_unit.classification_close`、`external_code.register`、`.assign`、`.assignment_close` | `department_classification`、`service_unit_classification`、`external_code`、`external_code_assignment` |
-| 部门组织变更 | `department.reorganize`（与同一申请里的 `department.create`、单元改挂、隶属调整、结束编码解释等配合） | `department_version`（退出部门新版本为“被替代”）、`department_change_event`、`department_change_participant`；自动结束退出部门的上级边、管理关系、分类、别名、主体归属 |
+| 部门组织变更 | `department.reorganize`（与同一申请里的 `department.create`、单元改挂、人员调科、隶属调整、结束编码解释等配合） | `department_version`（退出部门新版本为“被替代”）、`department_change_event`、`department_change_participant`；自动结束退出部门的上级边、管理关系、分类、别名、主体归属 |
+| 人员（P1.1） | `person.create`、`person.engage`、`person.transfer`、`person.assignment_set_end`（处理函数在 `services/persons.py`） | `person`、`person_version`、`person_engagement`、`person_work_no`、`person_assignment` |
 
 ## 4. 读取：按日期
 
@@ -159,7 +170,8 @@ stateDiagram-v2
 - 组织总览（剧本 21）不另设接口：服务布局图、部门 × 院区矩阵与概况由前端从 `GET /api/service-units?include_future=true`（所属部门、院区、运营主体、类型、状态、`not_yet_effective`）与 `GET /api/departments`（主分类、行政上级、层级）聚合（`web/src/lib/org-overview.ts`），口径见设计文档第 6 节。
 - **批量操作 = 一张申请里的多个变更项**，不另设批量接口：整体预演、整体确认；任何一项不通过则整张不能提交，提示指出第几项（`problems[].item_index`）。
 - 承接清单 `GET /api/departments/{id}/dependencies?day=`：部门在某日及以后仍有效的服务单元、下级部门、外部编码解释、分类与管理关系（组织变更向导用）。服务单元按“与 day 及以后相交”取：今天在别的部门、预约以后改挂进来的单元也列出，取挂在该部门的第一版（2026-10-21）。
-- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`，末尾加了 `unit_pinyin`）、部门（`departments`，末尾加了 `department_pinyin`）、院区（`campuses`，末尾加了 `public_name`、`campus_pinyin`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）。列名和列顺序是对外契约，新增列只能加在末尾。
+- 人员（迁移 0016，第 8 节）：`GET /api/persons`（名册，`scope=all` 为查重）、`GET /api/persons/{id}`、`GET /api/departments/{id}/persons`；承接清单另含 `persons`（与 day 及以后相交的人员归属）。需要“查看人员”权限。
+- 只读导出：`GET /api/export/{dataset}.csv?as_of=`，逻辑在 `services/export.py`：服务单元（`service-units`，末尾加了 `unit_pinyin`）、部门（`departments`，末尾加了 `department_pinyin`）、院区（`campuses`，末尾加了 `public_name`、`campus_pinyin`）、主体（`institutions`）、运营关系（`operator-relations`）、单元演变关系（`service-unit-lineage`）、部门行政隶属（`department-hierarchy`）、部门管理关系（`department-relations`）、外部编码（`external-codes`）、分类（`classifications`）、部门沿革（`department-lineage`，一行一个参与部门）、人员名册（`persons`，一人一行）、任用与归属（`person-relations`，一行一项当天有效的任用与当天主归属；后两个需要“导出人员数据”权限，敏感字段按权限置空）。列名和列顺序是对外契约，新增列只能加在末尾。
 
 ## 5. 迁移史
 
@@ -180,6 +192,7 @@ stateDiagram-v2
 | 0013 | 运营关系：同一主体与同一院区同一时期只能有一条关系，不论类型（`operator_relation_pair_excl` 取代只禁止同类型重叠的 `operator_relation_dup_excl`）；已有重叠数据时迁移失败并列出 |
 | 0014 | 种子账号 solo 的显示名称改为“张三”（用户名、角色不变） |
 | 0015 | 院区、部门、服务单元的代码改由系统分配：三个发号序列与 `code_reservation`（只追加）；院区 / 部门 / 服务单元版本加拼音码 `pinyin`。开发库与走查库按新规则重建 |
+| 0016 | 人员模块 P1.1：`person`、`person_version`（姓名、拼音码、`revise_reason`）、`person_engagement`、`person_work_no`、`person_assignment`；保护函数 `hdip_guard_open_end`（结束日到达前可改）；人员发号序列；任用类型等选项；确认规则 `person.create / engage / transfer / assignment_set_end` |
 
 ### 新增一类对象或变更的检查单
 
@@ -398,3 +411,22 @@ erDiagram
 - **新设部门**须在同一申请里先 `department.create`，开始日 = 生效日、正式履职。
 - 演变关系不是行政上下级，A → B → A 允许出现，不做成环检查。
 
+
+
+## 8. 人员（P1.1 已实施，迁移 0016）
+
+业务设计见 `docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md`。
+
+| 表 | 一行是 | 要点 |
+| --- | --- | --- |
+| `person` | 一个人的身份 | 代码 `P` + 6 位，系统分配、永不复用；整行不可更新。人员上不存当前部门，也不存在职 / 离职状态（由任用按日期派生） |
+| `person_version` | 一段期间的姓名 | `revise_reason`：`INITIAL` 登记 / `RENAME` 更名 / `CORRECTION` 更正误录；某版本的下一版是 `CORRECTION` 时它的姓名是误录，是 `RENAME` 时是曾用名 |
+| `person_engagement` | 一项任用 | 人员 × 主体 × 任用类型 × 期间；同一人员 + 同一主体期间不重叠（`person_engagement_no_overlap`，P1 的范围限制，允许并行任用时删掉这一条） |
+| `person_work_no` | 一段业务工号 | 挂在任用上、带期间，可换号；`person_work_no_one_owner`：同一主体内一个工号永远只属于一个人（`EXCLUDE ... person_id WITH <>`），本人返聘可沿用。复合外键锁定任用的人员与主体 |
+| `person_assignment` | 一段部门归属 | 任用 × 部门 × 期间；`kind` 目前只有 `PRIMARY`；同一任用同一时点最多一条主归属（`person_assignment_primary_no_overlap`，按任用而非部门分桶） |
+
+- 归属的完整期间须落在任用期间内；部门在此期间已设立，且没有“撤销 / 被替代”段；筹备、暂停履职可以（与服务单元“全期须正式履职”不同）。在应用层按完整期间检查（`persons.assignment_problem`）。
+- 任用开始日不早于人员第一个姓名版本的开始日，也不早于主体的开始日。
+- 结束任用、调科、结束归属都带“预期原结束日”（`expected_valid_to`），确认时与库里不一致就拒绝。
+- 权限（`core/permissions.py`）：`person.view`、`person.view_sensitive`、`person.export`、`person.change`。没有 `person.view` 时人员接口 403，含人员变更项的申请整张隐藏（按号打开为 404）。敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（目前为空：工号不是敏感字段；身份证号、电话将来加入时登记），读接口、导出统一置空并列入 `masked_fields`。
+- 拼音码：人名首字按姓氏读音（前端 `lib/pinyin.ts` 的 `person` 模式，单 S、曾 Z、区 O），组织名称的固定读音（区 → Q）不适用；后端 pypinyin 没有姓氏模式，只在变更项未给出时兜底。
