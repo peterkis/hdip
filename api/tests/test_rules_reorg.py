@@ -138,3 +138,67 @@ def test_reorganization_draft_cannot_lose_its_event(api):
     # 整体替换（仍含事件）可以
     r = api.put(f"/api/change-requests/{cr['id']}", {"items": items[:1], "note": None})
     assert r.status_code == 200
+
+
+def test_dependencies_list_units_moving_in_later(api):
+    """承接清单不只看生效日当天：今天在甲科、已预约以后改挂到乙科的单元，乙科退出时也要列出并处置。"""
+    from factories import unit_create, unit_item
+    from reorg_helpers import dept
+
+    api.apply(
+        *world(),
+        dept_create(code="A", name="甲科"),
+        dept_create(code="B", name="乙科"),
+        dept_create(code="C", name="丙科"),
+        unit_create(code="U1", name="甲科门诊", dept="A", campus="BY", valid_from="2020-01-01"),
+    )
+    api.apply(unit_item("change_department", "U1", "2030-03-01", department_code="B"))
+    day = "2030-01-01"
+
+    deps = api.get(
+        f"/api/departments/{dept(api, 'B', day)['id']}/dependencies", params={"day": day}
+    ).json()
+    [u] = deps["units"]
+    assert u["code"] == "U1" and u["not_yet_effective"] is True
+    assert u["version"]["valid_from"] == "2030-03-01"
+    assert u["version"]["department_code"] == "B"
+
+    # 不处置：不能确认
+    cr = api.draft(reorganize("ABSORB", day, ["B"], ["C"]))
+    r = api.submit(cr["id"])
+    assert any(p["item_index"] == 0 for p in r.json()["problems"])
+    api.cancel(cr["id"])
+
+    # 向导的处置：在那一版的开始日改挂（更正计划中的版本）
+    api.apply(
+        reorganize("ABSORB", day, ["B"], ["C"]),
+        unit_item("change_department", "U1", "2030-03-01", department_code="C"),
+    )
+    rows = api.get("/api/service-units", params={"as_of": "2030-03-01"}).json()
+    assert next(x for x in rows if x["code"] == "U1")["version"]["department_code"] == "C"
+    rows = api.get("/api/service-units", params={"as_of": "2029-12-31"}).json()
+    assert next(x for x in rows if x["code"] == "U1")["version"]["department_code"] == "A"
+
+
+def test_unit_moving_in_can_retire_before_the_move(api):
+    """预约改挂进来的单元，也可以选“在改挂前一天退出”：之前的历史保留，从未挂到退出的部门。"""
+    from factories import unit_create, unit_item
+
+    api.apply(
+        *world(),
+        dept_create(code="A", name="甲科"),
+        dept_create(code="B", name="乙科"),
+        dept_create(code="C", name="丙科"),
+        unit_create(code="U1", name="甲科门诊", dept="A", campus="BY", valid_from="2020-01-01"),
+    )
+    api.apply(unit_item("change_department", "U1", "2030-03-01", department_code="B"))
+    api.apply(
+        reorganize("ABSORB", "2030-01-01", ["B"], ["C"]),
+        {"kind": "service_unit.retire", "code": "U1", "valid_to": "2030-02-28"},
+    )
+    on = lambda d: {  # noqa: E731
+        u["code"]: u["version"]["department_code"]
+        for u in api.get("/api/service-units", params={"as_of": d}).json()
+    }
+    assert on("2030-02-28")["U1"] == "A"
+    assert "U1" not in on("2030-03-01")

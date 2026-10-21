@@ -46,6 +46,7 @@ import { notify } from '@/lib/notify'
 import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
 import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
+import { indexDepartments, NO_CLASS } from '@/lib/org-overview'
 
 const COLUMNS: DbColumn[] = [
   { label: '名称', icon: TextFontIcon, className: 'min-w-56' },
@@ -75,6 +76,10 @@ function useFilters() {
   return {
     campus: get('campus'),
     dept: get('dept'),
+    // 部门含其下级部门（组织总览跳转过来时带上）
+    sub: get('sub') === '1',
+    // 一级部门的部门管理主分类（同组织总览“按分类”）
+    cls: get('cls'),
     inst: get('inst'),
     type: get('type'),
     status: get('status'),
@@ -82,7 +87,7 @@ function useFilters() {
     future: get('future') !== '0',
     set,
     clear: () => setParams(new URLSearchParams(), { replace: true }),
-    active: ['campus', 'dept', 'inst', 'type', 'status', 'future'].some((k) => params.has(k)),
+    active: ['campus', 'dept', 'sub', 'cls', 'inst', 'type', 'status', 'future'].some((k) => params.has(k)),
   }
 }
 
@@ -100,14 +105,24 @@ export function ServiceUnitsPage() {
     as_of: asOf,
     include_future: f.future,
     ...(f.campus && { campus_id: Number(f.campus) }),
-    ...(f.dept && { department_id: Number(f.dept) }),
+    // 含下级时在页内按隶属链筛
+    ...(f.dept && !f.sub && { department_id: Number(f.dept) }),
     ...(f.inst && { institution_id: Number(f.inst) }),
   })
+
+  const idx = useMemo(() => indexDepartments(departments), [departments])
+  const classOptions = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const d of departments) if (!d.parent && d.main_class) m.set(d.main_class.code, d.main_class.name)
+    return [...m].map(([value, label]) => ({ value, label })).concat({ value: NO_CLASS, label: '未分类' })
+  }, [departments])
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
     return units.filter(
       (u) =>
+        (!f.dept || !f.sub || idx.chain(u.version.department_id).some((d) => String(d.id) === f.dept)) &&
+        (!f.cls || idx.classOf(u.version.department_id) === f.cls) &&
         (!f.type || u.unit_type === f.type) &&
         (!f.status || u.version.status === f.status) &&
         (!q ||
@@ -115,7 +130,7 @@ export function ServiceUnitsPage() {
           u.version.name.toLowerCase().includes(q) ||
           (u.version.pinyin ?? '').toLowerCase().includes(q)),
     )
-  }, [units, f.type, f.status, query])
+  }, [units, idx, f.dept, f.sub, f.cls, f.type, f.status, query])
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('service-units', asOf),
@@ -164,6 +179,14 @@ export function ServiceUnitsPage() {
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
           options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+        />
+        {f.dept && <ToggleChip label="含下级部门" checked={f.sub} onChange={(v) => f.set('sub', v ? '1' : '')} />}
+        <FilterPill
+          label="主分类"
+          icon={ListViewIcon}
+          value={f.cls}
+          onChange={(v) => f.set('cls', v)}
+          options={classOptions}
         />
         <FilterPill
           label="运营主体"

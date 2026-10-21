@@ -185,12 +185,22 @@ export function DepartmentReorgWizard({
       : []
   // 生效日之后才开始的单元（计划中）：改挂在它的开始日直接更正那一版；“退出”即取消这个计划，从未生效
   const planned = (u: { version: { valid_from: string } }) => !!day && u.version.valid_from > day
-  const unitOptions = (u: { version: { valid_from: string } }): Option[] => [
+  // 计划中的有两种：单元本身尚未开始（第 1 版），或单元已在别的部门、预约以后改挂进来（后续版本）
+  const movingIn = (u: { version: { valid_from: string; version_no: number } }) => planned(u) && u.version.version_no > 1
+  const unitOptions = (u: { version: { valid_from: string; version_no: number } }): Option[] => [
     ...(type === 'SPLIT_OFF' ? [{ value: KEEP, label: `保持在${rename.trim() || source.name}（存续）` }] : []),
-    ...resultOptions.map((o) => (planned(u) ? { ...o, label: `${o.label}，自 ${u.version.valid_from} 开始时就挂在这里` } : o)),
-    planned(u)
-      ? { value: RETIRE, label: `取消这个计划中的单元（原定 ${u.version.valid_from} 开始，取消后从未生效）` }
-      : { value: RETIRE, label: `单元永久退出（最后有效日 ${day ? dayBefore(day) : '—'}）` },
+    ...resultOptions.map((o) =>
+      movingIn(u)
+        ? { ...o, label: `${o.label}，原定 ${u.version.valid_from} 的改挂改为挂到这里` }
+        : planned(u)
+          ? { ...o, label: `${o.label}，自 ${u.version.valid_from} 开始时就挂在这里` }
+          : o,
+    ),
+    movingIn(u)
+      ? { value: RETIRE, label: `单元永久退出（最后有效日 ${dayBefore(u.version.valid_from)}，不再改挂进来）` }
+      : planned(u)
+        ? { value: RETIRE, label: `取消这个计划中的单元（原定 ${u.version.valid_from} 开始，取消后从未生效）` }
+        : { value: RETIRE, label: `单元永久退出（最后有效日 ${day ? dayBefore(day) : '—'}）` },
   ]
   const childOptions: Option[] = [
     ...(type === 'SPLIT_OFF' ? [{ value: KEEP, label: `保持隶属${rename.trim() || source.name}` }] : []),
@@ -488,7 +498,7 @@ export function DepartmentReorgWizard({
                     <ChecklistRow
                       key={u.code}
                       label={`${u.version.name}`}
-                      sub={`${u.code} · ${u.version.campus_name}${sourceCodes.length > 1 ? ` · 原属 ${deptName(u.from)}` : ''}${planned(u) ? ` · 计划 ${u.version.valid_from} 开始` : ''}`}
+                      sub={`${u.code} · ${u.version.campus_name}${sourceCodes.length > 1 ? ` · 原属 ${deptName(u.from)}` : ''}${movingIn(u) ? ` · 预约 ${u.version.valid_from} 起改挂进来` : planned(u) ? ` · 计划 ${u.version.valid_from} 开始` : ''}`}
                     >
                       <SelectField
                         label="由谁承接"

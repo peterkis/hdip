@@ -723,6 +723,39 @@ def _reorganizations(s: Session, org: "_Org", dept_id: int) -> list[ReorgEventOu
     ]
 
 
+def _units_from(s: Session, department_id: int, day: date) -> list[ServiceUnitRow]:
+    """day 及以后有任一版本挂在该部门的单元，不只看 day 当天：
+    今天挂在别的部门、已预约将来改挂进来的单元也算。
+    每个单元取挂在该部门、与 day 及以后相交的第一版。"""
+    names = _UnitNames(s, day)
+    versions = _versions_by(s, ServiceUnitVersion, "service_unit_id")
+    rows = []
+    for unit in s.scalars(select(ServiceUnit).order_by(ServiceUnit.code)):
+        live = (v for v in versions[unit.id] if not is_void(v))
+        ordered = sorted(live, key=lambda v: v.version_no)
+        v = next(
+            (
+                x
+                for x in ordered
+                if x.department_id == department_id and (x.valid_to is None or x.valid_to >= day)
+            ),
+            None,
+        )
+        if v is None:
+            continue
+        rows.append(
+            ServiceUnitRow(
+                id=unit.id,
+                code=unit.code,
+                unit_type=unit.unit_type,
+                version=names.version_out(v),
+                not_yet_effective=v.valid_from > day,
+                has_later_versions=v is not ordered[-1],
+            )
+        )
+    return rows
+
+
 def department_dependencies(s: Session, department_id: int, day: date) -> DepartmentDependencies:
     """承接清单：部门在 day 及以后仍有效的依赖（组织变更向导据此逐项处置）。"""
     d = s.get(Department, department_id)
@@ -760,7 +793,7 @@ def department_dependencies(s: Session, department_id: int, day: date) -> Depart
     codes = _Codes(s, day)
     return DepartmentDependencies(
         day=day,
-        units=list_service_units(s, day, department_id=d.id),
+        units=_units_from(s, d.id, day),
         children=[org.ref(c) for c in children],
         code_links=codes.links(
             lambda a: (

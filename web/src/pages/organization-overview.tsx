@@ -155,12 +155,23 @@ export function OrganizationOverviewPage() {
     setSel(null)
   }
 
-  /** 服务单元列表的链接：带上当前范围（含计划 / 含暂停按列表的筛选表达） */
+  /** 服务单元列表的链接：带上当前的全部范围，列表与页内清单是同一批单元。
+   *  点的是某个部门（院区视角的部门节点、矩阵格、院区 → 部门的带）时按该部门本身筛：
+   *  它已在当前范围之内，比范围里的“部门（含下级）”“主分类”更窄；否则把范围里的部门（含下级）与主分类原样带上。
+   *  含计划 / 含暂停按列表的筛选表达。 */
   const listLink = (extra: Record<string, string>) => {
     const q = new URLSearchParams()
     const s = p.scope
     if (s.inst) q.set('inst', s.inst)
+    if (s.campus) q.set('campus', s.campus)
     if (s.type) q.set('type', s.type)
+    if (!extra.dept) {
+      if (s.dept) {
+        q.set('dept', s.dept)
+        q.set('sub', '1')
+      }
+      if (s.cls) q.set('cls', s.cls)
+    }
     if (!s.planned) q.set('future', '0')
     if (!s.suspended) q.set('status', 'ACTIVE')
     for (const [k, v] of Object.entries(extra)) q.set(k, v)
@@ -179,7 +190,7 @@ export function OrganizationOverviewPage() {
               打开部门详情
             </Button>
             {p.lens === 'campus' && (
-              <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={listLink({ dept: id, ...(p.scope.campus && { campus: p.scope.campus }) })} />}>
+              <Button variant="ghost" size="sm" nativeButton={false} render={<Link to={listLink({ dept: id })} />}>
                 在服务单元列表中查看
               </Button>
             )}
