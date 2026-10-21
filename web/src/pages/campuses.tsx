@@ -150,14 +150,19 @@ export function CampusDetailPage() {
             : `院区代码 ${data.code} · ${asOf} 尚未开始，自 ${data.versions.at(-1)!.valid_from} 起`
         }
         actions={
-          isMaintainer && (
-            <>
-              <Button variant="outline" disabled={suspended} onClick={() => setDialog('relation')}>
-                建立运营关系
-              </Button>
-              <Button onClick={() => setDialog('revise')}>修订资料</Button>
-            </>
-          )
+          <>
+            <Button variant="ghost" nativeButton={false} render={<Link to={`/organization-overview?campus=${data.id}&planned=1`} />}>
+              查看本院区服务布局
+            </Button>
+            {isMaintainer && (
+              <>
+                <Button variant="outline" disabled={suspended} onClick={() => setDialog('relation')}>
+                  建立运营关系
+                </Button>
+                <Button onClick={() => setDialog('revise')}>修订资料</Button>
+              </>
+            )}
+          </>
         }
       />
 

@@ -67,3 +67,31 @@ export const CODE_STATUS_TONE: Record<string, Tone> = {
 /** 部门层级（行政视图）：层级是维度不是状态，不用绿 / 黄 / 红 / 棕（已表示生命周期）；四级及以下同色 */
 export const LEVEL_TONE: Record<number, Tone> = { 1: 'blue', 2: 'orange', 3: 'purple' }
 export const levelTone = (level: number): Tone => LEVEL_TONE[level] ?? 'pink'
+
+/** 统计图的颜色：标签色之外多一个青色（令牌 --hd-chart-<色>） */
+export type ChartTone = Tone | 'teal'
+
+// 统计图的分类配色：相邻两色须过色盲区分度校验（dataviz 校验脚本），所以不直接沿用标签色
+//（标签色里蓝、紫相邻，绿色弱下几乎分不开）。图上每个节点都有名称标签，颜色不是唯一线索。
+
+/** 院区：按代码排序后依次取色 */
+export const CAMPUS_CHART_TONES: ChartTone[] = ['blue', 'orange', 'purple', 'pink', 'green', 'brown']
+
+/** 部门管理主分类（图上用；标签仍用 MAIN_CLASS_TONE）；未分类为中性灰 */
+export const MAIN_CLASS_CHART_TONE: Record<string, ChartTone> = {
+  CLINICAL: 'blue',
+  MEDTECH: 'orange',
+  SUPPORT: 'purple',
+  ADMIN: 'pink',
+  OPERATIONS: 'green',
+  RESEARCH_EDU: 'brown',
+}
+
+/** 编码治理图的解释状态：已对应的用蓝 / 绿 / 紫，未建模灰，待裁决橙 */
+export const CODE_BREAKDOWN_TONE: Record<string, ChartTone> = {
+  department: 'blue',
+  service_unit: 'green',
+  mixed: 'purple',
+  unmodeled: 'gray',
+  pending: 'orange',
+}

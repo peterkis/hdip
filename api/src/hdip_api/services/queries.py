@@ -2,7 +2,7 @@
 数据量上来后再换成按日期过滤的 SQL。"""
 
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date
 
 from sqlalchemy import select
@@ -914,6 +914,14 @@ class _Codes:
             return "unmodeled"
         return "mapped"
 
+    def breakdown(self, code_id: int) -> str:
+        """组织总览的编码治理图：待裁决 / 对象未建模 / 指向部门 / 指向服务单元 / 两者都有。"""
+        status = self.status(code_id)
+        if status != "mapped":
+            return status
+        kinds = {a.target_type for a in self.current(code_id)} - {"unmodeled"}
+        return kinds.pop() if len(kinds) == 1 else "mixed"
+
     def row(self, ec: ExternalCode) -> dict:
         ns = self.namespaces[ec.namespace_id]
         system = self.systems[ns.source_system_id]
@@ -982,6 +990,7 @@ def list_source_systems(s: Session, as_of: date) -> list[SourceSystemOut]:
                 is_active=ns.is_active,
                 code_count=len(per_ns[ns.id]),
                 pending_count=sum(1 for i in per_ns[ns.id] if not codes.current(i)),
+                breakdown=dict(Counter(codes.breakdown(i) for i in per_ns[ns.id])),
             )
             for ns in sorted(codes.namespaces.values(), key=lambda x: x.id)
             if ns.source_system_id == system.id

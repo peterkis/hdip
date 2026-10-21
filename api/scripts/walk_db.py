@@ -7,7 +7,8 @@
 起点数据（经一张申请确认）：主体成都市第三人民医院、本部院区（运行）及其运营关系、
 部门心血管内科，都自 2020-01-01 起。默认再加一张申请：高新 / 中心院区（筹建）、呼吸内科
 （带下级部门与三个单元）、放射科与核医学科、几个未分类部门、HIS 科室字典的待裁决代码，
-供剧本 18–20 与批量操作实测；`--minimal` 只建最小起点（剧本 1–17）。
+供剧本 18–20 与批量操作实测；第三张申请是组织总览（剧本 21）的演示数据：带二级部门的一级部门、
+高新 / 中心院区的计划单元、HRP 与病区字典的编码。`--minimal` 只建最小起点（剧本 1–17）。
 """
 
 import os
@@ -253,6 +254,170 @@ PLUS = [
 ]
 
 
+# ---------------------------------------- 第三批：组织总览（剧本 21）的演示数据，同样是模拟数据
+# 一级部门带二级部门、单元挂在各自的部门上；高新、中心院区补计划中的单元（儿科高新门诊已开始），
+# 另加 HRP 的组织机构字典与 HIS 的病区字典，让编码治理图有两个来源系统、三本字典。
+
+
+def _classify(code, class_code):
+    return {
+        "kind": "department.classify",
+        "code": code,
+        "scheme_code": "DEPT_MAIN_CLASS",
+        "class_code": class_code,
+        "effective_date": "2020-01-01",
+    }
+
+
+def _child(code, name, parent):
+    return [
+        _dept(code, name),
+        {
+            "kind": "department.set_parent",
+            "code": code,
+            "view_code": "ADMIN",
+            "parent_code": parent,
+            "effective_date": "2020-01-01",
+        },
+    ]
+
+
+def _ext(system, namespace, code, source_name, valid_from="2020-01-01", **target):
+    items = [
+        {
+            "kind": "external_code.register",
+            "system_code": system,
+            "namespace_code": namespace,
+            "external_code": code,
+            "source_name": source_name,
+        }
+    ]
+    if target:
+        target_type = (
+            "department"
+            if "department_code" in target
+            else "service_unit"
+            if "service_unit_code" in target
+            else "unmodeled"
+        )
+        items.append(
+            {
+                "kind": "external_code.assign",
+                "system_code": system,
+                "namespace_code": namespace,
+                "external_code": code,
+                "target_type": target_type,
+                "valid_from": valid_from,
+                "evidence_note": "走查起点数据（模拟）",
+                **target,
+            }
+        )
+    return items
+
+
+OVERVIEW = [
+    # 神经内科：一级部门自己有门诊、病房，二级部门神经介入室有一个单元；高新、中心各有计划单元
+    _dept("SJNK", "神经内科"),
+    _classify("SJNK", "CLINICAL"),
+    *_child("SJJR", "神经介入室", "SJNK"),
+    _unit("SJ-MZ", "神经内科门诊", "OPD", "SJNK"),
+    _unit("SJ-BF", "神经内科病房", "IPD", "SJNK"),
+    _unit("SJ-JR", "神经介入导管室", "EXAM", "SJJR"),
+    _unit("SJ-GX", "神经内科高新门诊", "OPD", "SJNK", campus="GX", valid_from="2026-11-01"),
+    _unit("SJ-ZX", "神经内科中心病房", "IPD", "SJNK", campus="ZX", valid_from="2027-12-27"),
+    # 骨科：两个二级部门分别有 2、3 个单元，各自挂在二级部门上；骨科自己有手术室
+    _dept("GK", "骨科"),
+    _classify("GK", "CLINICAL"),
+    *_child("JZWK", "脊柱外科", "GK"),
+    *_child("GJWK", "关节外科", "GK"),
+    _unit("GK-SS", "骨科手术室", "OR", "GK"),
+    _unit("JZ-MZ", "脊柱外科门诊", "OPD", "JZWK"),
+    _unit("JZ-BF", "脊柱外科病房", "IPD", "JZWK"),
+    _unit("GJ-MZ", "关节外科门诊", "OPD", "GJWK"),
+    _unit("GJ-BF", "关节外科病房", "IPD", "GJWK"),
+    _unit("GJ-GX", "关节外科高新病房", "IPD", "GJWK", campus="GX", valid_from="2027-03-01"),
+    # 儿科：高新门诊已开始（院区筹建期内先开门诊），今天就跨两个院区
+    _dept("EK", "儿科"),
+    _classify("EK", "CLINICAL"),
+    _unit("EK-MZ", "儿科门诊", "OPD", "EK"),
+    _unit("EK-BF", "儿科病房", "IPD", "EK"),
+    _unit("EK-GX", "儿科高新门诊", "OPD", "EK", campus="GX", valid_from="2026-10-15"),
+    _dept("JZK", "急诊科"),
+    _classify("JZK", "CLINICAL"),
+    _unit("JZ-BY", "急诊科", "ED", "JZK"),
+    _unit("JZ-GX", "高新急诊", "ED", "JZK", campus="GX", valid_from="2026-12-01"),
+    # 医技
+    _dept("JYK", "检验科"),
+    _classify("JYK", "MEDTECH"),
+    _unit("JY-BY", "临床检验室", "LAB", "JYK"),
+    _unit("JY-GX", "高新检验室", "LAB", "JYK", campus="GX", valid_from="2026-11-01"),
+    _dept("CSK", "超声科"),
+    _classify("CSK", "MEDTECH"),
+    _unit("CS-BY", "超声检查室", "EXAM", "CSK"),
+    _unit("CS-ZX", "中心超声检查室", "EXAM", "CSK", campus="ZX", valid_from="2027-12-27"),
+    _dept("YXB", "药学部"),
+    _classify("YXB", "SUPPORT"),
+    _unit("YX-MZ", "门诊药房", "PHARMACY", "YXB"),
+    _unit("YX-ZY", "住院药房", "PHARMACY", "YXB"),
+    _unit("YX-GX", "高新药房", "PHARMACY", "YXB", campus="GX", valid_from="2026-11-01"),
+    # 行政部门：没有服务单元，组织总览里计入“没有在用单元的部门”
+    _dept("DWB", "党委办公室"),
+    _classify("DWB", "ADMIN"),
+    # 编码治理：HIS 科室字典再解释几条，病区字典是对象未建模，HRP 组织机构字典部分已对应
+    *_ext("HIS", "DEPT", "D110", "神经内科", department_code="SJNK"),
+    *_ext("HIS", "DEPT", "M201", "儿科门诊", service_unit_code="EK-MZ"),
+    *_ext("HIS", "DEPT", "M202", "儿科高新门诊", "2026-10-15", service_unit_code="EK-GX"),
+    *_ext("HIS", "DEPT", "M301", "骨科门诊"),
+    *_ext("HIS", "WARD", "W01", "神经内科一病区", unmodeled_type="NURSING_UNIT"),
+    *_ext("HIS", "WARD", "W02", "骨科病区", unmodeled_type="NURSING_UNIT"),
+    *_ext("HIS", "WARD", "W03", "儿科病区", unmodeled_type="NURSING_UNIT"),
+    *_ext("HIS", "WARD", "W04", "急诊留观区"),
+    *_ext("HRP", "ORG", "1001", "神经内科", department_code="SJNK"),
+    *_ext("HRP", "ORG", "1002", "骨科", department_code="GK"),
+    *_ext("HRP", "ORG", "1003", "儿科", department_code="EK"),
+    *_ext("HRP", "ORG", "1004", "检验科", department_code="JYK"),
+    *_ext("HRP", "ORG", "1005", "药剂科"),
+    *_ext("HRP", "ORG", "1006", "党办"),
+]
+
+
+def _register_more(s, user) -> None:
+    """组织总览的编码治理图：HIS 再加病区字典，另加 HRP 组织机构字典（配置，直接维护）。"""
+    from hdip_api.models import CodeNamespace, SourceSystem
+
+    his = s.query(SourceSystem).filter_by(code="HIS").one()
+    hrp = SourceSystem(
+        code="HRP",
+        name="HRP 人力资源系统（模拟）",
+        kind="OTHER",
+        is_active=True,
+        updated_by=user.id,
+    )
+    s.add(hrp)
+    s.flush()
+    s.add_all(
+        [
+            CodeNamespace(
+                source_system_id=his.id,
+                code="WARD",
+                name="病区字典",
+                note="病区、护理单元，平台暂未建模",
+                is_active=True,
+                updated_by=user.id,
+            ),
+            CodeNamespace(
+                source_system_id=hrp.id,
+                code="ORG",
+                name="组织机构",
+                note="人事口径的部门",
+                is_active=True,
+                updated_by=user.id,
+            ),
+        ]
+    )
+    s.flush()
+
+
 def _register_his(s, user) -> None:
     """来源系统与字典是配置，维护人直接维护（不经申请）。"""
     from hdip_api.models import CodeNamespace, SourceSystem
@@ -290,7 +455,13 @@ with SessionLocal() as s:
     if "--minimal" not in sys.argv:
         _register_his(s, user)
         second = _apply(s, user, PLUS, "走查起点数据：组织变更、批量裁决、批量分类、关系图（模拟）")
+        _register_more(s, user)
+        third = _apply(s, user, OVERVIEW, "走查起点数据：组织总览的跨院区单元与编码治理（模拟）")
     s.commit()
-suffix = f"、#{second}（组织变更与批量操作）" if second else "；只含最小起点（--minimal）"
+suffix = (
+    f"、#{second}（组织变更与批量操作）、#{third}（组织总览）"
+    if second
+    else "；只含最小起点（--minimal）"
+)
 print(f"已重建 {WALK}（起点数据：申请 #{first}{suffix}）")
 print("代码对照：" + "、".join(f"{k} → {v}" for k, v in KNOWN.items()))

@@ -5,6 +5,7 @@ import {
   Briefcase01Icon,
   Building03Icon,
   Certificate01Icon,
+  DashboardSquare02Icon,
   Database01Icon,
   FileEditIcon,
   FolderLibraryIcon,
@@ -42,6 +43,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: '组织与关系',
     icon: Hospital01Icon,
     items: [
+      { label: '组织总览', icon: DashboardSquare02Icon, to: '/organization-overview' },
       { label: '主体', icon: Hospital01Icon, to: '/institutions' },
       { label: '部门', icon: UserGroupIcon, to: '/departments' },
       { label: '院区', icon: Building03Icon, to: '/campuses' },

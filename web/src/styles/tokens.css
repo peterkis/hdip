@@ -175,6 +175,20 @@
   --hd-flow-edge-soft: var(--hd-gray-300);       /* 竖向关系图（部门隶属）的连线：更浅，降低重心 */
   --hd-flow-card-foot: var(--hd-gray-50);        /* 竖向关系图卡片下半部的底色 */
 
+  /* 统计图（组织总览的桑基图）：每种颜色一个中等饱和度的实色，供节点与连带；中性色给不着色的节点。
+     分类配色（院区、主分类、解释状态）的顺序见 lib/tones.ts，已用 dataviz 校验脚本核过色盲区分度 */
+  --hd-chart-gray: var(--hd-gray-400);
+  --hd-chart-brown: var(--hd-brown-500);
+  --hd-chart-orange: var(--hd-orange-500);
+  --hd-chart-yellow: var(--hd-yellow-600);
+  --hd-chart-green: var(--hd-green-500);
+  --hd-chart-teal: var(--hd-teal-500);
+  --hd-chart-blue: var(--hd-blue-500);
+  --hd-chart-purple: var(--hd-purple-500);
+  --hd-chart-pink: var(--hd-pink-600);
+  --hd-chart-red: var(--hd-red-500);
+  --hd-chart-neutral: var(--hd-gray-300);
+
   /* 强调（主按钮、链接、焦点、选中）。换品牌色只改这一组，或用 [data-accent] */
   --hd-accent: var(--hd-blue-600);
   --hd-accent-hover: var(--hd-blue-700);
@@ -281,6 +295,17 @@
   --hd-flow-edge: var(--hd-gray-600);
   --hd-flow-edge-soft: var(--hd-gray-700);
   --hd-flow-card-foot: var(--hd-gray-850);
+  --hd-chart-gray: var(--hd-gray-500);
+  --hd-chart-brown: var(--hd-brown-500);
+  --hd-chart-orange: var(--hd-orange-600);
+  --hd-chart-yellow: var(--hd-yellow-700);
+  --hd-chart-green: var(--hd-green-500);
+  --hd-chart-teal: var(--hd-teal-500);
+  --hd-chart-blue: var(--hd-blue-500);
+  --hd-chart-purple: var(--hd-purple-500);
+  --hd-chart-pink: var(--hd-pink-600);
+  --hd-chart-red: var(--hd-red-500);
+  --hd-chart-neutral: var(--hd-gray-600);
 
   --hd-accent: var(--hd-blue-500);
   --hd-accent-hover: var(--hd-blue-400);

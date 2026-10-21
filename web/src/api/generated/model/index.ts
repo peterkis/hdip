@@ -115,6 +115,7 @@ export * from './listOptionsParams';
 export * from './listServiceUnitsParams';
 export * from './listSourceSystemsParams';
 export * from './namespaceOut';
+export * from './namespaceOutBreakdown';
 export * from './namespaceWrite';
 export * from './operatorRelationClose';
 export * from './operatorRelationCreate';

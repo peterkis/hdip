@@ -622,6 +622,10 @@ class NamespaceOut(BaseModel):
     code_count: int
     pending_count: int
     """查看日期当天的待裁决数。"""
+    breakdown: dict[str, int] = {}
+    """查看日期当天按源记录去重的解释状态：pending 待裁决 / unmodeled 对象未建模 /
+    department 指向部门 / service_unit 指向服务单元 / mixed 部门与单元都有（按院区条件）。
+    数为 0 的状态不出现。"""
 
 
 class SourceSystemOut(BaseModel):

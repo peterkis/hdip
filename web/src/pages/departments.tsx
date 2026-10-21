@@ -504,18 +504,22 @@ export function DepartmentDetailPage() {
             : `管理编码 ${data.code} · ${asOf} 尚未设立，自 ${shown.valid_from} 起`
         }
         actions={
-          isMaintainer &&
-          !terminal && (
-            <>
-              <Button variant="outline" onClick={() => setDialog('reorg')}>
-                组织变更
-              </Button>
-              <Button variant="outline" onClick={() => setDialog('lifecycle')}>
-                变更生命周期
-              </Button>
-              <Button onClick={() => setDialog('revise')}>修订属性</Button>
-            </>
-          )
+          <>
+            <Button variant="ghost" nativeButton={false} render={<Link to={`/organization-overview?tab=matrix&dept=${data.id}&planned=1`} />}>
+              查看跨院区布局
+            </Button>
+            {isMaintainer && !terminal && (
+              <>
+                <Button variant="outline" onClick={() => setDialog('reorg')}>
+                  组织变更
+                </Button>
+                <Button variant="outline" onClick={() => setDialog('lifecycle')}>
+                  变更生命周期
+                </Button>
+                <Button onClick={() => setDialog('revise')}>修订属性</Button>
+              </>
+            )}
+          </>
         }
       />
 

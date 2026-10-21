@@ -8412,6 +8412,14 @@
           "pending_count": {
             "type": "integer",
             "title": "Pending Count"
+          },
+          "breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Breakdown",
+            "default": {}
           }
         },
         "type": "object",

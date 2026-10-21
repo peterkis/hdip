@@ -4,6 +4,7 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { NamespaceOutBreakdown } from './namespaceOutBreakdown';
 
 export interface NamespaceOut {
   id: number;
@@ -13,4 +14,5 @@ export interface NamespaceOut {
   is_active: boolean;
   code_count: number;
   pending_count: number;
+  breakdown?: NamespaceOutBreakdown;
 }
