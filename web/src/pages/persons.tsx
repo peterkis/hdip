@@ -22,6 +22,7 @@ import { useGetPerson, useListPersons } from '@/api/generated/persons/persons'
 import {
   AssignDialog,
   AssignmentEndDialog,
+  EngagementEndDialog,
   PersonEngageDialog,
   PersonNameDialog,
   PersonRegisterDialog,
@@ -354,6 +355,7 @@ export function PersonDetailPage() {
       {engaging && <PersonEngageDialog open onOpenChange={setEngaging} personCode={data.code} name={data.name} />}
       {dialog?.kind === 'name' && <PersonNameDialog open onOpenChange={close} person={data} />}
       {dialog?.kind === 'work_no' && <WorkNoDialog open onOpenChange={close} engagement={dialog.engagement} />}
+      {dialog?.kind === 'engagement_end' && <EngagementEndDialog open onOpenChange={close} person={data.name} engagement={dialog.engagement} />}
       {dialog?.kind === 'assign' && <AssignDialog open onOpenChange={close} engagement={dialog.engagement} />}
       {dialog?.kind === 'transfer' && <TransferDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
       {dialog?.kind === 'end' && <AssignmentEndDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
@@ -363,7 +365,7 @@ export function PersonDetailPage() {
 
 type PersonDialog =
   | { kind: 'name' }
-  | { kind: 'work_no' | 'assign'; engagement: PersonEngagementOut }
+  | { kind: 'work_no' | 'assign' | 'engagement_end'; engagement: PersonEngagementOut }
   | { kind: 'transfer' | 'end'; assignment: PersonAssignmentOut }
 
 /** 还能调整的一段：未撤销，结束日为空或尚未过去（结束日到达前可改，人员设计 P-3） */
@@ -394,6 +396,9 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
                 {e.work_nos.some((n) => !n.void) ? '换工号' : '登记工号'}
               </InlineAction>
               <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>补归属</InlineAction>
+              <InlineAction onClick={() => onAction({ kind: 'engagement_end', engagement: e })}>
+                {e.valid_to ? '调整期限' : '结束任用'}
+              </InlineAction>
             </>
           )}
           <ChangeLink id={e.change_id} />

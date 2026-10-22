@@ -141,6 +141,7 @@ export * from './personDetailStatus';
 export * from './personEngage';
 export * from './personEngagementBrief';
 export * from './personEngagementOut';
+export * from './personEngagementSetEnd';
 export * from './personRevise';
 export * from './personReviseReason';
 export * from './personRow';

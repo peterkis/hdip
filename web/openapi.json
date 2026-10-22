@@ -4948,6 +4948,9 @@
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonEngagementSetEnd"
+                },
+                {
                   "$ref": "#/components/schemas/PersonAssignmentSetEnd"
                 }
               ],
@@ -4983,6 +4986,7 @@
                   "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
                   "person.engage": "#/components/schemas/PersonEngage",
+                  "person.engagement_set_end": "#/components/schemas/PersonEngagementSetEnd",
                   "person.revise": "#/components/schemas/PersonRevise",
                   "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
@@ -5443,6 +5447,9 @@
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonEngagementSetEnd"
+                },
+                {
                   "$ref": "#/components/schemas/PersonAssignmentSetEnd"
                 }
               ],
@@ -5478,6 +5485,7 @@
                   "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
                   "person.engage": "#/components/schemas/PersonEngage",
+                  "person.engagement_set_end": "#/components/schemas/PersonEngagementSetEnd",
                   "person.revise": "#/components/schemas/PersonRevise",
                   "person.transfer": "#/components/schemas/PersonTransfer",
                   "service_unit.change_department": "#/components/schemas/ServiceUnitChangeDepartment",
@@ -9897,6 +9905,58 @@
           "assignments"
         ],
         "title": "PersonEngagementOut"
+      },
+      "PersonEngagementSetEnd": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.engagement_set_end",
+            "title": "Kind"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "expected_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Valid To"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "extend_assignments": {
+            "type": "boolean",
+            "title": "Extend Assignments",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "engagement_id",
+          "expected_valid_to",
+          "valid_to"
+        ],
+        "title": "PersonEngagementSetEnd",
+        "description": "结束任用、调整尚未到达的结束日（提前、推后、清空），\n或撤销尚未开始的任用（valid_to = 开始日前一日）。\n\n下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；\n推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长\n（extend_assignments 为假时归属不动）。\n结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。"
       },
       "PersonRevise": {
         "properties": {

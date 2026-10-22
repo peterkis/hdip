@@ -37,6 +37,7 @@ import type { PersonAssignmentSetEnd } from './personAssignmentSetEnd';
 import type { PersonChangeWorkNo } from './personChangeWorkNo';
 import type { PersonCreate } from './personCreate';
 import type { PersonEngage } from './personEngage';
+import type { PersonEngagementSetEnd } from './personEngagementSetEnd';
 import type { PersonRevise } from './personRevise';
 import type { PersonTransfer } from './personTransfer';
 import type { ProblemItem } from './problemItem';
@@ -56,7 +57,7 @@ export interface ChangeRequestOut {
   id: number;
   status: ChangeRequestOutStatus;
   note: string | null;
-  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonRevise | PersonChangeWorkNo | PersonAssign | PersonTransfer | PersonAssignmentSetEnd)[];
+  items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonRevise | PersonChangeWorkNo | PersonAssign | PersonTransfer | PersonEngagementSetEnd | PersonAssignmentSetEnd)[];
   item_labels: string[];
   item_summaries?: string[];
   item_views?: ItemView[];

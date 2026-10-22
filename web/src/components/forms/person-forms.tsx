@@ -500,3 +500,75 @@ export function AssignDialog({ engagement, ...props }: DialogProps & { engagemen
     </ItemDialog>
   )
 }
+
+// ------------------------------------------------------------------ P1.3：结束任用、调整结束日、撤销计划
+type EndMode = 'end' | 'clear' | 'cancel'
+
+/** 结束日变化后，下属归属与工号会怎样（与后端 person_engagement_set_end 同一规则，只用于预览） */
+function endPreview(e: PersonEngagementOut, mode: EndMode, last: string, extend: boolean): string[] {
+  const old = e.valid_to ?? null
+  const next = mode === 'clear' ? null : mode === 'cancel' ? dayBefore(e.valid_from) : last
+  if (mode === 'end' && !last) return []
+  const shorter = next !== null && (old === null || next < old)
+  const out: string[] = []
+  const rows = [
+    ...e.assignments.map((a) => ({ label: a.department.name, r: a, kind: '归属' })),
+    ...e.work_nos.map((n) => ({ label: `工号 ${n.work_no ?? ''}`, r: n, kind: '工号' })),
+  ]
+  for (const { label, r, kind } of rows) {
+    if (r.void) continue
+    if (shorter) {
+      if (r.valid_to && r.valid_to <= next!) continue
+      out.push(r.valid_from > next! ? `${label}（原定 ${r.valid_from} 开始）撤销，从未生效` : `${label}止于 ${next}`)
+    } else if (r.valid_to === old && (kind === '工号' || extend)) {
+      out.push(`${label}延至 ${next ?? '长期'}`)
+    }
+  }
+  return out
+}
+
+export function EngagementEndDialog({ person, engagement: e, ...props }: DialogProps & { person: string; engagement: PersonEngagementOut }) {
+  const planned = e.valid_from > today()
+  const [mode, setMode] = useState<EndMode | ''>(e.valid_to ? '' : 'end')
+  const [last, setLast] = useState(e.valid_to ?? today())
+  const [extend, setExtend] = useState(true)
+  const next = mode === 'clear' ? null : mode === 'cancel' ? dayBefore(e.valid_from) : last
+  const longer = mode === 'clear' || (mode === 'end' && !!e.valid_to && !!last && last > e.valid_to)
+  const preview = mode ? endPreview(e, mode, last, extend) : []
+  const modes = [
+    { value: 'end', label: e.valid_to ? '改最后有效日（提前或推后）' : '结束任用（填最后有效日）' },
+    ...(e.valid_to ? [{ value: 'clear', label: '撤回结束日（长期有效）' }] : []),
+    ...(planned ? [{ value: 'cancel', label: `撤销这项计划（原定 ${e.valid_from} 开始，从未生效）` }] : []),
+  ]
+  return (
+    <ItemDialog
+      {...props}
+      title={`结束 / 调整任用：${person}`}
+      description={`当前 ${period(e.valid_from, e.valid_to)}。最后有效日当天仍有效；结束日到达前可以再改，到达后不能改，再次任用请新建任用。`}
+      build={() =>
+        requireFields([
+          ['mode', !!mode, '请选择要怎么调整'],
+          ['valid_to', mode !== 'end' || !!last, '请填写最后有效日'],
+          ['valid_to', mode !== 'end' || !last || last >= e.valid_from, `最后有效日不能早于任用开始日 ${e.valid_from}`],
+        ]) ?? {
+          kind: 'person.engagement_set_end',
+          engagement_id: e.id,
+          expected_valid_to: e.valid_to ?? null,
+          valid_to: next,
+          extend_assignments: extend,
+        }
+      }
+    >
+      <SelectField label="怎么调整" name="mode" required placeholder="请选择" value={mode} onChange={(v) => setMode(v as EndMode)} options={modes} />
+      {mode === 'end' && (
+        <TextField label="最后有效日（含当日）" name="valid_to" type="date" required value={last} onChange={setLast} hint="可以填过去的日期（迟报的离开）" />
+      )}
+      {longer && <ToggleChip label="同一天到期的部门归属一起延长" checked={extend} onChange={setExtend} />}
+      {mode && (
+        <Callout tone="info" title="下属归属与工号会这样处理">
+          {preview.length ? preview.join('；') : '不受影响'}。此人在其他主体的任用不受影响；页面不表示其他系统的离院处置已完成。
+        </Callout>
+      )}
+    </ItemDialog>
+  )
+}

@@ -314,3 +314,13 @@ def assign(engagement_id, dept, valid_from, valid_to=None):
     if valid_to:
         item["valid_to"] = valid_to
     return item
+
+
+def engagement_end(engagement_id, valid_to, expected=None, extend_assignments=True):
+    return {
+        "kind": "person.engagement_set_end",
+        "engagement_id": engagement_id,
+        "expected_valid_to": expected,
+        "valid_to": valid_to,
+        "extend_assignments": extend_assignments,
+    }

@@ -156,7 +156,7 @@ stateDiagram-v2
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
 | 分类与外部标识 | `department.classification_close`、`service_unit.classify`、`service_unit.classification_close`、`external_code.register`、`.assign`、`.assignment_close` | `department_classification`、`service_unit_classification`、`external_code`、`external_code_assignment` |
 | 部门组织变更 | `department.reorganize`（与同一申请里的 `department.create`、单元改挂、人员调科、隶属调整、结束编码解释等配合） | `department_version`（退出部门新版本为“被替代”）、`department_change_event`、`department_change_participant`；自动结束退出部门的上级边、管理关系、分类、别名、主体归属 |
-| 人员（P1.1、P1.2） | `person.create`、`person.engage`、`person.transfer`、`person.assignment_set_end`；`person.revise`（更名 / 更正误录）、`person.change_work_no`（换号 / 更正）、`person.assign`（补主部门）（处理函数在 `services/persons.py`） | `person`、`person_version`、`person_engagement`、`person_work_no`、`person_assignment` |
+| 人员（P1） | `person.create`、`person.engage`、`person.transfer`、`person.assignment_set_end`；`person.engagement_set_end`（结束任用 / 调整结束日 / 撤销计划，P1.3）；`person.revise`（更名 / 更正误录）、`person.change_work_no`（换号 / 更正）、`person.assign`（补主部门）（处理函数在 `services/persons.py`） | `person`、`person_version`、`person_engagement`、`person_work_no`、`person_assignment` |
 
 ## 4. 读取：按日期
 
@@ -194,6 +194,7 @@ stateDiagram-v2
 | 0015 | 院区、部门、服务单元的代码改由系统分配：三个发号序列与 `code_reservation`（只追加）；院区 / 部门 / 服务单元版本加拼音码 `pinyin`。开发库与走查库按新规则重建 |
 | 0016 | 人员模块 P1.1：`person`、`person_version`（姓名、拼音码、`revise_reason`）、`person_engagement`、`person_work_no`、`person_assignment`；保护函数 `hdip_guard_open_end`（结束日到达前可改）；人员发号序列；任用类型等选项；确认规则 `person.create / engage / transfer / assignment_set_end` |
 | 0017 | 人员模块 P1.2：确认规则 `person.revise`、`person.change_work_no`、`person.assign`（表结构不变） |
+| 0018 | 人员模块 P1.3：确认规则 `person.engagement_set_end`（表结构不变） |
 
 ### 新增一类对象或变更的检查单
 
@@ -431,6 +432,7 @@ erDiagram
 - 结束任用、调科、结束归属都带“预期原结束日”（`expected_valid_to`），换工号带“预期当前工号”（`expected_work_no`），确认时与库里不一致就拒绝。
 - 换工号（P1.2）：旧号止于生效日前一日，新号自生效日起、到任用结束；`revise_reason` 为 `CHANGE` 换号或 `CORRECTION` 更正误录。生效日须在任用期间内、晚于当前工号的开始日（当前工号尚未开始时可在其开始日当天直接更正）。
 - 姓名修订（P1.2）：沿用版本表的修订规则（只作用于最新版本、未生效版本可在开始日当天更正、内容无变化被拒），`revise_reason` 不参与“有无变化”比较（`apply._next_version` 的 `extra`）。
+- 结束任用 / 调整结束日 / 撤销计划（P1.3，`person.engagement_set_end`）：原结束日已过去时拒绝（不“接续”，再次任用 = 新任用）；撤销只限尚未开始的任用。下属归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销（空期间）；推后 / 清空时工号与“结束日等于原结束日”的归属一起延长（`extend_assignments` 为假时归属不动）。同一人在其他主体的任用不受影响；确认时按当时的数据处理，提交后新出现的计划归属也一并处理。
 - 提示（不阻止）：变更项处理结果里的 `notices`（同名人员、部门筹备 / 暂停履职、暂未分配主部门），随预演结果返回，申请页显示在对应行下。
 - 权限（`core/permissions.py`）：`person.view`、`person.view_sensitive`、`person.export`、`person.change`。没有 `person.view` 时人员接口 403，含人员变更项的申请整张隐藏（按号打开为 404）。敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（目前为空：工号不是敏感字段；身份证号、电话将来加入时登记），读接口、导出统一置空并列入 `masked_fields`。
 - 拼音码：人名首字按姓氏读音（前端 `lib/pinyin.ts` 的 `person` 模式，单 S、曾 Z、区 O），组织名称的固定读音（区 → Q）不适用；后端 pypinyin 没有姓氏模式，只在变更项未给出时兜底。

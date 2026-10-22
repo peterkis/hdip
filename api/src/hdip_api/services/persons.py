@@ -32,6 +32,7 @@ from hdip_api.schemas.items import (
     PersonChangeWorkNo,
     PersonCreate,
     PersonEngage,
+    PersonEngagementSetEnd,
     PersonRevise,
     PersonTransfer,
 )
@@ -625,6 +626,93 @@ def person_assign(ctx: Ctx, item: PersonAssign) -> dict:
     }
 
 
+def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
+    s = ctx.session
+    e = _locked_engagement(s, item.engagement_id)
+    today = _today(s)
+    old, new = e.valid_to, item.valid_to
+    who = person_name(s, e.person_id, e.valid_from)
+    if old != item.expected_valid_to:
+        now = "长期有效" if old is None else f"最后有效日 {old.isoformat()}"
+        raise ItemError(
+            f"这项任用已被申请 #{e.closed_change_id} 改为{now}，与发起时看到的不同",
+            "engagement_id",
+            hint="请刷新人员详情，按现在的情况重新发起。",
+        )
+    if old is not None and old < today:
+        raise ItemError(
+            f"这项任用已于 {old.isoformat()} 结束，结束日不能再改",
+            "valid_to",
+            hint="如再次任用，请在人员详情点“建立任用（再次任用）”，这会新建一项任用。",
+        )
+    if new == old:
+        raise ItemError("结束日没有变化", "valid_to")
+    if new is not None and new < e.valid_from - DAY:
+        raise ItemError(f"最后有效日不能早于任用开始日 {e.valid_from.isoformat()}", "valid_to")
+    cancelling = new is not None and new == e.valid_from - DAY
+    if cancelling and e.valid_from <= today:
+        raise ItemError(
+            f"这项任用已于 {e.valid_from.isoformat()} 生效，不能撤销，只能结束",
+            "valid_to",
+            hint=f"最后有效日最早填 {e.valid_from.isoformat()}。",
+        )
+    before = engagement_snapshot(s, e)
+    shorter = new is not None and (old is None or new < old)
+    handled: list[str] = []
+    children = [
+        *(
+            ("归属", r)
+            for r in s.scalars(
+                select(PersonAssignment)
+                .where(PersonAssignment.engagement_id == e.id)
+                .with_for_update()
+            )
+        ),
+        *(
+            ("工号", r)
+            for r in s.scalars(
+                select(PersonWorkNo).where(PersonWorkNo.engagement_id == e.id).with_for_update()
+            )
+        ),
+    ]
+    for what, r in sorted(children, key=lambda x: x[1].valid_from):
+        if is_void(r):
+            continue
+        label = (
+            _dept_name(s, r.department_id, r.valid_from) if what == "归属" else f"工号 {r.work_no}"
+        )
+        if shorter:
+            if r.valid_to is not None and r.valid_to <= new:
+                continue
+            if r.valid_from > new:
+                _set_end(ctx, r, r.valid_from - DAY)
+                handled.append(f"{label}（原定 {r.valid_from.isoformat()} 开始）撤销，从未生效")
+            else:
+                _set_end(ctx, r, new)
+                handled.append(f"{label}止于 {new.isoformat()}")
+        elif r.valid_to == old and (what == "工号" or item.extend_assignments):
+            _set_end(ctx, r, new)
+            handled.append(f"{label}延至 {'长期' if new is None else new.isoformat()}")
+        if what == "归属":
+            ctx.new_assignments[r.id] = ctx.index
+    _set_end(ctx, e, new)
+    after = engagement_snapshot(s, e) | {"handled": handled}
+    if cancelling:
+        notices = ["撤销尚未开始的任用：从未生效，记录保留；人员身份与代码不变"]
+    elif shorter:
+        notices = ["本次任用关系自次日起结束（不表示其他系统的离院处置已完成）"]
+    else:
+        notices = []
+    if not shorter and not item.extend_assignments:
+        notices.append("部门归属未随任用延长：延长后的期间暂未分配主部门")
+    return {
+        "target": f"人员 {s.get(Person, e.person_id).code} {who}",
+        "before": before,
+        "after": after,
+        "notices": notices + handled,
+    }
+
+
 HANDLERS = {
     "person.create": person_create,
     "person.revise": person_revise,
@@ -632,6 +720,7 @@ HANDLERS = {
     "person.assign": person_assign,
     "person.engage": person_engage,
     "person.transfer": person_transfer,
+    "person.engagement_set_end": person_engagement_set_end,
     "person.assignment_set_end": person_assignment_set_end,
 }
 

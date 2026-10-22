@@ -276,6 +276,13 @@ def describe(n: _Names, i: dict) -> str:
         case "person.transfer":
             who, dept, _, _ = n.pa(i["assignment_id"])
             return f"“{who}”从{dept}调到“{n.d(i['department_code'])}”{since()}"
+        case "person.engagement_set_end":
+            who = n.pe(i["engagement_id"])
+            if not i.get("valid_to"):
+                return f"清除“{who}”任用的结束日（长期有效）"
+            return f"“{who}”任用的最后有效日改为 {_day(i['valid_to'])}" + (
+                f"（原为 {_day(i['expected_valid_to'])}）" if i.get("expected_valid_to") else ""
+            )
         case "person.revise":
             what = "更名为" if i["reason"] == "RENAME" else "姓名更正为"
             return f"“{n.p(i['code'])}”{what}“{i['name']}”{since()}"
@@ -568,6 +575,33 @@ def _view(
                 *_engage_parts(n, i),
                 _p("text", f"自 {day('valid_from')}"),
             ], (f"工号 {i['work_no']}" if i.get("work_no") else None)
+        case "person.engagement_set_end":
+            old = i.get("expected_valid_to")
+            if not i.get("valid_to"):
+                return [
+                    _p("chip", n.pe(i["engagement_id"])),
+                    _p("text", "任用"),
+                    _p("tag", "清除结束日", "blue"),
+                    _p("text", f"原为 {_day(old)}" if old else ""),
+                ], None
+            tag = (
+                ("结束任用", "gray")
+                if not old
+                else (
+                    ("提前结束", "gray")
+                    if _day(i["valid_to"]) < _day(old)
+                    else ("推后结束日", "blue")
+                )
+            )
+            return [
+                _p("chip", n.pe(i["engagement_id"])),
+                _p("text", "任用"),
+                _p("tag", *tag),
+                _p(
+                    "text",
+                    f"最后有效日 {_day(i['valid_to'])}" + (f"（原为 {_day(old)}）" if old else ""),
+                ),
+            ], None
         case "person.revise":
             return [
                 _p("chip", n.p(i["code"])),

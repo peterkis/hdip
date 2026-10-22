@@ -724,6 +724,23 @@ class PersonTransfer(_Item):
     effective_date: date
 
 
+class PersonEngagementSetEnd(_Item):
+    """结束任用、调整尚未到达的结束日（提前、推后、清空），
+    或撤销尚未开始的任用（valid_to = 开始日前一日）。
+
+    下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；
+    推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长
+    （extend_assignments 为假时归属不动）。
+    结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。
+    """
+
+    kind: Literal["person.engagement_set_end"]
+    engagement_id: int
+    expected_valid_to: date | None
+    valid_to: date | None
+    extend_assignments: bool = True
+
+
 class PersonAssignmentSetEnd(_Item):
     """结束一条归属、调整它尚未到达的结束日（valid_to 为最后有效日；空 = 清除结束日），
     或撤销尚未开始的归属（valid_to = 开始日前一日）。"""
@@ -775,6 +792,7 @@ ChangeItem = Annotated[
     | PersonChangeWorkNo
     | PersonAssign
     | PersonTransfer
+    | PersonEngagementSetEnd
     | PersonAssignmentSetEnd,
     Field(discriminator="kind"),
 ]
@@ -822,6 +840,7 @@ KIND_LABELS: dict[str, str] = {
     "person.change_work_no": "变更业务工号",
     "person.assign": "补主部门归属",
     "person.transfer": "调科",
+    "person.engagement_set_end": "结束 / 调整任用期限",
     "person.assignment_set_end": "结束部门归属",
 }
 
