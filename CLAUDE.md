@@ -77,7 +77,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
   - 待裁决不存储：某日没有解释即待裁决；裁决 = 新增解释（开始日可在过去）。待裁决与对象未建模都不进导出。
   - 分类方案写明 `meaning_for_department` / `meaning_for_unit`，为空即不适用于该对象；外部分类代码按正式代码表原样书写（如 `03.05`），不臆造。
 - 人员（P1.1，迁移 0016，人员设计）：`person` 只留身份（代码 `P` + 6 位，系统分配，与医院业务工号无关）；姓名在 `person_version`（`revise_reason` 区分登记 / 更名 / 更正误录）；任用 `person_engagement`、业务工号 `person_work_no`、部门归属 `person_assignment` 都带期间。人员上**不存当前部门、不存在职 / 离职状态**（按日期从任用派生）。
-  - 任用、工号、归属的结束日**到达前可改**（`hdip_guard_open_end`），到达后不可改、不“接续”，再次任用 = 新任用；组织表仍是“结束日只写一次”。改结束日的变更项带 `expected_valid_to`，与库里不一致即拒绝。
+  - 任用、工号、归属的结束日**到达前可改**（`hdip_guard_open_end`），到达后不可改、不“接续”，再次任用 = 新任用；追溯结束 / 部门追溯退出时，只有**尚未开始**的下属计划自动撤销，已生效的归属、工号、职务不得改成“从未生效”（整项不成立并列出）；结束日逐次调整从已确认申请结果还原（`end_changes`）；“当前主部门”只取 `kind = PRIMARY`；组织表仍是“结束日只写一次”。改结束日的变更项带 `expected_valid_to`，与库里不一致即拒绝。
   - 同一人员 + 同一主体任用期间不重叠（P1 限制，可撤掉的约束）；同一任用同一时点最多一条主归属；同一主体内一个工号永远只属于一个人（本人返聘可沿用）。
   - 归属完整期间落在任用期间内；部门已设立且无撤销 / 被替代段；筹备、暂停履职可以。部门撤销 / 被替代时，与退出日及以后相交的人员归属（含预约调入）阻止确认并列出，在同一申请里调科或结束归属；不随服务单元或名称自动迁人。
   - 变更项：`person.create`、`.engage`（新建任用 + 工号 + 主归属；暂未分配须写原因）、`.transfer`（调科：旧止于 D−1、新自 D 起）、`.assignment_set_end`、`.revise`（`RENAME` 更名 / `CORRECTION` 更正误录，都不改写已生效历史）、`.change_work_no`（`CHANGE` / `CORRECTION`，带 `expected_work_no`）、`.assign`（补主部门）、`.engagement_set_end`（结束 / 提前 / 推后 / 清空结束日 / 撤销计划，下属归属与工号随之处理）；处理结果可带 `notices`（不阻止的提示：同名、部门筹备 / 暂停、暂未分配）；处理在 `services/persons.py`，最终检查 `check_persons`。确认在咨询锁下串行执行。
@@ -164,5 +164,6 @@ make check     # ruff + 前端类型检查
 
 ## 待确认
 
+- 人员敏感字段在申请页（`item_summaries`、`item_views`、`outcomes`）尚未按 `PERSON_FIELD_PERMISSIONS` 脱敏：**登记任何敏感字段前必须完成**（人员设计第 10.3 节）。
 - 认证与用户来源：目前是**开发期身份**——前端在请求头 `X-HDIP-User` 带用户名，后端只认 `app_user` 里启用的用户（种子：solo（显示名“张三”）维护+确认、maintainer、confirmer、viewer）。这不是安全措施。正式方案（本地账号或内网门户登录）确定后只替换 `api/src/hdip_api/core/auth.py` 与 `web/src/lib/session.ts`。
 - 主体性质目前是自由文本（旧仓库为“按登记证照确认”），是否改为选项待定。

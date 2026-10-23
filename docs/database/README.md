@@ -438,6 +438,8 @@ erDiagram
 - 换工号（P1.2）：旧号止于生效日前一日，新号自生效日起、到任用结束；`revise_reason` 为 `CHANGE` 换号或 `CORRECTION` 更正误录。生效日须在任用期间内、晚于当前工号的开始日（当前工号尚未开始时可在其开始日当天直接更正）。
 - 姓名修订（P1.2）：沿用版本表的修订规则（只作用于最新版本、未生效版本可在开始日当天更正、内容无变化被拒），`revise_reason` 不参与“有无变化”比较（`apply._next_version` 的 `extra`）。
 - 结束任用 / 调整结束日 / 撤销计划（P1.3，`person.engagement_set_end`）：原结束日已过去时拒绝（不“接续”，再次任用 = 新任用）；撤销只限尚未开始的任用。下属归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销（空期间）；推后 / 清空时工号与“结束日等于原结束日”的归属一起延长（`extend_assignments` 为假时归属不动）。同一人在其他主体的任用不受影响；确认时按当时的数据处理，提交后新出现的计划归属也一并处理。
+- **追溯结束不改写已生效的历史**（2026-10-23）：任用追溯结束、部门追溯退出时，结束日（退出日）之后才开始的下属关系——尚未开始的计划自动撤销（空期间）；已经生效的归属、工号、职务不改成空期间，整项不成立并列出对象与开始日（`persons.person_engagement_set_end`、`persons.end_department_duties`）。`hdip_guard_open_end` 只防“已过去的结束日再改”，这条规则在应用层检查。
+- 任用结束日的调整记录不另建表：从已确认申请 `results` 中 `person.engage`（登记时的结束日）与 `person.engagement_set_end`（前后结束日、随之处理的下属关系）还原（`person_queries._end_changes`），详情接口的 `end_changes`。
 - 提示（不阻止）：变更项处理结果里的 `notices`（同名人员、部门筹备 / 暂停履职、暂未分配主部门），随预演结果返回，申请页显示在对应行下。
 - 权限（`core/permissions.py`）：`person.view`、`person.view_sensitive`、`person.export`、`person.change`。没有 `person.view` 时人员接口 403，含人员变更项的申请整张隐藏（按号打开为 404）。敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（目前为空：工号不是敏感字段；身份证号、电话将来加入时登记），读接口、导出统一置空并列入 `masked_fields`。
 - 拼音码：人名首字按姓氏读音（前端 `lib/pinyin.ts` 的 `person` 模式，单 S、曾 Z、区 O），组织名称的固定读音（区 → Q）不适用；后端 pypinyin 没有姓氏模式，只在变更项未给出时兜底。
