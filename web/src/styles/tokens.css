@@ -219,6 +219,8 @@
   --hd-tag-purple-bg: var(--hd-purple-200); --hd-tag-purple-text: var(--hd-purple-800);
   --hd-tag-pink-bg: var(--hd-pink-200);     --hd-tag-pink-text: var(--hd-pink-800);
   --hd-tag-red-bg: var(--hd-red-200);       --hd-tag-red-text: var(--hd-red-800);
+  /* 青：2026-10-23 为任用类型补的第 10 种标签色（与其他标签同一明度区间，正文对比 7.2:1） */
+  --hd-tag-teal-bg: var(--hd-teal-200);     --hd-tag-teal-text: var(--hd-teal-800);
 
   /* 文字角色：字号 / 行高 / 字重 / 字距 */
   --hd-type-caption-size: var(--hd-size-50);
@@ -334,6 +336,7 @@
   --hd-tag-purple-bg: #3c2d49;  --hd-tag-purple-text: var(--hd-purple-200);
   --hd-tag-pink-bg: #4e2c3c;    --hd-tag-pink-text: var(--hd-pink-200);
   --hd-tag-red-bg: #522e2a;     --hd-tag-red-text: var(--hd-red-200);
+  --hd-tag-teal-bg: #173f3d;    --hd-tag-teal-text: var(--hd-teal-200);
 
   --hd-elevation-card: 0 0 0 1px var(--hd-alpha-white-100);
   --hd-elevation-popover: 0 0 0 1px var(--hd-alpha-white-100), 0 4px 18px #00000066;

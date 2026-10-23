@@ -102,16 +102,17 @@ export const CODE_BREAKDOWN_TONE: Record<string, ChartTone> = {
 }
 
 /**
- * 任用类型：按任用一级类别着色，同一类别同一颜色（2026-10-23 Peter）。
- * 避开已表示状态的绿、橙、黄、红、灰：人事任用 = 蓝，派遣 = 棕，外部专业 = 紫，培训学习 = 粉。
+ * 任用类型：八种各用一色，按含义取色（2026-10-23 Peter：每种类型单独着色）。
+ * 这一列表示“哪种用工形式”，不表示状态好坏（同部门主分类 MAIN_CLASS_TONE）；不用红、灰，免得像“停用 / 已结束”。
+ * 两种主题下正文对比都 ≥ 6:1，相邻两色的底色或正文色差都清楚可辨（2026-10-23 按 tokens.css 计算）。
  */
 export const ENGAGEMENT_TYPE_TONE: Record<string, Tone> = {
-  STAFF: 'blue',
-  CONTRACT: 'blue',
-  REHIRE: 'blue',
-  DISPATCH: 'brown',
-  EXTERNAL: 'purple',
-  RESIDENT: 'pink',
-  VISITING: 'pink',
-  INTERN: 'pink',
+  STAFF: 'blue', // 在编：正式编制，最稳定
+  CONTRACT: 'teal', // 合同（人事代理）：同为医院直接用工，与在编相邻的青色
+  DISPATCH: 'brown', // 劳务派遣：由第三方单位用工，中性的大地色
+  REHIRE: 'orange', // 退休返聘：资深、经验，暖色
+  EXTERNAL: 'purple', // 外聘专家：专业与声望
+  RESIDENT: 'green', // 规培：规范化培养中，成长
+  VISITING: 'yellow', // 进修：短期来院学习，明亮、临时
+  INTERN: 'pink', // 实习：学生，最年轻
 }

@@ -2,9 +2,9 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
-export type Tone = 'gray' | 'brown' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink' | 'red'
+export type Tone = 'gray' | 'brown' | 'orange' | 'yellow' | 'green' | 'teal' | 'blue' | 'purple' | 'pink' | 'red'
 
-export const TONES: Tone[] = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red']
+export const TONES: Tone[] = ['gray', 'brown', 'orange', 'yellow', 'green', 'teal', 'blue', 'purple', 'pink', 'red']
 
 // Tailwind 需要字面类名，所以逐一列出
 const TONE_CLASS: Record<Tone, string> = {
@@ -13,6 +13,7 @@ const TONE_CLASS: Record<Tone, string> = {
   orange: 'bg-tag-orange-bg text-tag-orange-text',
   yellow: 'bg-tag-yellow-bg text-tag-yellow-text',
   green: 'bg-tag-green-bg text-tag-green-text',
+  teal: 'bg-tag-teal-bg text-tag-teal-text',
   blue: 'bg-tag-blue-bg text-tag-blue-text',
   purple: 'bg-tag-purple-bg text-tag-purple-text',
   pink: 'bg-tag-pink-bg text-tag-pink-text',

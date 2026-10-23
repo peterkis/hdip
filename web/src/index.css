@@ -97,6 +97,8 @@
   --color-tag-pink-text: var(--hd-tag-pink-text);
   --color-tag-red-bg: var(--hd-tag-red-bg);
   --color-tag-red-text: var(--hd-tag-red-text);
+  --color-tag-teal-bg: var(--hd-tag-teal-bg);
+  --color-tag-teal-text: var(--hd-tag-teal-text);
 
   /* ---- shadcn 约定的颜色名（ui/ 组件使用） */
   --color-background: var(--background);
