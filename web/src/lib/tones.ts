@@ -100,3 +100,18 @@ export const CODE_BREAKDOWN_TONE: Record<string, ChartTone> = {
   unmodeled: 'gray',
   pending: 'orange',
 }
+
+/**
+ * 任用类型：按任用一级类别着色，同一类别同一颜色（2026-10-23 Peter）。
+ * 避开已表示状态的绿、橙、黄、红、灰：人事任用 = 蓝，派遣 = 棕，外部专业 = 紫，培训学习 = 粉。
+ */
+export const ENGAGEMENT_TYPE_TONE: Record<string, Tone> = {
+  STAFF: 'blue',
+  CONTRACT: 'blue',
+  REHIRE: 'blue',
+  DISPATCH: 'brown',
+  EXTERNAL: 'purple',
+  RESIDENT: 'pink',
+  VISITING: 'pink',
+  INTERN: 'pink',
+}

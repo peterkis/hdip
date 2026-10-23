@@ -3,9 +3,9 @@ import type { Tone } from '@/components/kit/tag'
 import { PLANNED_TONE } from '@/lib/tones'
 
 export const PERSON_STATUS: Record<string, string> = {
-  ENGAGED: '有有效任用',
+  ENGAGED: '有效任用',
   PLANNED: '计划中',
-  NONE: '无有效任用',
+  NONE: '无效任用',
 }
 
 export const PERSON_STATUS_TONE: Record<string, Tone> = {

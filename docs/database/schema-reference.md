@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0019**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0020**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -1244,9 +1244,9 @@ $function$
 | engagement_type | `RESIDENT` | 规培 | 60 | 是 |
 | engagement_type | `VISITING` | 进修 | 70 | 是 |
 | engagement_type | `INTERN` | 实习 | 80 | 是 |
-| person_relation_status | `ENGAGED` | 有有效任用 | 10 | 是 |
-| person_relation_status | `PLANNED` | 仅有计划任用 | 20 | 是 |
-| person_relation_status | `NONE` | 无有效任用 | 30 | 是 |
+| person_relation_status | `ENGAGED` | 有效任用 | 10 | 是 |
+| person_relation_status | `PLANNED` | 计划中 | 20 | 是 |
+| person_relation_status | `NONE` | 无效任用 | 30 | 是 |
 | service_unit_type | `OPD` | 门诊单元 | 10 | 是 |
 | service_unit_type | `IPD` | 住院单元 | 20 | 是 |
 | service_unit_type | `ED` | 急诊单元 | 30 | 是 |

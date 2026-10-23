@@ -14,7 +14,7 @@ import {
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
 import { useMutation } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useListDepartments } from '@/api/generated/master/master'
 import type { PersonAssignmentOut, PersonDetail, PersonDutyOut, PersonEngagementOut, PersonRow } from '@/api/generated/model'
@@ -34,7 +34,7 @@ import {
   WorkNoDialog,
 } from '@/components/forms/person-forms'
 import { Callout } from '@/components/kit/callout'
-import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
+import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, nextSort, SearchBox, ToggleChip, type DbSort } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
@@ -50,6 +50,7 @@ import { DEPARTMENT_LIFECYCLE, period, today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, WORK_NO_REASON } from '@/lib/person'
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
+import { EngagementTypeTag } from '@/components/engagement-type-tag'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -96,6 +97,8 @@ export function PersonsPage() {
     ...(f.dept && { department_id: Number(f.dept) }),
   })
   const types = optionLabels.engagement_type ?? {}
+  const [sort, setSort] = useState<DbSort | null>(null)
+  const sorted = useMemo(() => sortRows(rows, sort, types), [rows, sort, types])
 
   const exporting = useMutation({
     mutationFn: async (dataset: 'persons' | 'person-relations') => downloadCsv(dataset, asOf),
@@ -113,7 +116,7 @@ export function PersonsPage() {
           <>
             {can('person.export') && (
               <>
-                <Button variant="ghost" disabled={exporting.isPending} onClick={() => exporting.mutate('persons')} title="当天有有效任用的人员，一人一行">
+                <Button variant="ghost" disabled={exporting.isPending} onClick={() => exporting.mutate('persons')} title="当天有效任用的人员，一人一行">
                   <Icon icon={Download01Icon} inline="start" />
                   导出名册
                 </Button>
@@ -180,15 +183,17 @@ export function PersonsPage() {
       ) : (
         <DbTable
           columns={[
-            { label: '姓名', icon: TextFontIcon, className: 'min-w-36' },
-            { label: '人员代码', icon: HashtagIcon },
-            { label: '任用', icon: Briefcase01Icon },
-            { label: '主部门', icon: UserGroupIcon },
-            { label: '工号', icon: HashtagIcon },
-            { label: '任用期间', icon: Calendar03Icon },
+            { label: '姓名', icon: TextFontIcon, className: 'min-w-36', sortKey: 'name' },
+            { label: '人员代码', icon: HashtagIcon, sortKey: 'code' },
+            { label: '任用', icon: Briefcase01Icon, sortKey: 'type' },
+            { label: '主部门', icon: UserGroupIcon, sortKey: 'dept' },
+            { label: '工号', icon: HashtagIcon, sortKey: 'work_no' },
+            { label: '任用期间', icon: Calendar03Icon, sortKey: 'from' },
           ]}
+          sort={sort}
+          onSort={(key) => setSort(nextSort(sort, key))}
         >
-          {rows.map((r) => (
+          {sorted.map((r) => (
             <DbRow key={r.id}>
               <DbCell>
                 <span className="flex flex-wrap items-center gap-1.5">
@@ -200,7 +205,7 @@ export function PersonsPage() {
                 </span>
               </DbCell>
               <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{r.code}</DbCell>
-              <Stacked rows={r} render={(e) => types[e.engagement_type] ?? e.engagement_type} />
+              <Stacked rows={r} render={(e) => <EngagementTypeTag code={e.engagement_type} />} />
               <Stacked
                 rows={r}
                 render={(e) =>
@@ -224,12 +229,36 @@ export function PersonsPage() {
           共 <span className="text-fg-secondary">{rows.length}</span> 人
         </span>
         <span>
-          {f.all ? '全部人员，不看日期' : `${asOf} 当天有有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
+          {f.all ? '全部人员，不看日期' : `${asOf} 当天有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
         </span>
       </DbFooter>
       {registering && <PersonRegisterDialog open onOpenChange={setRegistering} />}
     </>
   )
+}
+
+const zh = new Intl.Collator('zh-Hans-CN')
+
+/** 名册按表头排序：多项任用时按第一项（与格子里第一行一致）；空值排在最后 */
+function sortRows(rows: PersonRow[], sort: DbSort | null, types: Record<string, string>): PersonRow[] {
+  if (!sort) return rows
+  const first = (r: PersonRow) => r.engagements[0]
+  const key: Record<string, (r: PersonRow) => string | undefined> = {
+    name: (r) => r.name,
+    code: (r) => r.code,
+    type: (r) => (first(r) ? (types[first(r).engagement_type] ?? first(r).engagement_type) : undefined),
+    dept: (r) => first(r)?.department?.name,
+    work_no: (r) => first(r)?.work_no ?? undefined,
+    from: (r) => first(r)?.valid_from,
+  }
+  const get = key[sort.key]
+  const sign = sort.dir === 'asc' ? 1 : -1
+  return [...rows].sort((a, b) => {
+    const x = get(a)
+    const y = get(b)
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1
+    return sign * zh.compare(x, y)
+  })
 }
 
 /** 一人多项任用时，在同一格里上下排列 */
@@ -261,7 +290,7 @@ const covers = (from: string, to: string | null | undefined, day: string) => fro
 
 export function PersonDetailPage() {
   const id = Number(useParams().id)
-  const { asOf, optionLabels } = useApp()
+  const { asOf } = useApp()
   const { can } = useMe()
   const { data, isError } = useGetPerson(id, { as_of: asOf })
   const [engaging, setEngaging] = useState(false)
@@ -298,14 +327,19 @@ export function PersonDetailPage() {
           { label: '状态', icon: Loading03Icon, value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },
           { label: '拼音码', icon: TextFontIcon, value: data.pinyin && <span className="font-mono">{data.pinyin}</span> },
           {
-            label: '当天任用',
+            label: '当前任用',
             icon: Hospital01Icon,
             value: current.length
-              ? current.map((e) => `${e.institution_name} · ${optionLabels.engagement_type?.[e.engagement_type] ?? e.engagement_type}`).join('；')
+              ? current.map((e) => (
+                  <span key={e.id} className="inline-flex items-center gap-1.5">
+                    {e.institution_name}
+                    <EngagementTypeTag code={e.engagement_type} />
+                  </span>
+                ))
               : null,
           },
           {
-            label: '当天主部门',
+            label: '当前主部门',
             icon: UserGroupIcon,
             value: current.length
               ? current.map((e) => {
@@ -323,7 +357,7 @@ export function PersonDetailPage() {
               : null,
           },
           {
-            label: '当天工号',
+            label: '当前工号',
             icon: HashtagIcon,
             value:
               current
@@ -380,8 +414,6 @@ type PersonDialog =
 const adjustable = (r: { void: boolean; valid_to?: string | null }) => !r.void && (!r.valid_to || r.valid_to >= today())
 
 function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: string; onAction?: (d: PersonDialog) => void }) {
-  const { optionLabels } = useApp()
-  const type = optionLabels.engagement_type?.[e.engagement_type] ?? e.engagement_type
   const state = e.void
     ? { label: '生效前已撤销', tone: 'gray' as const }
     : e.valid_from > asOf
@@ -393,7 +425,7 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
     <div className={cn('border-line rounded-md border', e.void && 'opacity-60')}>
       <div className="border-line-subtle flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2 text-xs">
         <span className="text-fg-strong font-medium">{e.institution_name}</span>
-        <span className="text-fg-secondary">{type}</span>
+        <EngagementTypeTag code={e.engagement_type} />
         <Tag tone={state.tone}>{state.label}</Tag>
         <span className="text-fg-secondary tabular-nums">{period(e.valid_from, e.valid_to)}</span>
         {e.note && <span className="text-fg-muted text-caption">· {e.note}</span>}

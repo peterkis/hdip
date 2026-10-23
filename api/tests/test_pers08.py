@@ -38,7 +38,7 @@ def test_pers08_same_numbers_everywhere(api):
     persons = _csv(api, "persons")
     relations = _csv(api, "person-relations")
     assert [p["person_code"] for p in persons] == ["P000001", "P000002", "P000003"]
-    assert persons[0]["relation_status_name"] == "有有效任用"
+    assert persons[0]["relation_status_name"] == "有效任用"
     by_code = {r["person_code"]: r for r in relations}
     assert by_code["P000001"]["work_no"] == "0007"
     assert by_code["P000001"]["department_name"] == "心血管内科"

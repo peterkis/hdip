@@ -4,14 +4,14 @@ import { Link } from 'react-router'
 import type { DepartmentDutyRow, DepartmentPersonRow } from '@/api/generated/model'
 import { DbCell, DbEmpty, DbRow, DbTable } from '@/components/kit/database'
 import { InlineAction } from '@/components/kit/section'
+import { EngagementTypeTag } from '@/components/engagement-type-tag'
 import { Tag } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
 import { period, today } from '@/lib/format'
 import { PLANNED_TONE } from '@/lib/tones'
 
 export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonRow[]; suspended: boolean }) {
-  const { asOf, optionLabels } = useApp()
-  const types = optionLabels.engagement_type ?? {}
+  const { asOf } = useApp()
   const current = new Set(rows.filter((r) => !r.not_yet_effective).map((r) => r.person_id))
   return (
     <div className="grid gap-2">
@@ -35,7 +35,10 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
               </DbCell>
               <DbCell className="text-fg-secondary font-mono text-caption">{r.person_code}</DbCell>
               <DbCell className="text-fg-secondary whitespace-nowrap">
-                {r.institution_name} · {types[r.engagement_type] ?? r.engagement_type}
+                <span className="inline-flex items-center gap-1.5">
+                  {r.institution_name}
+                  <EngagementTypeTag code={r.engagement_type} />
+                </span>
               </DbCell>
               <DbCell className="text-fg-secondary whitespace-nowrap">{period(r.valid_from, r.valid_to)}</DbCell>
             </DbRow>

@@ -198,6 +198,7 @@ stateDiagram-v2
 | 0017 | 人员模块 P1.2：确认规则 `person.revise`、`person.change_work_no`、`person.assign`（表结构不变） |
 | 0018 | 人员模块 P1.3：确认规则 `person.engagement_set_end`（表结构不变） |
 | 0019 | 人员模块 P3：`person_assignment` 加附加归属 `ADDITIONAL`（同一任用同一部门附加归属不重叠）；`person_duty` 部门职务（部长 / 副部长 × 正式 / 主持工作 / 代管；同一部门同一天正式部长、主持工作者各最多一位，可并存）；选项与确认规则 |
+| 0020 | 人员状态中文名改为“有效任用 / 计划中 / 无效任用”（`option_item.person_relation_status`，码值不变；导出 `relation_status_name` 随之变化） |
 
 ### 新增一类对象或变更的检查单
 

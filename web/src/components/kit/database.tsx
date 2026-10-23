@@ -1,6 +1,6 @@
 // Notion 数据库视图的基本件：工具栏、筛选胶囊、搜索、表格、底部计数。各列表页共用。
 import { Icon, type AppIcon } from '@/components/kit/icon'
-import { ArrowDown01Icon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, ArrowUp01Icon, ArrowUpDownIcon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -105,9 +105,32 @@ export interface DbColumn {
   label: string
   icon?: AppIcon
   className?: string
+  /** 给出时表头可点击排序（与 DbTable 的 sort / onSort 配合） */
+  sortKey?: string
 }
 
-export function DbTable({ columns, children }: { columns: DbColumn[]; children: ReactNode }) {
+export interface DbSort {
+  key: string
+  dir: 'asc' | 'desc'
+}
+
+/** 点表头：未排序 → 升序 → 降序 → 取消 */
+export function nextSort(current: DbSort | null, key: string): DbSort | null {
+  if (current?.key !== key) return { key, dir: 'asc' }
+  return current.dir === 'asc' ? { key, dir: 'desc' } : null
+}
+
+export function DbTable({
+  columns,
+  children,
+  sort,
+  onSort,
+}: {
+  columns: DbColumn[]
+  children: ReactNode
+  sort?: DbSort | null
+  onSort?: (key: string) => void
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
@@ -122,10 +145,28 @@ export function DbTable({ columns, children }: { columns: DbColumn[]; children: 
                   c.className,
                 )}
               >
-                <span className="inline-flex items-center gap-1.5">
-                  {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
-                  {c.label}
-                </span>
+                {c.sortKey && onSort ? (
+                  <button
+                    type="button"
+                    onClick={() => onSort(c.sortKey!)}
+                    aria-sort={sort?.key === c.sortKey ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                    title="点击排序"
+                    className="hover:text-fg group/sort inline-flex items-center gap-1.5"
+                  >
+                    {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
+                    {c.label}
+                    <Icon
+                      icon={sort?.key === c.sortKey ? (sort.dir === 'asc' ? ArrowUp01Icon : ArrowDown01Icon) : ArrowUpDownIcon}
+                      className={cn('size-3.5', sort?.key === c.sortKey ? 'text-fg' : 'opacity-0 group-hover/sort:opacity-100')}
+                      strokeWidth={2}
+                    />
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
+                    {c.label}
+                  </span>
+                )}
               </th>
             ))}
           </tr>

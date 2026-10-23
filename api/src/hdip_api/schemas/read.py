@@ -667,7 +667,7 @@ DepartmentDetail.model_rebuild()
 
 # ------------------------------------------------------------------ 人员（迁移 0016）
 PersonStatus = Literal["ENGAGED", "PLANNED", "NONE"]
-"""按查看日期派生，不存储：有有效任用 / 仅有计划任用 / 无有效任用。"""
+"""按查看日期派生，不存储：有效任用 / 计划中（仅有计划任用）/ 无效任用（当天没有有效任用）。"""
 
 
 class PersonVersionOut(BaseModel):
