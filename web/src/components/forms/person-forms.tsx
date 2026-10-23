@@ -536,12 +536,17 @@ function endPreview(e: PersonEngagementOut, mode: EndMode, last: string, extend:
   const rows = [
     ...e.assignments.map((a) => ({ label: a.department.name, r: a, kind: '归属' })),
     ...e.work_nos.map((n) => ({ label: `工号 ${n.work_no ?? ''}`, r: n, kind: '工号' })),
+    // 职务随任用一起处理（与后端同一规则：推后时按“一起延长”的选择）
+    ...(e.duties ?? []).map((d) => ({ label: `${d.department.name}${d.label}`, r: d, kind: '职务' })),
   ]
   for (const { label, r, kind } of rows) {
     if (r.void) continue
     if (shorter) {
       if (r.valid_to && r.valid_to <= next!) continue
-      out.push(r.valid_from > next! ? `${label}（原定 ${r.valid_from} 开始）撤销，从未生效` : `${label}止于 ${next}`)
+      if (r.valid_from <= next!) out.push(`${label}止于 ${next}`)
+      else if (r.valid_from > today()) out.push(`${label}（原定 ${r.valid_from} 开始）撤销，从未生效`)
+      // 追溯结束时已经生效的关系不能改成从未生效：后端会拒绝整项（2026-10-23 收尾）
+      else out.push(`${label}自 ${r.valid_from} 起已生效，不能改成从未生效——请把最后有效日改到它开始之后`)
     } else if (r.valid_to === old && (kind === '工号' || extend)) {
       out.push(`${label}延至 ${next ?? '长期'}`)
     }
@@ -585,9 +590,9 @@ export function EngagementEndDialog({ person, engagement: e, ...props }: DialogP
       {mode === 'end' && (
         <TextField label="最后有效日（含当日）" name="valid_to" type="date" required value={last} onChange={setLast} hint="可以填过去的日期（迟报的离开）" />
       )}
-      {longer && <ToggleChip label="同一天到期的部门归属一起延长" checked={extend} onChange={setExtend} />}
+      {longer && <ToggleChip label="同一天到期的部门归属与职务一起延长" checked={extend} onChange={setExtend} />}
       {mode && (
-        <Callout tone="info" title="下属归属与工号会这样处理">
+        <Callout tone="info" title="下属归属、工号与职务会这样处理">
           {preview.length ? preview.join('；') : '不受影响'}。此人在其他主体的任用不受影响；页面不表示其他系统的离院处置已完成。
         </Callout>
       )}

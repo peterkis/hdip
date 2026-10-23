@@ -209,9 +209,8 @@ def assignment_problem(s: Session, a: PersonAssignment) -> tuple[str, list] | No
     ):
         if not is_void(o) and _overlaps(a.valid_from, a.valid_to, o.valid_from, o.valid_to):
             return (
-                f"{_dept_name(s, a.department_id, a.valid_from)}在 "
-                f"{_period(o.valid_from, o.valid_to)} 已是{KIND_LABELS[o.kind]}，"
-                "主部门与附加归属不能是同一部门",
+                f"{_dept_name(s, a.department_id, a.valid_from)}已是这项任用的{KIND_LABELS[o.kind]}"
+                f"（{_period(o.valid_from, o.valid_to)}），主部门与附加归属不能是同一部门",
                 [],
             )
     return None
@@ -864,8 +863,34 @@ def _duty_notices(s: Session, d: PersonDuty) -> list[str]:
     return out
 
 
+def _require_post_free(s: Session, dept_id: int, duty: str, mode: str, start, end) -> None:
+    """同一部门同一天正式部长、主持工作者各最多一位：先用名称说清是谁占着，再由排他约束兜底。"""
+    if duty != "HEAD":
+        return
+    formal = mode == "FORMAL"
+    for x in s.scalars(
+        select(PersonDuty).where(PersonDuty.department_id == dept_id, PersonDuty.duty == "HEAD")
+    ):
+        if is_void(x) or (x.mode == "FORMAL") != formal:
+            continue
+        if _overlaps(start, end, x.valid_from, x.valid_to):
+            e = s.get(PersonEngagement, x.engagement_id)
+            what = "正式部长" if formal else "主持工作的人（代理或代管）"
+            dept = _dept_name(s, dept_id, max(start, x.valid_from))
+            raise ItemError(
+                f"{dept}已有{what}{person_label(s, e.person_id, x.valid_from)}"
+                f"（{_period(x.valid_from, x.valid_to)}），同一时点只能有一位",
+                "duty",
+                hint="换人请用“交接”；部长在任时由他人主持工作，请选“主持工作”。"
+                if formal
+                else "先结束或交接现有的主持工作，再任命。",
+                facts=[("现任开始", x.valid_from, "info"), ("新任命开始", start, "bad")],
+            )
+
+
 def _new_duty(ctx: Ctx, engagement_id: int, dept_id: int, duty: str, mode: str, start, end):
     s = ctx.session
+    _require_post_free(s, dept_id, duty, mode, start, end)
     d = PersonDuty(
         engagement_id=engagement_id,
         department_id=dept_id,

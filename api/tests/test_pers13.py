@@ -56,12 +56,16 @@ def test_pers13_handover_and_presiding(api, owner_engine):
     api.confirm(cr["id"])
     assert set(duties(api, ywb, "2026-05-01")) == {("部长", "乙"), ("主持工作", "丁")}
     # 同一天第二位正式部长、第二位主持工作者被拒
-    for item in (
-        duty_assign(e["P000001"], "YWB", "HEAD", "FORMAL", "2026-05-01"),
-        duty_assign(e["P000001"], "YWB", "HEAD", "ACTING", "2026-05-01", "2026-05-31"),
+    for item, holder in (
+        (duty_assign(e["P000001"], "YWB", "HEAD", "FORMAL", "2026-05-01"), "正式部长乙（P000002）"),
+        (
+            duty_assign(e["P000001"], "YWB", "HEAD", "ACTING", "2026-05-01", "2026-05-31"),
+            "主持工作的人（代理或代管）丁（P000004）",
+        ),
     ):
         cr = api.draft(item)
-        assert api.submit(cr["id"]).status_code == 422
+        r = api.submit(cr["id"])
+        assert r.status_code == 422 and holder in r.json()["problems"][0]["message"]
         api.cancel(cr["id"])
 
     # 院感部：空缺期间副部长丙主持工作，之后乙代管（乙的主部门仍是医务部）
