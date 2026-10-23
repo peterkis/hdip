@@ -17,7 +17,14 @@ import { useMutation } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useListDepartments } from '@/api/generated/master/master'
-import type { PersonAssignmentOut, PersonDetail, PersonDutyOut, PersonEngagementOut, PersonRow } from '@/api/generated/model'
+import type {
+  EngagementEndChange,
+  PersonAssignmentOut,
+  PersonDetail,
+  PersonDutyOut,
+  PersonEngagementOut,
+  PersonRow,
+} from '@/api/generated/model'
 import { useGetPerson, useListPersons } from '@/api/generated/persons/persons'
 import {
   AssignDialog,
@@ -48,7 +55,7 @@ import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, period, today } from '@/lib/format'
 import { notify } from '@/lib/notify'
-import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, WORK_NO_REASON } from '@/lib/person'
+import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, primaryOn, WORK_NO_REASON } from '@/lib/person'
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
 import { EngagementTypeTag } from '@/components/engagement-type-tag'
 import { useMe } from '@/lib/use-me'
@@ -343,7 +350,7 @@ export function PersonDetailPage() {
             icon: UserGroupIcon,
             value: current.length
               ? current.map((e) => {
-                  const a = e.assignments.find((x) => !x.void && covers(x.valid_from, x.valid_to, asOf))
+                  const a = primaryOn(e.assignments, asOf)
                   return a ? (
                     <Link key={e.id} className="hover:underline" to={`/departments/${a.department.id}`}>
                       {a.department.name}
@@ -546,6 +553,37 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
           asOf={asOf}
         />
       </div>
+      {(e.end_changes ?? []).length > 0 && <EndChanges changes={e.end_changes ?? []} />}
+    </div>
+  )
+}
+
+const END_ACTION: Record<string, string> = {
+  REGISTER: '登记时填写',
+  END: '结束任用',
+  EARLIER: '提前结束',
+  LATER: '推后结束日',
+  CLEAR: '撤回结束日',
+  CANCEL: '撤销计划',
+}
+
+/** 任用结束日的逐次登记与调整：原结束日 → 新结束日，每次对应一张已确认的申请（PERS-06） */
+function EndChanges({ changes }: { changes: EngagementEndChange[] }) {
+  const show = (d?: string | null) => d ?? '长期'
+  return (
+    <div className="border-line-subtle grid gap-1 border-t px-3 py-2">
+      <div className="text-fg-muted text-caption font-medium">结束日调整记录</div>
+      {changes.map((c) => (
+        <div key={`${c.change_id}-${c.action}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+          <span className="text-fg-strong">{END_ACTION[c.action]}</span>
+          <span className="text-fg-secondary tabular-nums">
+            {c.action === 'REGISTER' ? show(c.to_valid_to) : `${show(c.from_valid_to)} → ${c.action === 'CANCEL' ? '从未生效' : show(c.to_valid_to)}`}
+          </span>
+          <ChangeLink id={c.change_id} className="text-caption" />
+          {c.confirmed_at && <span className="text-fg-muted text-caption">{c.confirmed_at.slice(0, 16).replace('T', ' ')} 确认</span>}
+          {(c.handled ?? []).length > 0 && <span className="text-fg-muted w-full text-caption">随之：{(c.handled ?? []).join('；')}</span>}
+        </div>
+      ))}
     </div>
   )
 }

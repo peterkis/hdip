@@ -33,6 +33,16 @@ def test_pers06_adjust_future_end(api):
     api.apply(engagement_end(eid, None, expected=days(50)))
     [e] = person(api, "P000001")["engagements"]
     assert e["valid_to"] is None and e["assignments"][0]["valid_to"] is None
+    # 逐次调整都能追溯：登记时的结束日、推后、提前、撤回，每次的原结束日、新结束日与申请号
+    changes = person(api, "P000001")["engagements"][0]["end_changes"]
+    assert [(c["action"], c["from_valid_to"], c["to_valid_to"]) for c in changes] == [
+        ("REGISTER", None, end),
+        ("LATER", end, later),
+        ("EARLIER", later, days(50)),
+        ("CLEAR", days(50), None),
+    ]
+    assert len({c["change_id"] for c in changes}) == 4
+    assert any("甲科延至" in h for h in changes[1]["handled"])
     # 过期草稿：按旧结束日发起的被拒
     cr = api.draft(engagement_end(eid, days(70), expected=days(50)))
     assert "与发起时看到的不同" in api.submit(cr["id"]).json()["problems"][0]["message"]

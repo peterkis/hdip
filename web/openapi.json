@@ -7932,6 +7932,80 @@
         ],
         "title": "DeptRef"
       },
+      "EngagementEndChange": {
+        "properties": {
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed At"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "REGISTER",
+              "END",
+              "EARLIER",
+              "LATER",
+              "CLEAR",
+              "CANCEL"
+            ],
+            "title": "Action"
+          },
+          "from_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Valid To"
+          },
+          "to_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Valid To"
+          },
+          "handled": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Handled",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "change_id",
+          "confirmed_at",
+          "action",
+          "from_valid_to",
+          "to_valid_to"
+        ],
+        "title": "EngagementEndChange",
+        "description": "任用结束日的一次登记或调整（来自已确认申请的前后结果，不另存）。"
+      },
       "ExternalCodeAssign": {
         "properties": {
           "system_code": {
@@ -10369,6 +10443,14 @@
             },
             "type": "array",
             "title": "Duties",
+            "default": []
+          },
+          "end_changes": {
+            "items": {
+              "$ref": "#/components/schemas/EngagementEndChange"
+            },
+            "type": "array",
+            "title": "End Changes",
             "default": []
           }
         },

@@ -17,6 +17,7 @@ def test_pers02_cancel_planned_engagement(api):
     d = person(api, "P000001")
     [e] = d["engagements"]
     assert e["void"] and e["assignments"][0]["void"] and e["work_nos"][0]["void"]
+    assert [(c["action"], c["to_valid_to"]) for c in e["end_changes"]] == [("CANCEL", before)]
     assert d["status"] == "NONE"
     assert roster(api, start, include_future=True) == []
     assert [r["code"] for r in roster(api, scope="all")] == ["P000001"]

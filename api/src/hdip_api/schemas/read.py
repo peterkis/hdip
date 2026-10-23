@@ -725,6 +725,19 @@ class PersonDutyOut(BaseModel):
     void: bool
 
 
+class EngagementEndChange(BaseModel):
+    """任用结束日的一次登记或调整（来自已确认申请的前后结果，不另存）。"""
+
+    change_id: int
+    confirmed_at: datetime | None
+    action: Literal["REGISTER", "END", "EARLIER", "LATER", "CLEAR", "CANCEL"]
+    """登记时填写 / 结束任用 / 提前 / 推后 / 撤回结束日 / 撤销计划。"""
+    from_valid_to: date | None
+    to_valid_to: date | None
+    handled: list[str] = []
+    """随之处理的归属、工号、职务。"""
+
+
 class PersonEngagementOut(BaseModel):
     id: int
     institution_id: int
@@ -740,6 +753,8 @@ class PersonEngagementOut(BaseModel):
     work_nos: list[PersonWorkNoOut]
     assignments: list[PersonAssignmentOut]
     duties: list[PersonDutyOut] = []
+    end_changes: list[EngagementEndChange] = []
+    """结束日的逐次登记与调整，按确认时间先后（PERS-06）。"""
 
 
 class PersonEngagementBrief(BaseModel):

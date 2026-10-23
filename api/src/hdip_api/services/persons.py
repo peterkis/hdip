@@ -746,6 +746,25 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
             )
         ),
     ]
+    # 追溯结束（新结束日早于今天）时，结束日之后才开始、但已经生效的下属关系不能改成“从未生效”：
+    # 那会改写已生效的历史。只有尚未开始的计划自动撤销；有冲突就整项不成立，逐条列出
+    if shorter:
+        blocked = [
+            r
+            for _, r in children
+            if not is_void(r) and r.valid_from > new and r.valid_from <= today
+        ]
+        if blocked:
+            raise ItemError(
+                f"最后有效日 {new.isoformat()} 之后，还有已经生效的"
+                + "、".join(_child_label(s, what, r) for what, r in children if r in blocked)
+                + "，不能把它们改成从未生效",
+                "valid_to",
+                hint="把最后有效日改到这些关系开始之后；或先在另一张申请里按实际情况结束它们，"
+                "确属误录的历史请单独纠错。",
+                facts=[("新的最后有效日", new, "bad")]
+                + [("已生效关系开始", r.valid_from, "info") for r in blocked[:3]],
+            )
     for what, r in sorted(children, key=lambda x: x[1].valid_from):
         if is_void(r):
             continue
@@ -953,15 +972,45 @@ def person_duty_handover(ctx: Ctx, item: PersonDutyHandover) -> dict:
     }
 
 
+def _child_label(s: Session, what: str, r) -> str:
+    """任用下属关系的一句说明（含开始日），用于提示。"""
+    if what == "归属":
+        name = f"{_dept_name(s, r.department_id, r.valid_from)}归属"
+    elif what == "职务":
+        name = f"{_dept_name(s, r.department_id, r.valid_from)}{duty_label(r)}职务"
+    else:
+        name = f"工号 {r.work_no}"
+    return f"{name}（{r.valid_from.isoformat()} 起）"
+
+
 def end_department_duties(ctx: Ctx, dept: Department, day: date) -> list[str]:
-    """部门撤销 / 被替代：它的职务随之结束于 day 前一日（之后才开始的撤销），返回说明。"""
+    """部门撤销 / 被替代：它的职务随之结束于 day 前一日；day 及以后才开始的，
+    尚未开始的计划撤销，已经生效的（追溯退出时）阻止并列出，不改写已生效的历史。"""
     s = ctx.session
+    today = _today(s)
     out = []
-    for d in s.scalars(
-        select(PersonDuty).where(PersonDuty.department_id == dept.id).with_for_update()
-    ):
-        if is_void(d) or (d.valid_to is not None and d.valid_to < day):
-            continue
+    rows = [
+        d
+        for d in s.scalars(
+            select(PersonDuty).where(PersonDuty.department_id == dept.id).with_for_update()
+        )
+        if not is_void(d) and (d.valid_to is None or d.valid_to >= day)
+    ]
+    effective_after = [d for d in rows if day <= d.valid_from <= today]
+    if effective_after:
+        who = "、".join(
+            f"{person_label(s, s.get(PersonEngagement, d.engagement_id).person_id, d.valid_from)}"
+            f"的{duty_label(d)}职务（{d.valid_from.isoformat()} 起）"
+            for d in effective_after
+        )
+        raise ItemError(
+            f"部门退出日 {day.isoformat()} 之后，还有已经生效的{who}，不能把它们改成从未生效",
+            "effective_date",
+            hint="把退出日改到这些职务开始之后；或先在另一张申请里按实际情况结束这些职务。",
+            facts=[("部门退出日", day, "bad")]
+            + [("职务开始", d.valid_from, "info") for d in effective_after[:3]],
+        )
+    for d in rows:
         e = s.get(PersonEngagement, d.engagement_id)
         who = person_label(s, e.person_id, d.valid_from)
         if d.valid_from >= day:

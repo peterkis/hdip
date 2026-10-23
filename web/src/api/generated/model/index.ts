@@ -73,6 +73,8 @@ export * from './departmentVersionOut';
 export * from './departmentVersionOutEstablishmentForm';
 export * from './departmentVersionOutLifecycle';
 export * from './deptRef';
+export * from './engagementEndChange';
+export * from './engagementEndChangeAction';
 export * from './exportCsvParams';
 export * from './externalCodeAssign';
 export * from './externalCodeAssignmentClose';

@@ -16,6 +16,7 @@ from hdip_api.core.errors import NotFound
 from hdip_api.core.permissions import PERSON_FIELD_PERMISSIONS, masked_fields
 from hdip_api.models import (
     AppUser,
+    ChangeRequest,
     Department,
     DepartmentVersion,
     Institution,
@@ -31,6 +32,7 @@ from hdip_api.schemas.read import (
     DepartmentDutyRow,
     DepartmentPersonRow,
     DeptRef,
+    EngagementEndChange,
     PersonAssignmentOut,
     PersonDetail,
     PersonDutyOut,
@@ -251,6 +253,63 @@ def list_persons(
     return rows
 
 
+def _end_changes(s: Session, engagement_ids: set[int]) -> dict[int, list[EngagementEndChange]]:
+    """从已确认申请的前后结果里还原每项任用结束日的登记与逐次调整（不另建日志表）。"""
+    out: dict[int, list[EngagementEndChange]] = defaultdict(list)
+    if not engagement_ids:
+        return out
+    rows = s.scalars(
+        select(ChangeRequest)
+        .where(
+            ChangeRequest.status == "confirmed",
+            ChangeRequest.results.contains([{"kind": "person.engagement_set_end"}])
+            | ChangeRequest.results.contains([{"kind": "person.engage"}]),
+        )
+        .order_by(ChangeRequest.confirmed_at, ChangeRequest.id)
+    )
+    for cr in rows:
+        for o in cr.results or []:
+            before, after = o.get("before") or {}, o.get("after") or {}
+            if o.get("kind") == "person.engage":
+                eid = after.get("id")
+                if eid in engagement_ids and after.get("valid_to"):
+                    out[eid].append(
+                        EngagementEndChange(
+                            change_id=cr.id,
+                            confirmed_at=cr.confirmed_at,
+                            action="REGISTER",
+                            from_valid_to=None,
+                            to_valid_to=after["valid_to"],
+                        )
+                    )
+                continue
+            if (
+                o.get("kind") != "person.engagement_set_end"
+                or before.get("id") not in engagement_ids
+            ):
+                continue
+            old, new = before.get("valid_to"), after.get("valid_to")
+            if new is None:
+                action = "CLEAR"
+            elif new < after["valid_from"]:
+                action = "CANCEL"
+            elif old is None:
+                action = "END"
+            else:
+                action = "EARLIER" if new < old else "LATER"
+            out[before["id"]].append(
+                EngagementEndChange(
+                    change_id=cr.id,
+                    confirmed_at=cr.confirmed_at,
+                    action=action,
+                    from_valid_to=old,
+                    to_valid_to=new,
+                    handled=after.get("handled", []),
+                )
+            )
+    return out
+
+
 def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDetail:
     w = _World.load(s)
     p = w.persons.get(person_id)
@@ -275,6 +334,7 @@ def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDe
         )
 
     engagements = []
+    end_changes = _end_changes(s, {e.id for e in w.engagements[person_id]})
     for e in sorted(w.engagements[person_id], key=lambda x: (x.valid_from, x.id), reverse=True):
         engagements.append(
             PersonEngagementOut(
@@ -306,6 +366,7 @@ def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDe
                     assignment_out(a)
                     for a in sorted(w.assignments[e.id], key=lambda x: (x.valid_from, x.id))
                 ],
+                end_changes=end_changes.get(e.id, []),
                 duties=[
                     PersonDutyOut(
                         id=d.id,
