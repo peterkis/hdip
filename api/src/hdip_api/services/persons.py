@@ -22,6 +22,7 @@ from hdip_api.models import (
     InstitutionVersion,
     Person,
     PersonAssignment,
+    PersonDuty,
     PersonEngagement,
     PersonVersion,
     PersonWorkNo,
@@ -31,6 +32,9 @@ from hdip_api.schemas.items import (
     PersonAssignmentSetEnd,
     PersonChangeWorkNo,
     PersonCreate,
+    PersonDutyAssign,
+    PersonDutyHandover,
+    PersonDutySetEnd,
     PersonEngage,
     PersonEngagementSetEnd,
     PersonRevise,
@@ -140,39 +144,84 @@ def engagement_snapshot(s: Session, e: PersonEngagement) -> dict:
 
 
 # ------------------------------------------------------------------ 归属是否成立
-def assignment_problem(s: Session, a: PersonAssignment) -> tuple[str, list] | None:
-    """归属的完整期间：落在任用期间内；部门已设立、没有撤销 / 被替代段。返回 (说明, 日期对照)。"""
-    if is_void(a):
-        return None
-    e = s.get(PersonEngagement, a.engagement_id)
-    dept = _dept_name(s, a.department_id, a.valid_from)
-    if a.valid_from < e.valid_from or (
-        e.valid_to is not None and (a.valid_to is None or a.valid_to > e.valid_to)
-    ):
+DUTY_LABELS = {"HEAD": "部长", "DEPUTY": "副部长"}
+MODE_LABELS = {"FORMAL": "", "ACTING": "（主持工作）", "CARETAKER": "（代管）"}
+KIND_LABELS = {"PRIMARY": "主部门", "ADDITIONAL": "附加归属"}
+
+
+def duty_label(d: PersonDuty) -> str:
+    if d.duty == "HEAD" and d.mode != "FORMAL":
+        return "主持工作" if d.mode == "ACTING" else "代管"
+    return DUTY_LABELS[d.duty] + MODE_LABELS[d.mode]
+
+
+def _span_problem(
+    s: Session, e: PersonEngagement, dept_id: int, start: date, end: date | None, what: str
+) -> tuple[str, list] | None:
+    """一段归属或职务的完整期间：落在任用期间内；部门已设立、没有撤销 / 被替代段。"""
+    dept = _dept_name(s, dept_id, start)
+    if start < e.valid_from or (e.valid_to is not None and (end is None or end > e.valid_to)):
         return (
-            f"归属{dept}的期间（{_period(a.valid_from, a.valid_to)}）超出了任用期间"
+            f"{what}{dept}的期间（{_period(start, end)}）超出了任用期间"
             f"（{_period(e.valid_from, e.valid_to)}）",
-            [("任用开始", e.valid_from, "info"), ("归属开始", a.valid_from, "bad")]
-            if a.valid_from < e.valid_from
+            [("任用开始", e.valid_from, "info"), (f"{what}开始", start, "bad")]
+            if start < e.valid_from
             else [("任用最后有效日", e.valid_to, "info")],
         )
-    versions = _versions(s, DepartmentVersion, DepartmentVersion.department_id, a.department_id)
-    start = versions[0].valid_from
-    if a.valid_from < start:
+    versions = _versions(s, DepartmentVersion, DepartmentVersion.department_id, dept_id)
+    first = versions[0].valid_from
+    if start < first:
         return (
-            f"{dept}自 {start.isoformat()} 才设立，归属不能从 {a.valid_from.isoformat()} 开始",
-            [("部门设立", start, "info"), ("归属开始", a.valid_from, "bad")],
+            f"{dept}自 {first.isoformat()} 才设立，{what}不能从 {start.isoformat()} 开始",
+            [("部门设立", first, "info"), (f"{what}开始", start, "bad")],
         )
     for v in versions:
         if v.lifecycle not in LIFECYCLE_TERMINAL:
             continue
-        if a.valid_to is None or a.valid_to >= v.valid_from:
+        if end is None or end >= v.valid_from:
             return (
                 f"{v.name}自 {v.valid_from.isoformat()} 起{LIFECYCLE_LABELS[v.lifecycle]}，"
-                f"归属不能延续到那时（归属{_period(a.valid_from, a.valid_to)}）",
+                f"{what}不能延续到那时（{what}{_period(start, end)}）",
                 [("部门" + LIFECYCLE_LABELS[v.lifecycle], v.valid_from, "bad")],
             )
     return None
+
+
+def _overlaps(a_from: date, a_to: date | None, b_from: date, b_to: date | None) -> bool:
+    return a_from <= (b_to or date.max) and b_from <= (a_to or date.max)
+
+
+def assignment_problem(s: Session, a: PersonAssignment) -> tuple[str, list] | None:
+    """归属的完整期间（见 _span_problem）；同一任用里主归属与附加归属不能是同一部门。"""
+    if is_void(a):
+        return None
+    e = s.get(PersonEngagement, a.engagement_id)
+    problem = _span_problem(s, e, a.department_id, a.valid_from, a.valid_to, "归属")
+    if problem:
+        return problem
+    other = "ADDITIONAL" if a.kind == "PRIMARY" else "PRIMARY"
+    for o in s.scalars(
+        select(PersonAssignment).where(
+            PersonAssignment.engagement_id == e.id,
+            PersonAssignment.department_id == a.department_id,
+            PersonAssignment.kind == other,
+        )
+    ):
+        if not is_void(o) and _overlaps(a.valid_from, a.valid_to, o.valid_from, o.valid_to):
+            return (
+                f"{_dept_name(s, a.department_id, a.valid_from)}在 "
+                f"{_period(o.valid_from, o.valid_to)} 已是{KIND_LABELS[o.kind]}，"
+                "主部门与附加归属不能是同一部门",
+                [],
+            )
+    return None
+
+
+def duty_problem(s: Session, d: PersonDuty) -> tuple[str, list] | None:
+    if is_void(d):
+        return None
+    e = s.get(PersonEngagement, d.engagement_id)
+    return _span_problem(s, e, d.department_id, d.valid_from, d.valid_to, "职务")
 
 
 def _require_assignment_ok(s: Session, a: PersonAssignment, field_name: str) -> None:
@@ -421,11 +470,22 @@ def person_transfer(ctx: Ctx, item: PersonTransfer) -> dict:
     s.flush()
     _require_assignment_ok(s, new, "department_code")
     ctx.new_assignments[new.id] = ctx.index
+    kept = [
+        f"{who}在{before['department_name']}的职务（{duty_label(x)}）不随调科转移，"
+        "需要时另行交接或结束"
+        for x in s.scalars(
+            select(PersonDuty).where(
+                PersonDuty.engagement_id == a.engagement_id,
+                PersonDuty.department_id == a.department_id,
+            )
+        )
+        if not is_void(x) and (x.valid_to is None or x.valid_to >= day)
+    ]
     return {
         "target": f"人员 {before['person']} {who}",
         "before": before,
         "after": assignment_snapshot(s, new),
-        "notices": dept_notices(s, d.id, new.valid_from, new.valid_to),
+        "notices": dept_notices(s, d.id, new.valid_from, new.valid_to) + kept,
     }
 
 
@@ -588,26 +648,31 @@ def person_assign(ctx: Ctx, item: PersonAssign) -> dict:
     e = _locked_engagement(s, item.engagement_id)
     d = _department(s, item.department_code, "department_code")
     end = item.valid_to if item.valid_to is not None else e.valid_to
+    kind = item.assignment_kind
     for other in s.scalars(
         select(PersonAssignment).where(
-            PersonAssignment.engagement_id == e.id, PersonAssignment.kind == "PRIMARY"
+            PersonAssignment.engagement_id == e.id, PersonAssignment.kind == kind
         )
     ):
-        if is_void(other):
+        if is_void(other) or not _overlaps(item.valid_from, end, other.valid_from, other.valid_to):
             continue
-        if other.valid_from <= (end or date.max) and item.valid_from <= (
-            other.valid_to or date.max
-        ):
+        if kind == "PRIMARY":
             raise ItemError(
                 f"这项任用在 {_period(other.valid_from, other.valid_to)} 已归属"
                 f"{_dept_name(s, other.department_id, other.valid_from)}，同一时期只能有一个主部门",
                 "valid_from",
-                hint="要换部门请用“调科”；补归属只用于暂未分配的期间。",
+                hint="要换部门请用“调科”；补主部门只用于暂未分配的期间；兼任请选“附加归属”。",
+            )
+        if other.department_id == d.id:
+            raise ItemError(
+                f"这项任用在 {_period(other.valid_from, other.valid_to)} 已有"
+                f"{_dept_name(s, d.id, other.valid_from)}的附加归属",
+                "valid_from",
             )
     a = PersonAssignment(
         engagement_id=e.id,
         department_id=d.id,
-        kind="PRIMARY",
+        kind=kind,
         valid_from=item.valid_from,
         valid_to=end,
         change_id=ctx.change_id,
@@ -674,13 +739,22 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
                 select(PersonWorkNo).where(PersonWorkNo.engagement_id == e.id).with_for_update()
             )
         ),
+        *(
+            ("职务", r)
+            for r in s.scalars(
+                select(PersonDuty).where(PersonDuty.engagement_id == e.id).with_for_update()
+            )
+        ),
     ]
     for what, r in sorted(children, key=lambda x: x[1].valid_from):
         if is_void(r):
             continue
-        label = (
-            _dept_name(s, r.department_id, r.valid_from) if what == "归属" else f"工号 {r.work_no}"
-        )
+        if what == "归属":
+            label = _dept_name(s, r.department_id, r.valid_from)
+        elif what == "职务":
+            label = f"{_dept_name(s, r.department_id, r.valid_from)}{duty_label(r)}"
+        else:
+            label = f"工号 {r.work_no}"
         if shorter:
             if r.valid_to is not None and r.valid_to <= new:
                 continue
@@ -695,6 +769,8 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
             handled.append(f"{label}延至 {'长期' if new is None else new.isoformat()}")
         if what == "归属":
             ctx.new_assignments[r.id] = ctx.index
+        elif what == "职务":
+            ctx.new_duties[r.id] = ctx.index
     _set_end(ctx, e, new)
     after = engagement_snapshot(s, e) | {"handled": handled}
     if cancelling:
@@ -704,7 +780,7 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
     else:
         notices = []
     if not shorter and not item.extend_assignments:
-        notices.append("部门归属未随任用延长：延长后的期间暂未分配主部门")
+        notices.append("部门归属与职务未随任用延长：延长后的期间暂未分配主部门")
     return {
         "target": f"人员 {s.get(Person, e.person_id).code} {who}",
         "before": before,
@@ -713,7 +789,194 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
     }
 
 
+# ------------------------------------------------------------------ 部门职务（P3）
+def duty_snapshot(s: Session, d: PersonDuty) -> dict:
+    e = s.get(PersonEngagement, d.engagement_id)
+    p = s.get(Person, e.person_id)
+    dept = s.get(Department, d.department_id)
+    return {
+        "id": d.id,
+        "person": p.code,
+        "person_name": person_name(s, p.id, d.valid_from),
+        "department": dept.code,
+        "department_name": _dept_name(s, dept.id, d.valid_from),
+        "duty": d.duty,
+        "mode": d.mode,
+        "label": duty_label(d),
+        "valid_from": _json(d.valid_from),
+        "valid_to": _json(d.valid_to),
+    }
+
+
+def _duty_notices(s: Session, d: PersonDuty) -> list[str]:
+    """代管的部门不是此人的归属部门，正常；这里只提示与其他职务并存的情况。"""
+    out = []
+    if d.duty == "HEAD" and d.mode != "FORMAL":
+        formal = [
+            x
+            for x in s.scalars(
+                select(PersonDuty).where(
+                    PersonDuty.department_id == d.department_id,
+                    PersonDuty.duty == "HEAD",
+                    PersonDuty.mode == "FORMAL",
+                )
+            )
+            if not is_void(x) and _overlaps(d.valid_from, d.valid_to, x.valid_from, x.valid_to)
+        ]
+        for x in formal:
+            e = s.get(PersonEngagement, x.engagement_id)
+            out.append(
+                f"部长{person_label(s, e.person_id, x.valid_from)}在任"
+                f"（{_period(x.valid_from, x.valid_to)}），期间由此人主持工作，"
+                "部门负责人显示为主持工作者"
+            )
+    e = s.get(PersonEngagement, d.engagement_id)
+    in_dept = any(
+        a.department_id == d.department_id
+        and not is_void(a)
+        and _overlaps(d.valid_from, d.valid_to, a.valid_from, a.valid_to)
+        for a in s.scalars(select(PersonAssignment).where(PersonAssignment.engagement_id == e.id))
+    )
+    if not in_dept and d.mode != "CARETAKER":
+        out.append(
+            f"此人不归属{_dept_name(s, d.department_id, d.valid_from)}；"
+            "跨部门临时管理请选“代管”，长期在该部门任职请先调科或加附加归属"
+        )
+    return out
+
+
+def _new_duty(ctx: Ctx, engagement_id: int, dept_id: int, duty: str, mode: str, start, end):
+    s = ctx.session
+    d = PersonDuty(
+        engagement_id=engagement_id,
+        department_id=dept_id,
+        duty=duty,
+        mode=mode,
+        valid_from=start,
+        valid_to=end,
+        change_id=ctx.change_id,
+        recorded_by=ctx.user_id,
+    )
+    s.add(d)
+    s.flush()
+    problem = duty_problem(s, d)
+    if problem:
+        raise ItemError(problem[0], "department_code", facts=problem[1])
+    ctx.new_duties[d.id] = ctx.index
+    return d
+
+
+def person_duty_assign(ctx: Ctx, item: PersonDutyAssign) -> dict:
+    s = ctx.session
+    e = _locked_engagement(s, item.engagement_id)
+    dept = _department(s, item.department_code, "department_code")
+    if item.duty == "DEPUTY" and item.mode == "CARETAKER":
+        raise ItemError("代管只用于部长职务（临时管理另一个部门）", "mode")
+    end = item.valid_to if item.valid_to is not None else e.valid_to
+    d = _new_duty(ctx, e.id, dept.id, item.duty, item.mode, item.valid_from, end)
+    snap = duty_snapshot(s, d)
+    return {
+        "target": f"人员 {snap['person']} {snap['person_name']}",
+        "before": None,
+        "after": snap,
+        "notices": _duty_notices(s, d),
+    }
+
+
+def _locked_duty(s: Session, duty_id: int, expected: date | None) -> PersonDuty:
+    d = s.get(PersonDuty, duty_id, with_for_update=True)
+    if d is None:
+        raise ItemError(f"职务 #{duty_id} 不存在", "duty_id")
+    if is_void(d):
+        raise ItemError("这条职务已在生效前撤销，不能再调整", "duty_id")
+    if d.valid_to != expected:
+        now = "长期有效" if d.valid_to is None else f"最后有效日 {d.valid_to.isoformat()}"
+        raise ItemError(
+            f"这条职务已被申请 #{d.closed_change_id} 改为{now}，与发起时看到的不同",
+            "duty_id",
+            hint="请刷新页面，按现在的情况重新发起。",
+        )
+    return d
+
+
+def person_duty_set_end(ctx: Ctx, item: PersonDutySetEnd) -> dict:
+    s = ctx.session
+    d = _locked_duty(s, item.duty_id, item.expected_valid_to)
+    before = duty_snapshot(s, d)
+    end = item.valid_to
+    if end == d.valid_to:
+        raise ItemError("结束日没有变化", "valid_to")
+    if end is not None and end < d.valid_from - DAY:
+        raise ItemError(f"最后有效日不能早于职务开始日 {d.valid_from.isoformat()}", "valid_to")
+    if end is not None and end == d.valid_from - DAY and d.valid_from <= _today(s):
+        raise ItemError(
+            f"这条职务已于 {d.valid_from.isoformat()} 生效，不能撤销，只能结束", "valid_to"
+        )
+    _set_end(ctx, d, end)
+    ctx.new_duties[d.id] = ctx.index
+    return {
+        "target": f"人员 {before['person']} {before['person_name']}",
+        "before": before,
+        "after": duty_snapshot(s, d),
+    }
+
+
+def person_duty_handover(ctx: Ctx, item: PersonDutyHandover) -> dict:
+    s = ctx.session
+    d = _locked_duty(s, item.duty_id, item.expected_valid_to)
+    to = _locked_engagement(s, item.to_engagement_id)
+    day = item.effective_date
+    before = duty_snapshot(s, d)
+    if to.id == d.engagement_id:
+        raise ItemError("接任者与原任职者是同一项任用", "to_engagement_id")
+    if day <= d.valid_from and not (day == d.valid_from and d.valid_from > _today(s)):
+        raise ItemError(
+            f"这条职务自 {d.valid_from.isoformat()} 起，交接日须晚于这一天",
+            "effective_date",
+            facts=[("职务开始", d.valid_from, "info"), ("交接日", day, "bad")],
+        )
+    if d.valid_to is not None and day > d.valid_to:
+        raise ItemError(
+            f"交接日 {day.isoformat()} 在这条职务结束（{d.valid_to.isoformat()}）之后",
+            "effective_date",
+        )
+    _set_end(ctx, d, day - DAY)
+    ctx.new_duties[d.id] = ctx.index
+    end = to.valid_to
+    new = _new_duty(ctx, to.id, d.department_id, d.duty, d.mode, day, end)
+    after = duty_snapshot(s, new)
+    return {
+        "target": f"{before['department_name']} {before['label']}",
+        "before": before,
+        "after": after,
+        "notices": _duty_notices(s, new),
+    }
+
+
+def end_department_duties(ctx: Ctx, dept: Department, day: date) -> list[str]:
+    """部门撤销 / 被替代：它的职务随之结束于 day 前一日（之后才开始的撤销），返回说明。"""
+    s = ctx.session
+    out = []
+    for d in s.scalars(
+        select(PersonDuty).where(PersonDuty.department_id == dept.id).with_for_update()
+    ):
+        if is_void(d) or (d.valid_to is not None and d.valid_to < day):
+            continue
+        e = s.get(PersonEngagement, d.engagement_id)
+        who = person_label(s, e.person_id, d.valid_from)
+        if d.valid_from >= day:
+            _set_end(ctx, d, d.valid_from - DAY)
+            out.append(f"职务 {duty_label(d)}：{who}（计划撤销）")
+        else:
+            _set_end(ctx, d, day - DAY)
+            out.append(f"职务 {duty_label(d)}：{who}")
+    return out
+
+
 HANDLERS = {
+    "person.duty_assign": person_duty_assign,
+    "person.duty_set_end": person_duty_set_end,
+    "person.duty_handover": person_duty_handover,
     "person.create": person_create,
     "person.revise": person_revise,
     "person.change_work_no": person_change_work_no,
@@ -754,6 +1017,10 @@ def check_persons(ctx: Ctx) -> list[ProblemItem]:
                 f"归属{_dept_name(s, a.department_id, a.valid_from)}"
                 f"（{_period(a.valid_from, a.valid_to)}）"
             )
+    for duty_id, index in sorted(ctx.new_duties.items()):
+        problem = duty_problem(s, s.get(PersonDuty, duty_id))
+        if problem:
+            blocked.setdefault(index, ([], []))[0].append(problem[0])
     problems = []
     for index, (own, dependents) in sorted(blocked.items()):
         parts = list(own)

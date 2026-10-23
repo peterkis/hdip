@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { PersonAssignmentOut } from './personAssignmentOut';
+import type { PersonDutyOut } from './personDutyOut';
 import type { PersonWorkNoOut } from './personWorkNoOut';
 
 export interface PersonEngagementOut {
@@ -21,4 +22,5 @@ export interface PersonEngagementOut {
   void: boolean;
   work_nos: PersonWorkNoOut[];
   assignments: PersonAssignmentOut[];
+  duties?: PersonDutyOut[];
 }

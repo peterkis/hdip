@@ -43,7 +43,9 @@ erDiagram
     institution ||--o{ person_engagement : "任用主体"
     person_engagement ||--o{ person_work_no : "业务工号"
     person_engagement ||--o{ person_assignment : "部门归属"
-    department ||--o{ person_assignment : "主归属"
+    department ||--o{ person_assignment : "主归属 / 附加归属"
+    person_engagement ||--o{ person_duty : "部门职务"
+    department ||--o{ person_duty : "部长 / 副部长"
 ```
 
 | 分组 | 表 | 说明 |
@@ -58,7 +60,7 @@ erDiagram
 | 外部标识 | `source_system`、`code_namespace`、`external_code`、`external_code_assignment` | 来源系统与字典（配置）；源记录与按期间的解释（编码映射台账，D3，迁移 0008） |
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage`、`service_unit_classification` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系；单元分类（D3） |
 | 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
-| 人员 | `person` / `person_version`、`person_engagement`、`person_work_no`、`person_assignment` | 人员身份 + 姓名版本；任用、业务工号、部门归属自带期间，结束日在到达前可改（迁移 0016，见第 8 节） |
+| 人员 | `person` / `person_version`、`person_engagement`、`person_work_no`、`person_assignment`、`person_duty` | 人员身份 + 姓名版本；任用、业务工号、部门归属自带期间，结束日在到达前可改（迁移 0016，见第 8 节） |
 
 院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
 
@@ -156,7 +158,7 @@ stateDiagram-v2
 | 拆分、合并 | `service_unit.split`、`service_unit.merge` | `service_unit_version`（前身结束、后继新建）、`service_unit_lineage` |
 | 分类与外部标识 | `department.classification_close`、`service_unit.classify`、`service_unit.classification_close`、`external_code.register`、`.assign`、`.assignment_close` | `department_classification`、`service_unit_classification`、`external_code`、`external_code_assignment` |
 | 部门组织变更 | `department.reorganize`（与同一申请里的 `department.create`、单元改挂、人员调科、隶属调整、结束编码解释等配合） | `department_version`（退出部门新版本为“被替代”）、`department_change_event`、`department_change_participant`；自动结束退出部门的上级边、管理关系、分类、别名、主体归属 |
-| 人员（P1） | `person.create`、`person.engage`、`person.transfer`、`person.assignment_set_end`；`person.engagement_set_end`（结束任用 / 调整结束日 / 撤销计划，P1.3）；`person.revise`（更名 / 更正误录）、`person.change_work_no`（换号 / 更正）、`person.assign`（补主部门）（处理函数在 `services/persons.py`） | `person`、`person_version`、`person_engagement`、`person_work_no`、`person_assignment` |
+| 人员（P1） | `person.create`、`person.engage`、`person.transfer`、`person.assignment_set_end`；`person.engagement_set_end`（结束任用 / 调整结束日 / 撤销计划，P1.3）；`person.assign` 的 `assignment_kind=ADDITIONAL`（附加归属）、`person.duty_assign`、`.duty_set_end`、`.duty_handover`（部门职务，P3）；`person.revise`（更名 / 更正误录）、`person.change_work_no`（换号 / 更正）、`person.assign`（补主部门）（处理函数在 `services/persons.py`） | `person`、`person_version`、`person_engagement`、`person_work_no`、`person_assignment`、`person_duty` |
 
 ## 4. 读取：按日期
 
@@ -195,6 +197,7 @@ stateDiagram-v2
 | 0016 | 人员模块 P1.1：`person`、`person_version`（姓名、拼音码、`revise_reason`）、`person_engagement`、`person_work_no`、`person_assignment`；保护函数 `hdip_guard_open_end`（结束日到达前可改）；人员发号序列；任用类型等选项；确认规则 `person.create / engage / transfer / assignment_set_end` |
 | 0017 | 人员模块 P1.2：确认规则 `person.revise`、`person.change_work_no`、`person.assign`（表结构不变） |
 | 0018 | 人员模块 P1.3：确认规则 `person.engagement_set_end`（表结构不变） |
+| 0019 | 人员模块 P3：`person_assignment` 加附加归属 `ADDITIONAL`（同一任用同一部门附加归属不重叠）；`person_duty` 部门职务（部长 / 副部长 × 正式 / 主持工作 / 代管；同一部门同一天正式部长、主持工作者各最多一位，可并存）；选项与确认规则 |
 
 ### 新增一类对象或变更的检查单
 
@@ -425,7 +428,8 @@ erDiagram
 | `person_version` | 一段期间的姓名 | `revise_reason`：`INITIAL` 登记 / `RENAME` 更名 / `CORRECTION` 更正误录；某版本的下一版是 `CORRECTION` 时它的姓名是误录，是 `RENAME` 时是曾用名 |
 | `person_engagement` | 一项任用 | 人员 × 主体 × 任用类型 × 期间；同一人员 + 同一主体期间不重叠（`person_engagement_no_overlap`，P1 的范围限制，允许并行任用时删掉这一条） |
 | `person_work_no` | 一段业务工号 | 挂在任用上、带期间，可换号；`person_work_no_one_owner`：同一主体内一个工号永远只属于一个人（`EXCLUDE ... person_id WITH <>`），本人返聘可沿用。复合外键锁定任用的人员与主体 |
-| `person_assignment` | 一段部门归属 | 任用 × 部门 × 期间；`kind` 目前只有 `PRIMARY`；同一任用同一时点最多一条主归属（`person_assignment_primary_no_overlap`，按任用而非部门分桶） |
+| `person_assignment` | 一段部门归属 | 任用 × 部门 × 期间；`kind`：`PRIMARY` 主部门 / `ADDITIONAL` 附加归属（P3）。同一任用同一时点最多一条主归属（`person_assignment_primary_no_overlap`，按任用而非部门分桶）；同一任用同一部门的附加归属不重叠；主部门与附加归属不能同时是同一部门（应用层） |
+| `person_duty` | 一段部门职务（P3，迁移 0019） | 任用 × 部门 × `duty`（`HEAD` 部长 / `DEPUTY` 副部长）× `mode`（`FORMAL` 正式 / `ACTING` 主持工作（代理）/ `CARETAKER` 代管）× 期间。挂在任用上、不要求此人归属该部门（代管）。同一部门同一天正式部长最多一位（`person_duty_formal_head_excl`）、主持工作者最多一位（`person_duty_presiding_excl`），两者可并存；同一人同一部门同一职务不重叠。部门撤销 / 被替代时自动结束（预演列出）；任用结束时随之截断；调科不带走。负责人 = 当天的主持工作者（有则显示并注明部长），否则正式部长；不写在部门上，不是系统权限 |
 
 - 归属的完整期间须落在任用期间内；部门在此期间已设立，且没有“撤销 / 被替代”段；筹备、暂停履职可以（与服务单元“全期须正式履职”不同）。在应用层按完整期间检查（`persons.assignment_problem`）。
 - 任用开始日不早于人员第一个姓名版本的开始日，也不早于主体的开始日。

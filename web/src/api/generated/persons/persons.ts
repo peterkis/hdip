@@ -20,8 +20,10 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  DepartmentDutyRow,
   DepartmentPersonRow,
   GetPersonParams,
+  ListDepartmentDutiesParams,
   ListDepartmentPersonsParams,
   ListPersonsParams,
   PersonDetail,
@@ -379,6 +381,122 @@ export function useListDepartmentPersons<TData = Awaited<ReturnType<typeof listD
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListDepartmentPersonsQueryOptions(departmentId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListDepartmentDutiesUrl = (departmentId: number,
+    params?: ListDepartmentDutiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/departments/${departmentId}/duties?${stringifiedParams}` : `/api/departments/${departmentId}/duties`
+}
+
+/**
+ * 查看日期该部门的职务：部长、副部长、主持工作、代管（负责人由此按日期派生，不存在部门上）。
+ * @summary List Department Duties
+ */
+export const listDepartmentDuties = async (departmentId: number,
+    params?: ListDepartmentDutiesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DepartmentDutyRow[]> => {
+
+  return hdipFetch<DepartmentDutyRow[]>(getListDepartmentDutiesUrl(departmentId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListDepartmentDutiesQueryKey = (departmentId: number,
+    params?: ListDepartmentDutiesParams,) => {
+    return [
+    `/api/departments/${departmentId}/duties`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListDepartmentDutiesQueryOptions = <TData = Awaited<ReturnType<typeof listDepartmentDuties>>, TError = Problem>(departmentId: number,
+    params?: ListDepartmentDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListDepartmentDutiesQueryKey(departmentId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listDepartmentDuties>>> = ({ signal }) => listDepartmentDuties(departmentId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: departmentId !== null && departmentId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListDepartmentDutiesQueryResult = NonNullable<Awaited<ReturnType<typeof listDepartmentDuties>>>
+export type ListDepartmentDutiesQueryError = Problem
+
+
+export function useListDepartmentDuties<TData = Awaited<ReturnType<typeof listDepartmentDuties>>, TError = Problem>(
+ departmentId: number,
+    params: undefined |  ListDepartmentDutiesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDepartmentDuties>>,
+          TError,
+          Awaited<ReturnType<typeof listDepartmentDuties>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDepartmentDuties<TData = Awaited<ReturnType<typeof listDepartmentDuties>>, TError = Problem>(
+ departmentId: number,
+    params?: ListDepartmentDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listDepartmentDuties>>,
+          TError,
+          Awaited<ReturnType<typeof listDepartmentDuties>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListDepartmentDuties<TData = Awaited<ReturnType<typeof listDepartmentDuties>>, TError = Problem>(
+ departmentId: number,
+    params?: ListDepartmentDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Department Duties
+ */
+
+export function useListDepartmentDuties<TData = Awaited<ReturnType<typeof listDepartmentDuties>>, TError = Problem>(
+ departmentId: number,
+    params?: ListDepartmentDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listDepartmentDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListDepartmentDutiesQueryOptions(departmentId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

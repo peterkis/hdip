@@ -43,7 +43,7 @@ import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { OrgFlow } from '@/components/org-flow'
 import { Callout } from '@/components/kit/callout'
-import { ChangeLink, Section } from '@/components/kit/section'
+import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip, type DbColumn } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
@@ -53,8 +53,10 @@ import { PageHeader } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useListDepartmentPersons } from '@/api/generated/persons/persons'
-import { DepartmentPersons } from '@/components/department-persons'
+import { useListDepartmentDuties, useListDepartmentPersons } from '@/api/generated/persons/persons'
+import { DepartmentDuties, DepartmentLeader, DepartmentPersons } from '@/components/department-persons'
+import { DutyAssignDialog, DutyEndDialog, DutyHandoverDialog, dutyRefFromDept } from '@/components/forms/person-forms'
+import type { DepartmentDutyRow } from '@/api/generated/model'
 import { ExternalCodeLinks } from '@/components/external-code-links'
 import { ClassificationCloseDialog, ClassifyDialog } from '@/components/forms/code-forms'
 import { UnitsTable } from '@/components/units-table'
@@ -474,6 +476,12 @@ export function DepartmentDetailPage() {
     { as_of: asOf, include_future: true },
     { query: { enabled: can('person.view') && Number.isInteger(id) } },
   )
+  const { data: duties = [] } = useListDepartmentDuties(
+    id,
+    { as_of: asOf, include_future: true },
+    { query: { enabled: can('person.view') && Number.isInteger(id) } },
+  )
+  const [dutyDialog, setDutyDialog] = useState<{ kind: 'assign' } | { kind: 'handover' | 'end'; duty: DepartmentDutyRow } | null>(null)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
@@ -606,7 +614,7 @@ export function DepartmentDetailPage() {
           {
             label: '当前负责人',
             icon: UserIcon,
-            value: <span className="text-fg-muted">待“岗位与任职”接入，由有效任职关系带出</span>,
+            value: can('person.view') ? <DepartmentLeader duties={duties} /> : <span className="text-fg-muted">无权查看人员</span>,
           },
         ]}
       />
@@ -827,9 +835,28 @@ export function DepartmentDetailPage() {
         )}
 
         {tab === 'persons' && (
-          <Section title={`人员（${asOf}）`}>
-            <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
-          </Section>
+          <div className="grid gap-8">
+            <Section
+              title="部门职务"
+              action={can('person.change') ? <InlineAction onClick={() => setDutyDialog({ kind: 'assign' })}>任命职务</InlineAction> : null}
+            >
+              <DepartmentDuties rows={duties} onAction={can('person.change') ? (kind, duty) => setDutyDialog({ kind, duty }) : undefined} />
+              <p className="text-fg-muted text-caption">负责人由职务按日期带出，不写在部门上；代管者可以不归属本部门；职务不等于系统权限。</p>
+            </Section>
+            <Section title={`人员（${asOf}）`}>
+              <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
+            </Section>
+          </div>
+        )}
+
+        {dutyDialog?.kind === 'assign' && (
+          <DutyAssignDialog open onOpenChange={(o) => !o && setDutyDialog(null)} departmentCode={data.code} departmentName={latest.name} />
+        )}
+        {dutyDialog?.kind === 'handover' && (
+          <DutyHandoverDialog open onOpenChange={(o) => !o && setDutyDialog(null)} duty={dutyRefFromDept(dutyDialog.duty, latest.name)} />
+        )}
+        {dutyDialog?.kind === 'end' && (
+          <DutyEndDialog open onOpenChange={(o) => !o && setDutyDialog(null)} duty={dutyRefFromDept(dutyDialog.duty, latest.name)} />
         )}
 
         {tab === 'codes' && (

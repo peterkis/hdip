@@ -696,11 +696,14 @@ class PersonChangeWorkNo(_Item):
 
 
 class PersonAssign(_Item):
-    """给任用里暂未分配的期间补主归属；valid_to 为空时到任用结束（或长期）。"""
+    """补归属：assignment_kind 为 PRIMARY 时给暂未分配的期间补主部门；
+    ADDITIONAL 为附加归属（兼任等，P3），可有多条，但不能与同一时期的主部门相同。
+    valid_to 为空时到任用结束（或长期）。"""
 
     kind: Literal["person.assign"]
     engagement_id: int
     department_code: Code
+    assignment_kind: Literal["PRIMARY", "ADDITIONAL"] = "PRIMARY"
     valid_from: date
     valid_to: date | None = None
 
@@ -709,6 +712,50 @@ class PersonAssign(_Item):
         if self.valid_to is not None and self.valid_to < self.valid_from:
             raise ValueError("归属结束日不能早于开始日")
         return self
+
+
+DutyCode = Literal["HEAD", "DEPUTY"]
+DutyMode = Literal["FORMAL", "ACTING", "CARETAKER"]
+
+
+class PersonDutyAssign(_Item):
+    """任命部门职务（P3）：挂在任用 × 部门上，不要求此人归属该部门（代管）。
+
+    同一部门同一天正式部长最多一位、主持工作者（代理或代管）最多一位，两者可并存。
+    """
+
+    kind: Literal["person.duty_assign"]
+    engagement_id: int
+    department_code: Code
+    duty: DutyCode
+    mode: DutyMode = "FORMAL"
+    valid_from: date
+    valid_to: date | None = None
+
+    @model_validator(mode="after")
+    def _period(self):
+        if self.valid_to is not None and self.valid_to < self.valid_from:
+            raise ValueError("职务结束日不能早于开始日")
+        return self
+
+
+class PersonDutySetEnd(_Item):
+    """结束职务、调整尚未到达的结束日（空 = 清除），或撤销尚未开始的职务（开始日前一日）。"""
+
+    kind: Literal["person.duty_set_end"]
+    duty_id: int
+    expected_valid_to: date | None
+    valid_to: date | None
+
+
+class PersonDutyHandover(_Item):
+    """职务交接：原任职者止于生效日前一日，接任者自生效日起担任同一部门的同一职务（同一方式）。"""
+
+    kind: Literal["person.duty_handover"]
+    duty_id: int
+    expected_valid_to: date | None
+    to_engagement_id: int
+    effective_date: date
 
 
 class PersonTransfer(_Item):
@@ -792,6 +839,9 @@ ChangeItem = Annotated[
     | PersonChangeWorkNo
     | PersonAssign
     | PersonTransfer
+    | PersonDutyAssign
+    | PersonDutySetEnd
+    | PersonDutyHandover
     | PersonEngagementSetEnd
     | PersonAssignmentSetEnd,
     Field(discriminator="kind"),
@@ -838,7 +888,10 @@ KIND_LABELS: dict[str, str] = {
     "person.engage": "建立任用",
     "person.revise": "修订人员姓名",
     "person.change_work_no": "变更业务工号",
-    "person.assign": "补主部门归属",
+    "person.assign": "补部门归属",
+    "person.duty_assign": "任命部门职务",
+    "person.duty_set_end": "结束部门职务",
+    "person.duty_handover": "部门职务交接",
     "person.transfer": "调科",
     "person.engagement_set_end": "结束 / 调整任用期限",
     "person.assignment_set_end": "结束部门归属",

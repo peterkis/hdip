@@ -709,6 +709,22 @@ class PersonAssignmentOut(BaseModel):
     void: bool
 
 
+class PersonDutyOut(BaseModel):
+    """部门职务（P3）：部门可以不是此人的归属部门（代管）。"""
+
+    id: int
+    department: DeptRef
+    duty: Literal["HEAD", "DEPUTY"]
+    mode: Literal["FORMAL", "ACTING", "CARETAKER"]
+    label: str
+    """部长 / 副部长 / 主持工作 / 代管。"""
+    valid_from: date
+    valid_to: date | None
+    change_id: int
+    closed_change_id: int | None
+    void: bool
+
+
 class PersonEngagementOut(BaseModel):
     id: int
     institution_id: int
@@ -723,6 +739,7 @@ class PersonEngagementOut(BaseModel):
     void: bool
     work_nos: list[PersonWorkNoOut]
     assignments: list[PersonAssignmentOut]
+    duties: list[PersonDutyOut] = []
 
 
 class PersonEngagementBrief(BaseModel):
@@ -784,3 +801,19 @@ class DepartmentPersonRow(BaseModel):
 
 
 DepartmentDependencies.model_rebuild()
+
+
+class DepartmentDutyRow(BaseModel):
+    """某部门的一条职务（部门详情的“负责人”与职务清单）。"""
+
+    duty_id: int
+    person_id: int
+    person_code: str
+    person_name: str
+    engagement_id: int
+    duty: Literal["HEAD", "DEPUTY"]
+    mode: Literal["FORMAL", "ACTING", "CARETAKER"]
+    label: str
+    valid_from: date
+    valid_to: date | None
+    not_yet_effective: bool

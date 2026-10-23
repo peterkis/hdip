@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0018**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0019**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
+- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -939,8 +939,9 @@
 约束：
 
 - `person_assignment_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_assignment_additional_no_overlap`（排他）：`EXCLUDE USING gist (engagement_id WITH =, department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE ((kind = 'ADDITIONAL'::text))`
 - `person_assignment_primary_no_overlap`（排他）：`EXCLUDE USING gist (engagement_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE ((kind = 'PRIMARY'::text))`
-- `person_assignment_kind_check`（检查）：`CHECK ((kind = 'PRIMARY'::text))`
+- `person_assignment_kind_check`（检查）：`CHECK ((kind = ANY (ARRAY['PRIMARY'::text, 'ADDITIONAL'::text])))`
 - `person_assignment_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
 
 索引：
@@ -951,6 +952,41 @@
 触发器：
 
 - `person_assignment_guard`：`CREATE TRIGGER person_assignment_guard BEFORE UPDATE ON public.person_assignment FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
+
+### person_duty
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `engagement_id` | bigint | 是 |  | → `person_engagement` |
+| `department_id` | bigint | 是 |  | → `department` |
+| `duty` | text | 是 |  |  |
+| `mode` | text | 是 | 'FORMAL'::text |  |
+| `valid_from` | date | 是 |  |  |
+| `valid_to` | date |  |  |  |
+| `change_id` | bigint | 是 |  | → `change_request` |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `recorded_by` | bigint | 是 |  | → `app_user` |
+| `closed_change_id` | bigint |  |  | → `change_request` |
+
+约束：
+
+- `person_duty_pkey`（主键）：`PRIMARY KEY (id)`
+- `person_duty_formal_head_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE (((duty = 'HEAD'::text) AND (mode = 'FORMAL'::text)))`
+- `person_duty_presiding_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE (((duty = 'HEAD'::text) AND (mode <> 'FORMAL'::text)))`
+- `person_duty_same_excl`（排他）：`EXCLUDE USING gist (engagement_id WITH =, department_id WITH =, duty WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
+- `person_duty_duty_check`（检查）：`CHECK ((duty = ANY (ARRAY['HEAD'::text, 'DEPUTY'::text])))`
+- `person_duty_mode_check`（检查）：`CHECK ((mode = ANY (ARRAY['FORMAL'::text, 'ACTING'::text, 'CARETAKER'::text])))`
+- `person_duty_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`
+
+索引：
+
+- `person_duty_department_idx`：`CREATE INDEX person_duty_department_idx ON public.person_duty USING btree (department_id)`
+- `person_duty_engagement_idx`：`CREATE INDEX person_duty_engagement_idx ON public.person_duty USING btree (engagement_id)`
+
+触发器：
+
+- `person_duty_guard`：`CREATE TRIGGER person_duty_guard BEFORE UPDATE ON public.person_duty FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
 
 ### person_engagement
 
@@ -1174,6 +1210,7 @@ $function$
 | `org_view` | INSERT、SELECT、UPDATE |
 | `person` | INSERT、SELECT、UPDATE |
 | `person_assignment` | INSERT、SELECT、UPDATE |
+| `person_duty` | INSERT、SELECT、UPDATE |
 | `person_engagement` | INSERT、SELECT、UPDATE |
 | `person_version` | INSERT、SELECT、UPDATE |
 | `person_work_no` | INSERT、SELECT、UPDATE |
@@ -1190,9 +1227,15 @@ $function$
 | 类别 | 代码 | 名称 | 排序 | 启用 |
 | --- | --- | --- | --- | --- |
 | assignment_kind | `PRIMARY` | 主归属 | 10 | 是 |
+| assignment_kind | `ADDITIONAL` | 附加归属 | 20 | 是 |
 | campus_node_role | `HEADQUARTERS` | 本部院区 | 10 | 是 |
 | campus_node_role | `HIGH_TECH` | 高新院区 | 20 | 是 |
 | campus_node_role | `CITY_CENTER` | 中心院区 | 30 | 是 |
+| duty | `HEAD` | 部长 | 10 | 是 |
+| duty | `DEPUTY` | 副部长 | 20 | 是 |
+| duty_mode | `FORMAL` | 正式 | 10 | 是 |
+| duty_mode | `ACTING` | 主持工作（代理） | 20 | 是 |
+| duty_mode | `CARETAKER` | 代管 | 30 | 是 |
 | engagement_type | `STAFF` | 在编 | 10 | 是 |
 | engagement_type | `CONTRACT` | 合同（人事代理） | 20 | 是 |
 | engagement_type | `DISPATCH` | 劳务派遣 | 30 | 是 |
@@ -1245,6 +1288,9 @@ $function$
 | person | assignment_set_end | confirmer | 是 |
 | person | change_work_no | confirmer | 是 |
 | person | create | confirmer | 是 |
+| person | duty_assign | confirmer | 是 |
+| person | duty_handover | confirmer | 是 |
+| person | duty_set_end | confirmer | 是 |
 | person | engage | confirmer | 是 |
 | person | engagement_set_end | confirmer | 是 |
 | person | revise | confirmer | 是 |

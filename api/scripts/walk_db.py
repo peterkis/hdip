@@ -421,6 +421,9 @@ PERSONS = [
     # 姓氏读音：单 S、区 O（拼音码由登记表单按姓氏读音生成，这里照样写出）
     *_person("PT-SXX", "单雄信", "GK", "2020-09-01", "STAFF", pinyin="SXX"),
     *_person("PT-OZQ", "区志强", "EK", "2023-02-01", "STAFF", pinyin="OZQ"),
+    # 部门职务（P3）走查：医务部两人，任命、交接、主持工作、代管从页面上做
+    *_person("PT-CL", "陈立", "YWB", "2020-01-01", "STAFF", work_no="0101"),
+    *_person("PT-YF", "杨帆", "YWB", "2021-05-01", "STAFF", work_no="0102"),
 ]
 
 

@@ -538,3 +538,18 @@ class PersonAssignment(_Period, Base):
     engagement_id: Mapped[int] = mapped_column(ForeignKey("person_engagement.id"))
     department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
     kind: Mapped[str] = mapped_column(Text)
+
+
+class PersonDuty(_Period, Base):
+    """部门职务：任用 × 部门 × 职务（部长 / 副部长）× 方式（正式 / 主持工作 / 代管）× 期间。
+
+    迁移 0019；不要求此人归属该部门（代管）；不是系统权限。
+    """
+
+    __tablename__ = "person_duty"
+    __mapper_args__ = {"eager_defaults": True}
+
+    engagement_id: Mapped[int] = mapped_column(ForeignKey("person_engagement.id"))
+    department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
+    duty: Mapped[str] = mapped_column(Text)
+    mode: Mapped[str] = mapped_column(Text)

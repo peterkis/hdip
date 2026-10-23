@@ -173,6 +173,13 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
     "person_work_no_value_check": "工号不能为空，最长 64 个字符",
     "person_assignment_primary_no_overlap": "这项任用在这段期间已有主归属，同一时点只能有一个",
     "person_assignment_period_check": "归属结束日不能早于开始日",
+    "person_assignment_additional_no_overlap": "这项任用在这段期间已有该部门的附加归属",
+    "person_duty_formal_head_excl": "该部门在这段期间已有正式部长，同一时点只能有一位",
+    "person_duty_presiding_excl": (
+        "该部门在这段期间已有主持工作的人（代理或代管），同一时点只能有一位"
+    ),
+    "person_duty_same_excl": "此人在这段期间已担任该部门的这一职务",
+    "person_duty_period_check": "职务结束日不能早于开始日",
 }
 
 
@@ -225,6 +232,8 @@ class Ctx:
     touched_codes: dict[int, int] = field(default_factory=dict)
     # 本申请新写或改过结束日的人员归属 id → 项序号（按完整期间检查，见 services/persons.py）
     new_assignments: dict[int, int] = field(default_factory=dict)
+    # 本申请新写或改过结束日的部门职务 id → 项序号（P3）
+    new_duties: dict[int, int] = field(default_factory=dict)
 
 
 def _json(value: Any) -> Any:
@@ -1099,6 +1108,8 @@ def _end_department_links(ctx: Ctx, d: Department, day: date) -> list[str]:
         else:
             ended.append(RELATION_LABELS_DEPT[r.kind])
     s.flush()
+    # 部门职务依附部门存在：随部门退出自动结束（P3，services/persons.py）
+    ended += _persons.end_department_duties(ctx, d, day)
     return ended
 
 

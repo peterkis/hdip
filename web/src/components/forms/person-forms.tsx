@@ -7,7 +7,14 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router'
 import { useListPersons } from '@/api/generated/persons/persons'
-import type { PersonAssignmentOut, PersonDetail, PersonEngagementOut, PersonRow } from '@/api/generated/model'
+import type {
+  DepartmentDutyRow,
+  PersonAssignmentOut,
+  PersonDetail,
+  PersonDutyOut,
+  PersonEngagementOut,
+  PersonRow,
+} from '@/api/generated/model'
 import { useEffectiveDate, type DialogProps } from '@/components/forms/change-forms'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
 import { orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
@@ -460,6 +467,9 @@ export function AssignmentEndDialog({ person, assignment, ...props }: DialogProp
 }
 
 export function AssignDialog({ engagement, ...props }: DialogProps & { engagement: PersonEngagementOut }) {
+  const [kind, setKind] = useState<'PRIMARY' | 'ADDITIONAL'>(() =>
+    engagement.assignments.some((a) => !a.void && a.kind === 'PRIMARY' && (!a.valid_to || a.valid_to >= today())) ? 'ADDITIONAL' : 'PRIMARY',
+  )
   const [dept, setDept] = useState('')
   const [from, setFrom] = useState(() => {
     const t = today()
@@ -469,23 +479,35 @@ export function AssignDialog({ engagement, ...props }: DialogProps & { engagemen
   return (
     <ItemDialog
       {...props}
-      title="补主部门归属"
-      description="给这项任用里暂未分配的期间补上主部门。已有主部门的期间要换部门，请用“调科”。"
+      title="添加部门归属"
+      description="主部门：给暂未分配的期间补上（已有主部门要换部门请用“调科”）。附加归属：兼任等，可有多个，但不能与同一时期的主部门相同；调科不带走附加归属。"
       build={() =>
         requireFields([
-          ['department', !!dept, '请选择主部门'],
+          ['department', !!dept, '请选择部门'],
           ['valid_from', !!from, '请填写开始日'],
           ['valid_to', !to || to >= from, '结束日不能早于开始日'],
         ]) ?? {
           kind: 'person.assign',
           engagement_id: engagement.id,
           department_code: dept,
+          assignment_kind: kind,
           valid_from: from,
           valid_to: to || null,
         }
       }
     >
-      <DepartmentSelect label="主部门" name="department" required value={dept} onChange={setDept} />
+      <SelectField
+        label="归属方式"
+        name="assignment_kind"
+        required
+        value={kind}
+        onChange={(v) => setKind(v as 'PRIMARY' | 'ADDITIONAL')}
+        options={[
+          { value: 'PRIMARY', label: '主部门（暂未分配时补上）' },
+          { value: 'ADDITIONAL', label: '附加归属（兼任等）' },
+        ]}
+      />
+      <DepartmentSelect label="部门" name="department" required value={dept} onChange={setDept} />
       <div className="grid grid-cols-2 gap-3">
         <TextField label="开始日" name="valid_from" type="date" required value={from} onChange={setFrom} />
         <TextField
@@ -569,6 +591,133 @@ export function EngagementEndDialog({ person, engagement: e, ...props }: DialogP
           {preview.length ? preview.join('；') : '不受影响'}。此人在其他主体的任用不受影响；页面不表示其他系统的离院处置已完成。
         </Callout>
       )}
+    </ItemDialog>
+  )
+}
+
+// ------------------------------------------------------------------ P3：部门职务（部长 / 副部长，正式 / 主持工作 / 代管）
+const DUTY_OPTIONS = [
+  { value: 'HEAD.FORMAL', label: '部长' },
+  { value: 'DEPUTY.FORMAL', label: '副部长' },
+  { value: 'HEAD.ACTING', label: '主持工作（代理部长；部长在任也可以，如部长外出学习、派驻）' },
+  { value: 'DEPUTY.ACTING', label: '代理副部长' },
+  { value: 'HEAD.CARETAKER', label: '代管（临时管理另一个部门，不改主部门）' },
+]
+
+/** 选一位人员的当前任用（值是任用 id）：按名称，后附代码与主部门，便于区分同名 */
+function PersonEngagementSelect({ value, onChange, label, name, exclude }: { value: string; onChange: (v: string) => void; label: string; name: string; exclude?: number }) {
+  const { asOf } = useApp()
+  const { data: rows = [] } = useListPersons({ as_of: asOf, include_future: true })
+  const options = rows.flatMap((p) =>
+    p.engagements
+      .filter((e) => e.id !== exclude)
+      .map((e) => ({
+        value: String(e.id),
+        label: `${p.name}（${p.code}）· ${e.department?.name ?? '暂未分配'}${e.not_yet_effective ? ` · ${e.valid_from} 起` : ''}`,
+      })),
+  )
+  return <SelectField label={label} name={name} required placeholder="请选择人员" value={value} onChange={onChange} options={options} hint="按姓名选择；列出查看日期有任用或计划任用的人" />
+}
+
+export function DutyAssignDialog({
+  engagement,
+  departmentCode,
+  departmentName,
+  ...props
+}: DialogProps & { engagement?: PersonEngagementOut; departmentCode?: string; departmentName?: string }) {
+  const [dept, setDept] = useState(departmentCode ?? '')
+  const [who, setWho] = useState(engagement ? String(engagement.id) : '')
+  const [duty, setDuty] = useState('')
+  const [from, setFrom] = useState(today())
+  const [to, setTo] = useState('')
+  return (
+    <ItemDialog
+      {...props}
+      title={departmentName ? `任命职务：${departmentName}` : '任命部门职务'}
+      description="职务挂在“任用 × 部门”上，不改主部门，也不授予任何系统权限。同一部门同一天正式部长、主持工作者各最多一位，两者可以并存。"
+      build={() => {
+        const missing = requireFields([
+          ['engagement', !!who, '请选择人员'],
+          ['department', !!dept, '请选择部门'],
+          ['duty', !!duty, '请选择职务'],
+          ['valid_from', !!from, '请填写开始日'],
+          ['valid_to', !to || to >= from, '结束日不能早于开始日'],
+        ])
+        if (missing) return missing
+        const [d, mode] = duty.split('.') as ['HEAD' | 'DEPUTY', 'FORMAL' | 'ACTING' | 'CARETAKER']
+        return { kind: 'person.duty_assign', engagement_id: Number(who), department_code: dept, duty: d, mode, valid_from: from, valid_to: to || null }
+      }}
+    >
+      {!engagement && <PersonEngagementSelect label="人员" name="engagement" value={who} onChange={setWho} />}
+      {!departmentCode && <DepartmentSelect label="部门" name="department" required value={dept} onChange={setDept} />}
+      <SelectField label="职务" name="duty" required placeholder="请选择" value={duty} onChange={setDuty} options={DUTY_OPTIONS} />
+      <div className="grid grid-cols-2 gap-3">
+        <TextField label="开始日" name="valid_from" type="date" required value={from} onChange={setFrom} />
+        <TextField label="结束日（选填）" name="valid_to" type="date" value={to} onChange={setTo} hint="代理、代管不强制结束日；不填 = 到任用结束" />
+      </div>
+    </ItemDialog>
+  )
+}
+
+type DutyRef = Pick<PersonDutyOut, 'id' | 'label' | 'valid_from' | 'valid_to'> & { holder: string; department: string; engagementId?: number }
+
+export function dutyRefFromPerson(d: PersonDutyOut, holder: string): DutyRef {
+  return { id: d.id, label: d.label, valid_from: d.valid_from, valid_to: d.valid_to ?? null, holder, department: d.department.name }
+}
+
+export function dutyRefFromDept(d: DepartmentDutyRow, department: string): DutyRef {
+  return { id: d.duty_id, label: d.label, valid_from: d.valid_from, valid_to: d.valid_to ?? null, holder: d.person_name, department, engagementId: d.engagement_id }
+}
+
+export function DutyHandoverDialog({ duty, ...props }: DialogProps & { duty: DutyRef }) {
+  const [who, setWho] = useState('')
+  const [day, setDay] = useState(() => (duty.valid_from > today() ? duty.valid_from : today()))
+  return (
+    <ItemDialog
+      {...props}
+      title={`交接：${duty.department}${duty.label}`}
+      description={`${duty.holder}止于交接日前一日，接任者自交接日起担任同一职务；部门身份不变。`}
+      build={() =>
+        requireFields([
+          ['engagement', !!who, '请选择接任者'],
+          ['effective_date', !!day, '请填写交接日'],
+        ]) ?? {
+          kind: 'person.duty_handover',
+          duty_id: duty.id,
+          expected_valid_to: duty.valid_to ?? null,
+          to_engagement_id: Number(who),
+          effective_date: day,
+        }
+      }
+    >
+      <PersonEngagementSelect label="接任者" name="engagement" value={who} onChange={setWho} exclude={duty.engagementId} />
+      <TextField label="交接日" name="effective_date" type="date" required value={day} onChange={setDay} hint={`须晚于这条职务的开始日 ${duty.valid_from}`} />
+    </ItemDialog>
+  )
+}
+
+export function DutyEndDialog({ duty, ...props }: DialogProps & { duty: DutyRef }) {
+  const planned = duty.valid_from > today()
+  const [cancelPlan, setCancelPlan] = useState(false)
+  const [last, setLast] = useState(duty.valid_to ?? today())
+  return (
+    <ItemDialog
+      {...props}
+      title={`结束职务：${duty.holder} · ${duty.department}${duty.label}`}
+      description="最后有效日当天仍担任；结束日到达前还可以再改。"
+      build={() =>
+        cancelPlan
+          ? { kind: 'person.duty_set_end', duty_id: duty.id, expected_valid_to: duty.valid_to ?? null, valid_to: dayBefore(duty.valid_from) }
+          : (requireFields([['valid_to', !!last && last >= duty.valid_from, `最后有效日不能早于开始日 ${duty.valid_from}`]]) ?? {
+              kind: 'person.duty_set_end',
+              duty_id: duty.id,
+              expected_valid_to: duty.valid_to ?? null,
+              valid_to: last,
+            })
+      }
+    >
+      {planned && <ToggleChip label={`撤销这条计划（原定 ${duty.valid_from} 开始）`} checked={cancelPlan} onChange={setCancelPlan} />}
+      {!cancelPlan && <TextField label="最后有效日（含当日）" name="valid_to" type="date" required value={last} onChange={setLast} />}
     </ItemDialog>
   )
 }

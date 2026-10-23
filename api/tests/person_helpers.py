@@ -44,3 +44,13 @@ def engagement_id(api, code, day=None):
 def notices(cr):
     """申请预演结果里各项的提示（不阻止提交）。"""
     return [n for o in cr.get("outcomes") or [] for n in o.get("notices", [])]
+
+
+def duties(api, dept_id, day):
+    """某部门某日的职务：[(职务名, 姓名)]。"""
+    rows = api.get(f"/api/departments/{dept_id}/duties", params={"as_of": day}).json()
+    return [(r["label"], r["person_name"]) for r in rows]
+
+
+def dept_id(api, code):
+    return next(d["id"] for d in api.get("/api/departments").json() if d["code"] == code)

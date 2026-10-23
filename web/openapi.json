@@ -4123,6 +4123,128 @@
           }
         }
       }
+    },
+    "/api/departments/{department_id}/duties": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "List Department Duties",
+        "description": "查看日期该部门的职务：部长、副部长、主持工作、代管（负责人由此按日期派生，不存在部门上）。",
+        "operationId": "listDepartmentDuties",
+        "parameters": [
+          {
+            "name": "department_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Department Id"
+            }
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Future"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DepartmentDutyRow"
+                  },
+                  "title": "Response Listdepartmentduties"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -4948,6 +5070,15 @@
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonDutyAssign"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonDutySetEnd"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonDutyHandover"
+                },
+                {
                   "$ref": "#/components/schemas/PersonEngagementSetEnd"
                 },
                 {
@@ -4985,6 +5116,9 @@
                   "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
                   "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
+                  "person.duty_assign": "#/components/schemas/PersonDutyAssign",
+                  "person.duty_handover": "#/components/schemas/PersonDutyHandover",
+                  "person.duty_set_end": "#/components/schemas/PersonDutySetEnd",
                   "person.engage": "#/components/schemas/PersonEngage",
                   "person.engagement_set_end": "#/components/schemas/PersonEngagementSetEnd",
                   "person.revise": "#/components/schemas/PersonRevise",
@@ -5447,6 +5581,15 @@
                   "$ref": "#/components/schemas/PersonTransfer"
                 },
                 {
+                  "$ref": "#/components/schemas/PersonDutyAssign"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonDutySetEnd"
+                },
+                {
+                  "$ref": "#/components/schemas/PersonDutyHandover"
+                },
+                {
                   "$ref": "#/components/schemas/PersonEngagementSetEnd"
                 },
                 {
@@ -5484,6 +5627,9 @@
                   "person.assignment_set_end": "#/components/schemas/PersonAssignmentSetEnd",
                   "person.change_work_no": "#/components/schemas/PersonChangeWorkNo",
                   "person.create": "#/components/schemas/PersonCreate",
+                  "person.duty_assign": "#/components/schemas/PersonDutyAssign",
+                  "person.duty_handover": "#/components/schemas/PersonDutyHandover",
+                  "person.duty_set_end": "#/components/schemas/PersonDutySetEnd",
                   "person.engage": "#/components/schemas/PersonEngage",
                   "person.engagement_set_end": "#/components/schemas/PersonEngagementSetEnd",
                   "person.revise": "#/components/schemas/PersonRevise",
@@ -6791,6 +6937,88 @@
           "reorganizations"
         ],
         "title": "DepartmentDetail"
+      },
+      "DepartmentDutyRow": {
+        "properties": {
+          "duty_id": {
+            "type": "integer",
+            "title": "Duty Id"
+          },
+          "person_id": {
+            "type": "integer",
+            "title": "Person Id"
+          },
+          "person_code": {
+            "type": "string",
+            "title": "Person Code"
+          },
+          "person_name": {
+            "type": "string",
+            "title": "Person Name"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "duty": {
+            "type": "string",
+            "enum": [
+              "HEAD",
+              "DEPUTY"
+            ],
+            "title": "Duty"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "FORMAL",
+              "ACTING",
+              "CARETAKER"
+            ],
+            "title": "Mode"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duty_id",
+          "person_id",
+          "person_code",
+          "person_name",
+          "engagement_id",
+          "duty",
+          "mode",
+          "label",
+          "valid_from",
+          "valid_to",
+          "not_yet_effective"
+        ],
+        "title": "DepartmentDutyRow",
+        "description": "某部门的一条职务（部门详情的“负责人”与职务清单）。"
       },
       "DepartmentEdgeOut": {
         "properties": {
@@ -9285,6 +9513,15 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
             "title": "Department Code"
           },
+          "assignment_kind": {
+            "type": "string",
+            "enum": [
+              "PRIMARY",
+              "ADDITIONAL"
+            ],
+            "title": "Assignment Kind",
+            "default": "PRIMARY"
+          },
           "valid_from": {
             "type": "string",
             "format": "date",
@@ -9312,7 +9549,7 @@
           "valid_from"
         ],
         "title": "PersonAssign",
-        "description": "给任用里暂未分配的期间补主归属；valid_to 为空时到任用结束（或长期）。"
+        "description": "补归属：assignment_kind 为 PRIMARY 时给暂未分配的期间补主部门；\nADDITIONAL 为附加归属（兼任等，P3），可有多条，但不能与同一时期的主部门相同。\nvalid_to 为空时到任用结束（或长期）。"
       },
       "PersonAssignmentOut": {
         "properties": {
@@ -9627,6 +9864,245 @@
         ],
         "title": "PersonDetail"
       },
+      "PersonDutyAssign": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.duty_assign",
+            "title": "Kind"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "department_code": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Department Code"
+          },
+          "duty": {
+            "type": "string",
+            "enum": [
+              "HEAD",
+              "DEPUTY"
+            ],
+            "title": "Duty"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "FORMAL",
+              "ACTING",
+              "CARETAKER"
+            ],
+            "title": "Mode",
+            "default": "FORMAL"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "engagement_id",
+          "department_code",
+          "duty",
+          "valid_from"
+        ],
+        "title": "PersonDutyAssign",
+        "description": "任命部门职务（P3）：挂在任用 × 部门上，不要求此人归属该部门（代管）。\n\n同一部门同一天正式部长最多一位、主持工作者（代理或代管）最多一位，两者可并存。"
+      },
+      "PersonDutyHandover": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.duty_handover",
+            "title": "Kind"
+          },
+          "duty_id": {
+            "type": "integer",
+            "title": "Duty Id"
+          },
+          "expected_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Valid To"
+          },
+          "to_engagement_id": {
+            "type": "integer",
+            "title": "To Engagement Id"
+          },
+          "effective_date": {
+            "type": "string",
+            "format": "date",
+            "title": "Effective Date"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "duty_id",
+          "expected_valid_to",
+          "to_engagement_id",
+          "effective_date"
+        ],
+        "title": "PersonDutyHandover",
+        "description": "职务交接：原任职者止于生效日前一日，接任者自生效日起担任同一部门的同一职务（同一方式）。"
+      },
+      "PersonDutyOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "duty": {
+            "type": "string",
+            "enum": [
+              "HEAD",
+              "DEPUTY"
+            ],
+            "title": "Duty"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "FORMAL",
+              "ACTING",
+              "CARETAKER"
+            ],
+            "title": "Mode"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          },
+          "closed_change_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Change Id"
+          },
+          "void": {
+            "type": "boolean",
+            "title": "Void"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "department",
+          "duty",
+          "mode",
+          "label",
+          "valid_from",
+          "valid_to",
+          "change_id",
+          "closed_change_id",
+          "void"
+        ],
+        "title": "PersonDutyOut",
+        "description": "部门职务（P3）：部门可以不是此人的归属部门（代管）。"
+      },
+      "PersonDutySetEnd": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "person.duty_set_end",
+            "title": "Kind"
+          },
+          "duty_id": {
+            "type": "integer",
+            "title": "Duty Id"
+          },
+          "expected_valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Valid To"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "duty_id",
+          "expected_valid_to",
+          "valid_to"
+        ],
+        "title": "PersonDutySetEnd",
+        "description": "结束职务、调整尚未到达的结束日（空 = 清除），或撤销尚未开始的职务（开始日前一日）。"
+      },
       "PersonEngage": {
         "properties": {
           "kind": {
@@ -9886,6 +10362,14 @@
             },
             "type": "array",
             "title": "Assignments"
+          },
+          "duties": {
+            "items": {
+              "$ref": "#/components/schemas/PersonDutyOut"
+            },
+            "type": "array",
+            "title": "Duties",
+            "default": []
           }
         },
         "type": "object",

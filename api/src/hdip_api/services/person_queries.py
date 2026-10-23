@@ -22,15 +22,18 @@ from hdip_api.models import (
     InstitutionVersion,
     Person,
     PersonAssignment,
+    PersonDuty,
     PersonEngagement,
     PersonVersion,
     PersonWorkNo,
 )
 from hdip_api.schemas.read import (
+    DepartmentDutyRow,
     DepartmentPersonRow,
     DeptRef,
     PersonAssignmentOut,
     PersonDetail,
+    PersonDutyOut,
     PersonEngagementBrief,
     PersonEngagementOut,
     PersonRow,
@@ -38,6 +41,7 @@ from hdip_api.schemas.read import (
     PersonWorkNoOut,
 )
 from hdip_api.services.apply import is_void
+from hdip_api.services.persons import duty_label
 from hdip_api.services.queries import _pick, _versions_by, covers
 
 
@@ -58,6 +62,7 @@ class _World:
     engagements: dict[int, list[PersonEngagement]]
     work_nos: dict[int, list[PersonWorkNo]]
     assignments: dict[int, list[PersonAssignment]]
+    duties: dict[int, list[PersonDuty]]
     departments: dict[int, Department]
     dept_versions: dict[int, list[DepartmentVersion]]
     institutions: dict[int, Institution]
@@ -72,6 +77,7 @@ class _World:
             engagements=by(s.scalars(select(PersonEngagement)), "person_id"),
             work_nos=by(s.scalars(select(PersonWorkNo)), "engagement_id"),
             assignments=by(s.scalars(select(PersonAssignment)), "engagement_id"),
+            duties=by(s.scalars(select(PersonDuty)), "engagement_id"),
             departments={d.id: d for d in s.scalars(select(Department))},
             dept_versions=_versions_by(s, DepartmentVersion, "department_id"),
             institutions={i.id: i for i in s.scalars(select(Institution))},
@@ -130,7 +136,7 @@ class _World:
             anchor = e.valid_to
         # 任用当天有效：只取当天的归属与工号（没有就是暂未分配）；任用尚未开始：取最早的计划
         pick = self.on_or_first if e.valid_from > day else self.on
-        a = pick(self.assignments[e.id], anchor)
+        a = pick([x for x in self.assignments[e.id] if x.kind == "PRIMARY"], anchor)
         w = pick(self.work_nos[e.id], anchor)
         return PersonEngagementBrief(
             id=e.id,
@@ -300,6 +306,24 @@ def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDe
                     assignment_out(a)
                     for a in sorted(w.assignments[e.id], key=lambda x: (x.valid_from, x.id))
                 ],
+                duties=[
+                    PersonDutyOut(
+                        id=d.id,
+                        department=w.dept_ref(
+                            d.department_id,
+                            day if covers(d.valid_from, d.valid_to, day) else d.valid_from,
+                        ),
+                        duty=d.duty,
+                        mode=d.mode,
+                        label=duty_label(d),
+                        valid_from=d.valid_from,
+                        valid_to=d.valid_to,
+                        change_id=d.change_id,
+                        closed_change_id=d.closed_change_id,
+                        void=is_void(d),
+                    )
+                    for d in sorted(w.duties[e.id], key=lambda x: (x.valid_from, x.id))
+                ],
             )
         )
     return PersonDetail(
@@ -380,6 +404,43 @@ def department_persons(
     return sorted(rows, key=lambda r: (r.not_yet_effective, r.person_code, r.valid_from))
 
 
+def department_duties(
+    s: Session, department_id: int, day: date, *, include_future: bool = False
+) -> list[DepartmentDutyRow]:
+    """查看日期该部门的职务（含代管者；include_future 加上之后才开始的）。"""
+    w = _World.load(s)
+    if department_id not in w.departments:
+        raise NotFound("部门不存在")
+    engagement_of = {e.id: e for es in w.engagements.values() for e in es}
+    rows = []
+    for ds in w.duties.values():
+        for d in _live(ds):
+            if d.department_id != department_id:
+                continue
+            later = d.valid_from > day
+            if not (covers(d.valid_from, d.valid_to, day) or (later and include_future)):
+                continue
+            e = engagement_of[d.engagement_id]
+            v = w.name(e.person_id, max(day, d.valid_from))
+            rows.append(
+                DepartmentDutyRow(
+                    duty_id=d.id,
+                    person_id=e.person_id,
+                    person_code=w.persons[e.person_id].code,
+                    person_name=v.name if v else "",
+                    engagement_id=e.id,
+                    duty=d.duty,
+                    mode=d.mode,
+                    label=duty_label(d),
+                    valid_from=d.valid_from,
+                    valid_to=d.valid_to,
+                    not_yet_effective=later,
+                )
+            )
+    order = {"HEAD": 0, "DEPUTY": 1}
+    return sorted(rows, key=lambda r: (r.not_yet_effective, order[r.duty], r.mode != "FORMAL"))
+
+
 # ------------------------------------------------------------------ 导出
 def export_persons(s: Session, user: AppUser, day: date):
     """当天有有效任用的人员，一人一行。"""
@@ -402,7 +463,11 @@ def export_relations(s: Session, user: AppUser, day: date):
             if not covers(e.valid_from, e.valid_to, day):
                 continue
             a = next(
-                (x for x in _live(w.assignments[e.id]) if covers(x.valid_from, x.valid_to, day)),
+                (
+                    x
+                    for x in _live(w.assignments[e.id])
+                    if x.kind == "PRIMARY" and covers(x.valid_from, x.valid_to, day)
+                ),
                 None,
             )
             n = next(

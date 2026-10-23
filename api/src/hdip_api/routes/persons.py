@@ -13,7 +13,13 @@ from hdip_api.core.auth import CurrentUser
 from hdip_api.core.db import SessionDep
 from hdip_api.core.errors import ERROR_RESPONSES
 from hdip_api.core.permissions import PERSON_VIEW, require_permission
-from hdip_api.schemas.read import DepartmentPersonRow, PersonDetail, PersonRow, PersonStatus
+from hdip_api.schemas.read import (
+    DepartmentDutyRow,
+    DepartmentPersonRow,
+    PersonDetail,
+    PersonRow,
+    PersonStatus,
+)
 from hdip_api.services import person_queries
 
 router = APIRouter(tags=["persons"], responses=ERROR_RESPONSES)
@@ -76,5 +82,24 @@ def list_department_persons(
     """查看日期归属该部门的人员（主归属，不含下级部门）。"""
     require_permission(user, PERSON_VIEW)
     return person_queries.department_persons(
+        session, department_id, _day(session, as_of), include_future=include_future
+    )
+
+
+@router.get(
+    "/departments/{department_id}/duties",
+    response_model=list[DepartmentDutyRow],
+    operation_id="listDepartmentDuties",
+)
+def list_department_duties(
+    session: SessionDep,
+    user: CurrentUser,
+    department_id: int,
+    as_of: AsOf = None,
+    include_future: bool = False,
+):
+    """查看日期该部门的职务：部长、副部长、主持工作、代管（负责人由此按日期派生，不存在部门上）。"""
+    require_permission(user, PERSON_VIEW)
+    return person_queries.department_duties(
         session, department_id, _day(session, as_of), include_future=include_future
     )

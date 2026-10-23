@@ -25,6 +25,7 @@ from hdip_api.models import (
     OptionItem,
     Person,
     PersonAssignment,
+    PersonDuty,
     PersonEngagement,
     PersonVersion,
     ServiceUnit,
@@ -120,6 +121,19 @@ class _Names:
                 )
             ).all()
         )
+        # 职务 id → (人员代码, 部门代码, 职务名)
+        self.duties = {
+            d.id: (
+                self.engagement_person.get(d.engagement_id, ""),
+                dcode,
+                _duty_label(d.duty, d.mode),
+            )
+            for d, dcode in s.execute(
+                select(PersonDuty, Department.code).join(
+                    Department, Department.id == PersonDuty.department_id
+                )
+            )
+        }
         self.engagement_types = {
             o.code: o.name
             for o in s.scalars(select(OptionItem).where(OptionItem.category == "engagement_type"))
@@ -164,6 +178,12 @@ class _Names:
             assignment_id, (f"#{assignment_id}", "", None, None)
         )
         return self.p(pcode), self.dept.get(dcode, dcode), start, end
+
+
+def _duty_label(duty: str, mode: str) -> str:
+    if duty == "HEAD" and mode != "FORMAL":
+        return "主持工作" if mode == "ACTING" else "代管"
+    return {"HEAD": "部长", "DEPUTY": "副部长"}[duty]
 
 
 def _day(v) -> str:
@@ -293,7 +313,21 @@ def describe(n: _Names, i: dict) -> str:
             return f"“{n.pe(i['engagement_id'])}”{what}：{old} → {new}{since()}"
         case "person.assign":
             until = f"，至 {_day(i['valid_to'])}" if i.get("valid_to") else ""
-            return f"“{n.pe(i['engagement_id'])}”补主部门“{n.d(i['department_code'])}”{since('valid_from')}{until}"
+            what = "附加归属" if i.get("assignment_kind") == "ADDITIONAL" else "补主部门"
+            return f"“{n.pe(i['engagement_id'])}”{what}“{n.d(i['department_code'])}”{since('valid_from')}{until}"
+        case "person.duty_assign":
+            label = _duty_label(i["duty"], i.get("mode", "FORMAL"))
+            return f"“{n.pe(i['engagement_id'])}”任{n.d(i['department_code'])}{label}{since('valid_from')}"
+        case "person.duty_set_end":
+            pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
+            if not i.get("valid_to"):
+                return f"清除“{n.p(pcode)}”{n.dept.get(dcode, dcode)}{label}的结束日"
+            return (
+                f"“{n.p(pcode)}”{n.dept.get(dcode, dcode)}{label}的最后有效日 {_day(i['valid_to'])}"
+            )
+        case "person.duty_handover":
+            pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
+            return f"{n.dept.get(dcode, dcode)}{label}：“{n.p(pcode)}”交给“{n.pe(i['to_engagement_id'])}”{since()}"
         case "person.assignment_set_end":
             who, dept, start, _ = n.pa(i["assignment_id"])
             if not i.get("valid_to"):
@@ -626,10 +660,46 @@ def _view(
                 ),
                 _p("text", f"{i.get('work_no') or '（不再有工号）'} · 自 {day()}"),
             ], None
+        case "person.duty_assign":
+            return [
+                _p("chip", n.pe(i["engagement_id"])),
+                _p("tag", "任" + _duty_label(i["duty"], i.get("mode", "FORMAL")), "green"),
+                dept_chip(i["department_code"]),
+                _p(
+                    "text",
+                    f"自 {day('valid_from')}"
+                    + (f" 至 {_day(i['valid_to'])}" if i.get("valid_to") else ""),
+                ),
+            ], None
+        case "person.duty_set_end":
+            pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
+            return [
+                _p("chip", n.p(pcode)),
+                _p("text", f"{n.dept.get(dcode, dcode)}{label}"),
+                _p("arrow", "→"),
+                _p(
+                    "text",
+                    f"最后有效日 {_day(i['valid_to'])}" if i.get("valid_to") else "清除结束日",
+                ),
+            ], None
+        case "person.duty_handover":
+            pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
+            return [
+                _p("ref", f"{n.dept.get(dcode, dcode)} {label}"),
+                _p("out", n.p(pcode)),
+                _p("arrow", "→"),
+                _p("chip", n.pe(i["to_engagement_id"])),
+                _p("tag", "交接", "blue"),
+                _p("text", f"自 {day()}"),
+            ], None
         case "person.assign":
             return [
                 _p("chip", n.pe(i["engagement_id"])),
-                _p("tag", "补主部门", "green"),
+                _p(
+                    "tag",
+                    "附加归属" if i.get("assignment_kind") == "ADDITIONAL" else "补主部门",
+                    "green",
+                ),
                 dept_chip(i["department_code"]),
                 _p(
                     "text",

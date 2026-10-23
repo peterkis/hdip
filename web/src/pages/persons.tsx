@@ -17,11 +17,15 @@ import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useListDepartments } from '@/api/generated/master/master'
-import type { PersonAssignmentOut, PersonDetail, PersonEngagementOut, PersonRow } from '@/api/generated/model'
+import type { PersonAssignmentOut, PersonDetail, PersonDutyOut, PersonEngagementOut, PersonRow } from '@/api/generated/model'
 import { useGetPerson, useListPersons } from '@/api/generated/persons/persons'
 import {
   AssignDialog,
   AssignmentEndDialog,
+  DutyAssignDialog,
+  DutyEndDialog,
+  DutyHandoverDialog,
+  dutyRefFromPerson,
   EngagementEndDialog,
   PersonEngageDialog,
   PersonNameDialog,
@@ -355,6 +359,9 @@ export function PersonDetailPage() {
       {engaging && <PersonEngageDialog open onOpenChange={setEngaging} personCode={data.code} name={data.name} />}
       {dialog?.kind === 'name' && <PersonNameDialog open onOpenChange={close} person={data} />}
       {dialog?.kind === 'work_no' && <WorkNoDialog open onOpenChange={close} engagement={dialog.engagement} />}
+      {dialog?.kind === 'duty_assign' && <DutyAssignDialog open onOpenChange={close} engagement={dialog.engagement} />}
+      {dialog?.kind === 'duty_handover' && <DutyHandoverDialog open onOpenChange={close} duty={dutyRefFromPerson(dialog.duty, data.name)} />}
+      {dialog?.kind === 'duty_end' && <DutyEndDialog open onOpenChange={close} duty={dutyRefFromPerson(dialog.duty, data.name)} />}
       {dialog?.kind === 'engagement_end' && <EngagementEndDialog open onOpenChange={close} person={data.name} engagement={dialog.engagement} />}
       {dialog?.kind === 'assign' && <AssignDialog open onOpenChange={close} engagement={dialog.engagement} />}
       {dialog?.kind === 'transfer' && <TransferDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
@@ -365,7 +372,8 @@ export function PersonDetailPage() {
 
 type PersonDialog =
   | { kind: 'name' }
-  | { kind: 'work_no' | 'assign' | 'engagement_end'; engagement: PersonEngagementOut }
+  | { kind: 'work_no' | 'assign' | 'engagement_end' | 'duty_assign'; engagement: PersonEngagementOut }
+  | { kind: 'duty_handover' | 'duty_end'; duty: PersonDutyOut }
   | { kind: 'transfer' | 'end'; assignment: PersonAssignmentOut }
 
 /** 还能调整的一段：未撤销，结束日为空或尚未过去（结束日到达前可改，人员设计 P-3） */
@@ -395,7 +403,8 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
               <InlineAction onClick={() => onAction({ kind: 'work_no', engagement: e })}>
                 {e.work_nos.some((n) => !n.void) ? '换工号' : '登记工号'}
               </InlineAction>
-              <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>补归属</InlineAction>
+              <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>添加归属</InlineAction>
+              <InlineAction onClick={() => onAction({ kind: 'duty_assign', engagement: e })}>任命职务</InlineAction>
               <InlineAction onClick={() => onAction({ kind: 'engagement_end', engagement: e })}>
                 {e.valid_to ? '调整期限' : '结束任用'}
               </InlineAction>
@@ -409,7 +418,7 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
         <SegmentList
           title="主部门"
           empty="这项任用没有部门归属（暂未分配）"
-          rows={e.assignments.map((a) => ({
+          rows={e.assignments.filter((a) => a.kind === 'PRIMARY').map((a) => ({
             key: a.id,
             void: a.void,
             from: a.valid_from,
@@ -433,6 +442,60 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
           }))}
           asOf={asOf}
         />
+        {e.assignments.some((a) => a.kind === 'ADDITIONAL') && (
+          <SegmentList
+            title="附加归属"
+            empty=""
+            rows={e.assignments
+              .filter((a) => a.kind === 'ADDITIONAL')
+              .map((a) => ({
+                key: a.id,
+                void: a.void,
+                from: a.valid_from,
+                to: a.valid_to,
+                label: (
+                  <>
+                    <Link className="hover:underline" to={`/departments/${a.department.id}`}>
+                      {a.department.name}
+                    </Link>
+                    {onAction && adjustable(a) && (
+                      <span className="order-last">
+                        <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>
+                      </span>
+                    )}
+                  </>
+                ),
+              }))}
+            asOf={asOf}
+          />
+        )}
+        {(e.duties ?? []).length > 0 && (
+          <SegmentList
+            title="部门职务"
+            empty=""
+            rows={(e.duties ?? []).map((d) => ({
+              key: d.id,
+              void: d.void,
+              from: d.valid_from,
+              to: d.valid_to,
+              label: (
+                <>
+                  <Link className="hover:underline" to={`/departments/${d.department.id}`}>
+                    {d.department.name}
+                  </Link>
+                  <Tag tone={d.mode === 'FORMAL' ? 'blue' : 'orange'}>{d.label}</Tag>
+                  {onAction && adjustable(d) && (
+                    <span className="order-last">
+                      <InlineAction onClick={() => onAction({ kind: 'duty_handover', duty: d })}>交接</InlineAction>
+                      <InlineAction onClick={() => onAction({ kind: 'duty_end', duty: d })}>结束</InlineAction>
+                    </span>
+                  )}
+                </>
+              ),
+            }))}
+            asOf={asOf}
+          />
+        )}
         <SegmentList
           title="业务工号"
           empty="未登记工号"

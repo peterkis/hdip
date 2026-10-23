@@ -4,15 +4,19 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { PersonAssignAssignmentKind } from './personAssignAssignmentKind';
 
 /**
- * 给任用里暂未分配的期间补主归属；valid_to 为空时到任用结束（或长期）。
+ * 补归属：assignment_kind 为 PRIMARY 时给暂未分配的期间补主部门；
+ * ADDITIONAL 为附加归属（兼任等，P3），可有多条，但不能与同一时期的主部门相同。
+ * valid_to 为空时到任用结束（或长期）。
  */
 export interface PersonAssign {
   kind: 'person.assign';
   engagement_id: number;
   /** @pattern ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ */
   department_code: string;
+  assignment_kind?: PersonAssignAssignmentKind;
   valid_from: string;
   valid_to?: string | null;
 }
