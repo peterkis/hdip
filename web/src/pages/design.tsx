@@ -322,7 +322,7 @@ function Overview() {
               value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法）',
             },
             { label: '组件底层', icon: Layers01Icon, value: 'shadcn/ui Base UI（base-mira）+ hugeicons' },
-            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0 规范接入、U1 变更申请列表、U2 全部列表页；详情与表单待 U3）' },
+            { label: '更新', icon: Calendar03Icon, value: '2026-10-25（U0 规范接入、U1 变更申请列表、U2 全部列表页、U3 详情、表单与复杂核对）' },
           ]}
         />
       </div>
@@ -350,20 +350,20 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-LAY 页面外框',
     target: 'work 净宽 ≤1440 / document ≤900 / canvas 不设上限；共享 gutter 24（<768 为 16）',
     stage: 'done',
-    note: 'U1 变更申请列表；U2 部门、服务单元、主体、院区、分类方案、编码映射台账、人员名册、部门任职都已接入 work 外框；详情页待 U3，仍是旧外框',
+    note: 'U1、U2：全部列表页 work；U3：主体、院区、服务单元、部门、人员详情与规划页 document，变更申请详情 work，组织总览 canvas。本页（/design）有自己的外壳，不套外框',
   },
   {
     rule: 'R-TYP 工作页标题',
     target: '24/32 · 600 · 字距 0',
     stage: 'done',
-    note: 'PageHeader work：U1、U2 的全部列表页；详情页（文档标题 32/40）待 U3',
+    note: 'U3 起 PageHeader 按外框取标题角色：work / canvas 24/32，document 用文档标题 32/40（字距 0）',
     sample: <span className="text-fg-strong text-work-title font-semibold">变更申请</span>,
   },
   {
     rule: 'R-TYP 章节标题',
     target: '16/24 · 600',
-    stage: 'ready',
-    note: 'text-section；逐步替代过大的区块标题',
+    stage: 'done',
+    note: 'U3：有外框的页面里 Section 标题、申请核对的组标题都用 text-section',
     sample: <span className="text-fg-strong text-section font-semibold">所属关系</span>,
   },
   {
@@ -376,7 +376,7 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-ROW 行高',
     target: '标准行 ≥44 / 显式紧凑 ≥36 / 双行工作列表 ≥64；表头 36；单元格内边距 12',
     stage: 'done',
-    note: 'U2：声明了外框的页面里，DbTable 自动用规范行高（表头 36、行 ≥44、单元格左右 12）；未迁移的详情页仍是 36px 旧样式',
+    note: 'U2 起声明了外框的页面里 DbTable 自动用规范行高（表头 36、行 ≥44、单元格左右 12）；U3 后全部业务页都已声明外框',
     sample: (
       <span className="grid w-56 gap-1">
         <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-row-height-compact) items-center border px-(--hd-cell-padding-x) text-caption">紧凑 36</span>
@@ -401,25 +401,43 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-ROW 表格边线',
     target: '默认只用横线；矩阵、逐列对照显式启用竖线',
     stage: 'done',
-    note: 'U2：列表页只用横线，variant="compare" 才画竖线；详情页（U3）与本页“表格”一节仍是旧样式'
+    note: '列表与详情只用横线；申请里的字段前后对照用 variant="compare" 画竖线。本页“表格”一节仍是旧样式',
   },
   {
     rule: 'R-COL 主按钮状态色',
     target: 'default / hover / pressed 用明确色阶；深色主题浅底深字；18 组 ≥4.5:1',
-    stage: 'todo',
-    note: '现有主按钮 hover 用透明度，深色白字约 4.03:1；U2 修',
+    stage: 'done',
+    note: 'U3：hover / pressed 改用语义状态色；浅色 600 / 700 / 800 + 白字，深色 300 / 200 / 400 + gray-900，深色与强调色组合单独声明；实测六组 4.57～10.39',
   },
   {
     rule: 'C-08 控件尺寸',
     target: '常规 32 / 行内 28 / 触控主要 44',
-    stage: 'todo',
-    note: '现有 Button 默认 28（h-7）；只改令牌不生效，U2 改组件',
+    stage: 'done',
+    note: 'U3：按钮 32 / 行内 28、输入框与下拉 32、搜索与筛选胶囊 32、单选分段 32、侧栏导航行 32，都引用 --hd-control-height*；触控 44 待移动端',
   },
   {
     rule: 'R-COL 业务状态色',
     target: '计划浅黄、停用红、结束灰；状态 / 分类 / 图表三套分开',
     stage: 'done',
     note: '沿用 lib/tones.ts，本次不改',
+  },
+  {
+    rule: 'C-06 属性与引用',
+    target: '属性名 128px、窄屏上下排；对象引用写名称；空值写“未登记”',
+    stage: 'done',
+    note: 'U3：PropertyList 在有外框的页面里自动切换（不画装饰图标、不加悬停底色）；轻量操作 InlineAction 为 28px 真实按钮',
+  },
+  {
+    rule: 'R-ACT 表单校验与离开',
+    target: '错误一次全部标出、聚焦第一个，改到通过才清除；有输入时关闭先确认一次',
+    stage: 'done',
+    note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮',
+  },
+  {
+    rule: 'R-STATE 详情三态',
+    target: '加载骨架 / 找不到 / 读取失败可重试 分开',
+    stage: 'done',
+    note: 'U3：kit/missing 的 DetailFallback，六个详情页共用',
   },
 ]
 
@@ -428,7 +446,7 @@ function SpecV1Section() {
     <Section
       id="v1"
       title="统一规范 v1.0 落地状态"
-      description="docs/design/ui-tokens.md 的目标在源码中走到了哪一步。“令牌已就绪”= 令牌与类已定义，页面迁移时才使用；页面按 U1 → U2 → U3 逐批迁移。"
+      description="docs/design/ui-tokens.md 的目标在源码中走到了哪一步。“令牌已就绪”= 令牌与类已定义，页面迁移时才使用；业务页面已按 U1 → U2 → U3 全部迁移，U4 按需逐项推进。"
     >
       <Rows head={['规则', '目标', '状态', '说明与样例']}>
         {SPEC_ROWS.map((r) => (

@@ -3,9 +3,10 @@ import { useParams } from 'react-router'
 import { Callout } from '@/components/kit/callout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { findPlanned, NAV_GROUPS } from '@/components/shell/nav'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 
 export function PlannedPage() {
+  usePageFrame('document')
   const key = useParams().key ?? ''
   const found = findPlanned(key)
   useCrumb(found ? null : '未知页面')
@@ -15,8 +16,8 @@ export function PlannedPage() {
   const { group, item } = found
   const siblings = item ? group.items.filter((i) => i !== item) : []
   return (
-    <div className="max-w-(--hd-page-max-width)">
-      <PageHeader icon={(item ?? group).icon} title={item?.label ?? group.label} description={`${group.label} · 规划中`} />
+    <>
+      <PageHeader title={item?.label ?? group.label} description={`${group.label} · 规划中`} />
       <Callout title="规划中，尚未纳入当前范围">
         {item?.note ??
           `这个${item ? '条目' : '主题域'}先在导航中占位，便于看清平台的整体结构。当前维护组织与关系（主体、院区、运营关系、部门、服务单元）与人员（名册、任用、部门归属、部门任职）；其余主题域在某条验收剧本需要时，再按同样的“变更申请 → 确认 → 版本”方式逐步引入。`}
@@ -29,6 +30,6 @@ export function PlannedPage() {
       <p className="text-fg-muted mt-2 text-xs">
         已规划的主题域：{NAV_GROUPS.map((g) => g.label).join('、')}。
       </p>
-    </div>
+    </>
   )
 }
