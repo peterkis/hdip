@@ -14,4 +14,5 @@ export interface PersonDutyHandover {
   expected_valid_to: string | null;
   to_engagement_id: number;
   effective_date: string;
+  basis_note?: string | null;
 }

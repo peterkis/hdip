@@ -9,6 +9,7 @@ import { DesignPage } from '@/pages/design'
 import { DictionaryPage } from '@/pages/dictionary'
 import { CodeLedgerPage } from '@/pages/code-ledger'
 import { InstitutionDetailPage, InstitutionsPage } from '@/pages/institutions'
+import { PersonDutiesPage } from '@/pages/person-duties'
 import { PersonDetailPage, PersonsPage } from '@/pages/persons'
 import { PlannedPage } from '@/pages/planned'
 
@@ -45,6 +46,7 @@ export function App() {
             <Route path="service-units/:id" element={<ServiceUnitDetailPage />} />
             <Route path="persons" element={<PersonsPage />} />
             <Route path="persons/:id" element={<PersonDetailPage />} />
+            <Route path="person-duties" element={<PersonDutiesPage />} />
             <Route path="changes" element={<ChangesPage />} />
             <Route path="changes/:id" element={<ChangeDetailPage />} />
             <Route path="dictionary/classification" element={<DictionaryPage />} />

@@ -46,7 +46,7 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getExportCsvUrl = (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+export const getExportCsvUrl = (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -64,9 +64,11 @@ export const getExportCsvUrl = (dataset: 'service-units' | 'departments' | 'camp
 
 /**
  * 导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。
+ *
+ * 人员数据集带上页面的筛选，导出的行与页面一致；某数据集不支持的筛选直接拒绝，不悄悄导出全量。
  * @summary Export Csv
  */
-export const exportCsv = async (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+export const exportCsv = async (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams, options?: Parameters<typeof hdipFetch>[1]): Promise<string> => {
 
   return hdipFetch<string>(getExportCsvUrl(dataset,params),
@@ -82,7 +84,7 @@ export const exportCsv = async (dataset: 'service-units' | 'departments' | 'camp
 
 
 
-export const getExportCsvQueryKey = (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+export const getExportCsvQueryKey = (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams,) => {
     return [
     `/api/export/${dataset}.csv`, ...(params ? [params] : [])
@@ -90,7 +92,7 @@ export const getExportCsvQueryKey = (dataset: 'service-units' | 'departments' | 
     }
 
 
-export const getExportCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+export const getExportCsvQueryOptions = <TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCsv>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
 ) => {
 
@@ -114,7 +116,7 @@ export type ExportCsvQueryError = Problem
 
 
 export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(
- dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+ dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params: undefined |  ExportCsvParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCsv>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportCsv>>,
@@ -125,7 +127,7 @@ export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TErr
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(
- dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+ dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCsv>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof exportCsv>>,
@@ -136,7 +138,7 @@ export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TErr
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(
- dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+ dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCsv>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -145,7 +147,7 @@ export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TErr
  */
 
 export function useExportCsv<TData = Awaited<ReturnType<typeof exportCsv>>, TError = Problem>(
- dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations',
+ dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',
     params?: ExportCsvParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCsv>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

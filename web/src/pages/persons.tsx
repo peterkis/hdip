@@ -58,10 +58,13 @@ import { notify } from '@/lib/notify'
 import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, primaryOn, WORK_NO_REASON } from '@/lib/person'
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
 import { EngagementTypeTag } from '@/components/engagement-type-tag'
+import { DutyBasis } from '@/components/department-persons'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
 // ================================================================== 名册
+const ALL_NO_EXPORT = '“全部人员”是查重视图，不按日期，不能导出；取消后按查看日期导出'
+
 function useRosterFilters() {
   const [params, setParams] = useSearchParams()
   const get = (k: string) => params.get(k) ?? ''
@@ -95,21 +98,21 @@ export function PersonsPage() {
   const [query, setQuery] = useState('')
   const [registering, setRegistering] = useState(false)
   const { data: departments = [] } = useListDepartments({ as_of: asOf })
-  const { data: rows = [], isPending } = useListPersons({
-    as_of: asOf,
+  // 名册与导出用同一组筛选：导出的行与页面一致
+  const filters = {
     q: query.trim() || undefined,
-    scope: f.all ? 'all' : 'as_of',
     include_future: f.future,
     ...(f.status && { status: f.status as PersonRow['status'] }),
     ...(f.dept && { department_id: Number(f.dept) }),
-  })
+  }
+  const { data: rows = [], isPending } = useListPersons({ as_of: asOf, scope: f.all ? 'all' : 'as_of', ...filters })
   const types = optionLabels.engagement_type ?? {}
   const [sort, setSort] = useState<DbSort | null>(null)
   const sorted = useMemo(() => sortRows(rows, sort, types), [rows, sort, types])
 
   const exporting = useMutation({
-    mutationFn: async (dataset: 'persons' | 'person-relations') => downloadCsv(dataset, asOf),
-    onSuccess: () => notify.success(`已导出 ${asOf} 的人员数据`),
+    mutationFn: async (dataset: 'persons' | 'person-relations') => downloadCsv(dataset, asOf, filters),
+    onSuccess: () => notify.success(`已导出 ${asOf} 的人员数据（${f.active || query.trim() ? '按当前筛选，' : ''}${rows.length} 人）`),
     onError: (e) => notify.error(e.message),
   })
 
@@ -123,15 +126,20 @@ export function PersonsPage() {
           <>
             {can('person.export') && (
               <>
-                <Button variant="ghost" disabled={exporting.isPending} onClick={() => exporting.mutate('persons')} title="当天有效任用的人员，一人一行">
+                <Button
+                  variant="ghost"
+                  disabled={exporting.isPending || f.all}
+                  onClick={() => exporting.mutate('persons')}
+                  title={f.all ? ALL_NO_EXPORT : '按当前筛选导出，与页面同一批人，一人一行'}
+                >
                   <Icon icon={Download01Icon} inline="start" />
                   导出名册
                 </Button>
                 <Button
                   variant="ghost"
-                  disabled={exporting.isPending}
+                  disabled={exporting.isPending || f.all}
                   onClick={() => exporting.mutate('person-relations')}
-                  title="当天有效的任用与主部门，一行一项任用"
+                  title={f.all ? ALL_NO_EXPORT : '按当前筛选导出页面上的任用与主部门，一行一项任用'}
                 >
                   <Icon icon={Download01Icon} inline="start" />
                   导出任用与归属
@@ -236,7 +244,7 @@ export function PersonsPage() {
           共 <span className="text-fg-secondary">{rows.length}</span> 人
         </span>
         <span>
-          {f.all ? '全部人员，不看日期' : `${asOf} 当天有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
+          {f.all ? '全部人员，不看日期，不能导出' : `${asOf} 当天有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
         </span>
       </DbFooter>
       {registering && <PersonRegisterDialog open onOpenChange={setRegistering} />}
@@ -529,6 +537,7 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
                       <InlineAction onClick={() => onAction({ kind: 'duty_end', duty: d })}>结束</InlineAction>
                     </span>
                   )}
+                  <DutyBasis note={d.basis_note} className="order-last basis-full pl-3" />
                 </>
               ),
             }))}

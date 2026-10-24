@@ -32,10 +32,16 @@ Dataset = Literal[
     "department-lineage",
     "persons",
     "person-relations",
+    "person-duties",
 ]
 
-# 人员数据集：需要“导出人员数据”权限，敏感字段按当前用户隐去（人员设计第 7.3、8 节）
-PERSON_DATASETS = {"persons", "person-relations"}
+# 人员数据集：需要“导出人员数据”权限，敏感字段按当前用户隐去（人员设计第 7.3、8 节）。
+# 值 = 该数据集支持的筛选（与对应页面同口径，A1）；其他数据集不接受筛选
+PERSON_DATASETS: dict[str, set[str]] = {
+    "persons": {"q", "status", "department_id", "include_future"},
+    "person-relations": {"q", "status", "department_id", "include_future"},
+    "person-duties": {"q", "department_id", "duty", "mode", "include_future"},
+}
 
 OPERATING_STATUS = {
     "PLANNING": "筹建",
@@ -244,26 +250,35 @@ def _lineage(s: Session, day: date) -> Iterable[dict]:
         }
 
 
-def _persons(s: Session, day: date, user) -> Iterable[dict]:
-    """当天有有效任用的人员，一人一行（按人去重）。"""
+def _persons(s: Session, day: date, user, filters: dict) -> Iterable[dict]:
+    """与名册同口径：默认当天有有效任用的人员，一人一行（按人去重）。"""
     from hdip_api.services import person_queries
 
     statuses = _options(s, "person_relation_status")
-    for r in person_queries.export_persons(s, user, day):
+    for r in person_queries.export_persons(s, user, day, **filters):
         yield r | {"relation_status_name": statuses.get(r["relation_status"])}
 
 
-def _person_relations(s: Session, day: date, user) -> Iterable[dict]:
-    """当天有效的任用 × 当天的主归属；暂未分配时部门列为空（不写成“离职”）。"""
+def _person_relations(s: Session, day: date, user, filters: dict) -> Iterable[dict]:
+    """名册里的任用 × 当天的主归属；暂未分配时部门列为空（不写成“离职”）。"""
     from hdip_api.services import person_queries
 
     types = _options(s, "engagement_type")
     kinds = _options(s, "assignment_kind")
-    for r in person_queries.export_relations(s, user, day):
+    for r in person_queries.export_relations(s, user, day, **filters):
         yield r | {
             "engagement_type_name": types.get(r["engagement_type"]),
             "assignment_kind_name": kinds.get(r["assignment_kind"]),
         }
+
+
+def _person_duties(s: Session, day: date, user, filters: dict) -> Iterable[dict]:
+    """部门任职台账：一行一条职务；依据为空 = A1 之前的记录未提供依据。"""
+    from hdip_api.services import person_queries
+
+    types = _options(s, "engagement_type")
+    for r in person_queries.export_duties(s, user, day, **filters):
+        yield r | {"engagement_type_name": types.get(r["engagement_type"])}
 
 
 def _department_lineage(s: Session, day: date) -> Iterable[dict]:
@@ -445,7 +460,13 @@ BUILDERS: dict[str, tuple[Callable[[Session, date], Iterable[dict]], list[str]]]
         "engagement_type", "engagement_type_name", "work_no",
         "engagement_valid_from", "engagement_valid_to",
         "assignment_kind", "assignment_kind_name", "department_code", "department_name",
-        "assignment_valid_from", "assignment_valid_to",
+        "assignment_valid_from", "assignment_valid_to", "not_yet_effective",
+    ]),
+    "person-duties": (_person_duties, [
+        "department_code", "department_name", "duty", "mode", "label",
+        "person_code", "name", "institution_name", "engagement_type", "engagement_type_name",
+        "primary_department_code", "primary_department_name",
+        "valid_from", "valid_to", "not_yet_effective", "basis_note", "change_id",
     ]),
 }
 # fmt: on
@@ -461,13 +482,13 @@ def _cell(value) -> str:
     return str(value)
 
 
-def to_csv(s: Session, dataset: Dataset, day: date, user=None) -> str:
+def to_csv(s: Session, dataset: Dataset, day: date, user=None, filters: dict | None = None) -> str:
     fn, columns = BUILDERS[dataset]
     buf = io.StringIO()
     buf.write("﻿")
     writer = csv.writer(buf, lineterminator="\r\n")
     writer.writerow(columns)
-    rows = fn(s, day, user) if dataset in PERSON_DATASETS else fn(s, day)
+    rows = fn(s, day, user, filters or {}) if dataset in PERSON_DATASETS else fn(s, day)
     for row in rows:
         writer.writerow([_cell(row[c]) for c in columns])
     return buf.getvalue()

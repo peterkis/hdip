@@ -179,6 +179,7 @@ CONSTRAINT_MESSAGES: dict[str, str] = {
         "该部门在这段期间已有主持工作的人（代理或代管），同一时点只能有一位"
     ),
     "person_duty_same_excl": "此人在这段期间已担任该部门的这一职务",
+    "person_duty_basis_note_check": "任职依据须为 1–500 字",
     "person_duty_period_check": "职务结束日不能早于开始日",
 }
 

@@ -720,6 +720,8 @@ class PersonDutyOut(BaseModel):
     """部长 / 副部长 / 主持工作 / 代管。"""
     valid_from: date
     valid_to: date | None
+    basis_note: str | None
+    """任职依据；A1 之前登记的为空（显示“历史记录未提供依据”）。"""
     change_id: int
     closed_change_id: int | None
     void: bool
@@ -832,3 +834,42 @@ class DepartmentDutyRow(BaseModel):
     valid_from: date
     valid_to: date | None
     not_yet_effective: bool
+    basis_note: str | None
+    """任职依据；A1 之前登记的为空。"""
+
+
+class DutyRegisterRow(DepartmentDutyRow):
+    """部门任职台账的一行 = 一条职务（A1）。任职部门与此人的主部门可以不同（代管）。"""
+
+    department: DeptRef
+    """任职部门。"""
+    institution_name: str
+    engagement_type: str
+    primary_department: DeptRef | None
+    """此人在查看日期（计划中的职务取开始日）的主部门；暂未分配时为空。"""
+    change_id: int
+    """登记这条职务的申请。"""
+
+
+class DepartmentLeaderRow(BaseModel):
+    """一个部门在查看日期的负责人依据：当天的部长职务（正式、主持工作、代管）；为空 = 空缺。
+
+    负责人规则与部门详情相同：有主持工作者显示主持工作者并注明部长，否则显示正式部长。"""
+
+    department: DeptRef
+    heads: list[DepartmentDutyRow]
+
+
+class DutyRegister(BaseModel):
+    """部门任职台账（A1）。计数只算查看日期当天有效的职务，计划中的另计。"""
+
+    as_of: date
+    record_count: int
+    """当天有效的职务条数（一人兼两职算两条）。"""
+    person_count: int
+    """当天担任职务的人数（按人员去重）。"""
+    planned_count: int
+    """筛选结果里尚未开始的职务条数（含计划时才有）。"""
+    rows: list[DutyRegisterRow]
+    leaders: list[DepartmentLeaderRow]
+    """正式履职的部门（及当天有部长职务的部门）的负责人一览；只受“任职部门”筛选影响。"""

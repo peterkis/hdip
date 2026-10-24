@@ -553,3 +553,5 @@ class PersonDuty(_Period, Base):
     department_id: Mapped[int] = mapped_column(ForeignKey("department.id"))
     duty: Mapped[str] = mapped_column(Text)
     mode: Mapped[str] = mapped_column(Text)
+    # 任职依据（迁移 0021）：任命、交接时必填；之前的记录为空
+    basis_note: Mapped[str | None] = mapped_column(Text)

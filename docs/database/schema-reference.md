@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0020**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0021**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -968,6 +968,7 @@
 | `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
 | `recorded_by` | bigint | 是 |  | → `app_user` |
 | `closed_change_id` | bigint |  |  | → `change_request` |
+| `basis_note` | text |  |  |  |
 
 约束：
 
@@ -975,6 +976,7 @@
 - `person_duty_formal_head_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE (((duty = 'HEAD'::text) AND (mode = 'FORMAL'::text)))`
 - `person_duty_presiding_excl`（排他）：`EXCLUDE USING gist (department_id WITH =, daterange(valid_from, (valid_to + 1)) WITH &&) WHERE (((duty = 'HEAD'::text) AND (mode <> 'FORMAL'::text)))`
 - `person_duty_same_excl`（排他）：`EXCLUDE USING gist (engagement_id WITH =, department_id WITH =, duty WITH =, daterange(valid_from, (valid_to + 1)) WITH &&)`
+- `person_duty_basis_note_check`（检查）：`CHECK (((basis_note IS NULL) OR ((char_length(basis_note) >= 1) AND (char_length(basis_note) <= 500))))`
 - `person_duty_duty_check`（检查）：`CHECK ((duty = ANY (ARRAY['HEAD'::text, 'DEPUTY'::text])))`
 - `person_duty_mode_check`（检查）：`CHECK ((mode = ANY (ARRAY['FORMAL'::text, 'ACTING'::text, 'CARETAKER'::text])))`
 - `person_duty_period_check`（检查）：`CHECK (((valid_to IS NULL) OR (valid_to >= (valid_from - 1))))`

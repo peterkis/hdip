@@ -16,6 +16,7 @@ from hdip_api.core.permissions import PERSON_VIEW, require_permission
 from hdip_api.schemas.read import (
     DepartmentDutyRow,
     DepartmentPersonRow,
+    DutyRegister,
     PersonDetail,
     PersonRow,
     PersonStatus,
@@ -104,4 +105,33 @@ def list_department_duties(
     require_permission(user, PERSON_VIEW)
     return person_queries.department_duties(
         session, department_id, _day(session, as_of), include_future=include_future
+    )
+
+
+@router.get("/person-duties", response_model=DutyRegister, operation_id="listPersonDuties")
+def list_person_duties(
+    session: SessionDep,
+    user: CurrentUser,
+    as_of: AsOf = None,
+    q: Annotated[
+        str, Query(description="人员（姓名、曾用名、拼音码、代码、工号）或任职部门名称")
+    ] = "",
+    department_id: Annotated[int | None, Query(description="任职部门（不含下级）")] = None,
+    duty: Literal["HEAD", "DEPUTY"] | None = None,
+    mode: Literal["FORMAL", "ACTING", "CARETAKER"] | None = None,
+    include_future: Annotated[bool, Query(description="加上之后才开始的职务")] = False,
+):
+    """部门任职台账（A1）：一行一条职务，附此人当天的主部门；另给全院负责人一览。
+
+    登记的是已确定的任命结果；不办理任命决策，职务不等于系统权限。"""
+    require_permission(user, PERSON_VIEW)
+    return person_queries.duty_register(
+        session,
+        user,
+        _day(session, as_of),
+        q=q,
+        department_id=department_id,
+        duty=duty,
+        mode=mode,
+        include_future=include_future,
     )

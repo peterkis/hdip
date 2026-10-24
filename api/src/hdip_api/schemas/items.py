@@ -716,6 +716,9 @@ class PersonAssign(_Item):
 
 DutyCode = Literal["HEAD", "DEPUTY"]
 DutyMode = Literal["FORMAL", "ACTING", "CARETAKER"]
+# 任职依据（A1，决定 B-3）：任命、交接必填，结束选填；只是文字，不做附件、不校验文号。
+# 模型里可空，好让 A1 之前的申请 JSON 照常解析；必填由处理函数检查，并指向这个字段
+BasisNote = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 
 
 class PersonDutyAssign(_Item):
@@ -731,6 +734,7 @@ class PersonDutyAssign(_Item):
     mode: DutyMode = "FORMAL"
     valid_from: date
     valid_to: date | None = None
+    basis_note: BasisNote | None = None
 
     @model_validator(mode="after")
     def _period(self):
@@ -746,6 +750,7 @@ class PersonDutySetEnd(_Item):
     duty_id: int
     expected_valid_to: date | None
     valid_to: date | None
+    basis_note: BasisNote | None = None
 
 
 class PersonDutyHandover(_Item):
@@ -756,6 +761,7 @@ class PersonDutyHandover(_Item):
     expected_valid_to: date | None
     to_engagement_id: int
     effective_date: date
+    basis_note: BasisNote | None = None
 
 
 class PersonTransfer(_Item):
@@ -777,7 +783,7 @@ class PersonEngagementSetEnd(_Item):
 
     下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；
     推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长
-    （extend_assignments 为假时归属不动）。
+    （extend_assignments 为假时归属不动）；职务不随任用延长（A1），续任另行登记。
     结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。
     """
 

@@ -327,7 +327,13 @@ def engagement_end(engagement_id, valid_to, expected=None, extend_assignments=Tr
 
 
 def duty_assign(
-    engagement_id, dept, duty="HEAD", mode="FORMAL", valid_from="2020-01-01", valid_to=None
+    engagement_id,
+    dept,
+    duty="HEAD",
+    mode="FORMAL",
+    valid_from="2020-01-01",
+    valid_to=None,
+    basis_note="院发〔2020〕1 号",
 ):
     item = {
         "kind": "person.duty_assign",
@@ -336,6 +342,7 @@ def duty_assign(
         "duty": duty,
         "mode": mode,
         "valid_from": valid_from,
+        "basis_note": basis_note,
     }
     if valid_to:
         item["valid_to"] = valid_to
@@ -351,11 +358,12 @@ def duty_end(duty_id, valid_to, expected=None):
     }
 
 
-def duty_handover(duty_id, to_engagement_id, day, expected=None):
+def duty_handover(duty_id, to_engagement_id, day, expected=None, basis_note="院发〔2026〕2 号"):
     return {
         "kind": "person.duty_handover",
         "duty_id": duty_id,
         "expected_valid_to": expected,
         "to_engagement_id": to_engagement_id,
         "effective_date": day,
+        "basis_note": basis_note,
     }

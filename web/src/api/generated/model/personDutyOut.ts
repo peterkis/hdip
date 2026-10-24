@@ -19,6 +19,7 @@ export interface PersonDutyOut {
   label: string;
   valid_from: string;
   valid_to: string | null;
+  basis_note: string | null;
   change_id: number;
   closed_change_id: number | null;
   void: boolean;

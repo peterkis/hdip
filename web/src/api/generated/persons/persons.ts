@@ -22,9 +22,11 @@ import type {
 import type {
   DepartmentDutyRow,
   DepartmentPersonRow,
+  DutyRegister,
   GetPersonParams,
   ListDepartmentDutiesParams,
   ListDepartmentPersonsParams,
+  ListPersonDutiesParams,
   ListPersonsParams,
   PersonDetail,
   PersonRow,
@@ -499,6 +501,116 @@ export function useListDepartmentDuties<TData = Awaited<ReturnType<typeof listDe
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListDepartmentDutiesQueryOptions(departmentId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getListPersonDutiesUrl = (params?: ListPersonDutiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/person-duties?${stringifiedParams}` : `/api/person-duties`
+}
+
+/**
+ * 部门任职台账（A1）：一行一条职务，附此人当天的主部门；另给全院负责人一览。
+ *
+ * 登记的是已确定的任命结果；不办理任命决策，职务不等于系统权限。
+ * @summary List Person Duties
+ */
+export const listPersonDuties = async (params?: ListPersonDutiesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<DutyRegister> => {
+
+  return hdipFetch<DutyRegister>(getListPersonDutiesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListPersonDutiesQueryKey = (params?: ListPersonDutiesParams,) => {
+    return [
+    `/api/person-duties`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListPersonDutiesQueryOptions = <TData = Awaited<ReturnType<typeof listPersonDuties>>, TError = Problem>(params?: ListPersonDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListPersonDutiesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listPersonDuties>>> = ({ signal }) => listPersonDuties(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListPersonDutiesQueryResult = NonNullable<Awaited<ReturnType<typeof listPersonDuties>>>
+export type ListPersonDutiesQueryError = Problem
+
+
+export function useListPersonDuties<TData = Awaited<ReturnType<typeof listPersonDuties>>, TError = Problem>(
+ params: undefined |  ListPersonDutiesParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPersonDuties>>,
+          TError,
+          Awaited<ReturnType<typeof listPersonDuties>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPersonDuties<TData = Awaited<ReturnType<typeof listPersonDuties>>, TError = Problem>(
+ params?: ListPersonDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listPersonDuties>>,
+          TError,
+          Awaited<ReturnType<typeof listPersonDuties>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListPersonDuties<TData = Awaited<ReturnType<typeof listPersonDuties>>, TError = Problem>(
+ params?: ListPersonDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Person Duties
+ */
+
+export function useListPersonDuties<TData = Awaited<ReturnType<typeof listPersonDuties>>, TError = Problem>(
+ params?: ListPersonDutiesParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listPersonDuties>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListPersonDutiesQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

@@ -453,6 +453,7 @@ def _view(
     k = i.get("kind", "")
     day = lambda key="effective_date": _day(i[key]) if i.get(key) else ""  # noqa: E731
     dept_chip = lambda code: _p("new" if code in n.new_depts else "chip", n.dept.get(code, code))  # noqa: E731
+    basis = lambda: [_p("text", f"依据：{i['basis_note']}")] if i.get("basis_note") else []  # noqa: E731
     match k:
         case "department.create":
             more = extra.get(i["code"], [])
@@ -670,6 +671,7 @@ def _view(
                     f"自 {day('valid_from')}"
                     + (f" 至 {_day(i['valid_to'])}" if i.get("valid_to") else ""),
                 ),
+                *basis(),
             ], None
         case "person.duty_set_end":
             pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
@@ -681,6 +683,7 @@ def _view(
                     "text",
                     f"最后有效日 {_day(i['valid_to'])}" if i.get("valid_to") else "清除结束日",
                 ),
+                *basis(),
             ], None
         case "person.duty_handover":
             pcode, dcode, label = n.duties.get(i["duty_id"], ("", "", "职务"))
@@ -691,6 +694,7 @@ def _view(
                 _p("chip", n.pe(i["to_engagement_id"])),
                 _p("tag", "交接", "blue"),
                 _p("text", f"自 {day()}"),
+                *basis(),
             ], None
         case "person.assign":
             return [

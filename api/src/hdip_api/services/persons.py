@@ -782,9 +782,12 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
             else:
                 _set_end(ctx, r, new)
                 handled.append(f"{label}止于 {new.isoformat()}")
-        elif r.valid_to == old and (what == "工号" or item.extend_assignments):
+        elif r.valid_to == old and (what == "工号" or (what == "归属" and item.extend_assignments)):
             _set_end(ctx, r, new)
             handled.append(f"{label}延至 {'长期' if new is None else new.isoformat()}")
+        elif r.valid_to == old and what == "职务":
+            # A1：职务不随任用延长；续任是另一次任命，须有自己的依据
+            handled.append(f"{label}仍止于 {old.isoformat()}：职务不随任用延长，续任请另行登记")
         if what == "归属":
             ctx.new_assignments[r.id] = ctx.index
         elif what == "职务":
@@ -798,7 +801,7 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
     else:
         notices = []
     if not shorter and not item.extend_assignments:
-        notices.append("部门归属与职务未随任用延长：延长后的期间暂未分配主部门")
+        notices.append("部门归属未随任用延长：延长后的期间暂未分配主部门")
     return {
         "target": f"人员 {s.get(Person, e.person_id).code} {who}",
         "before": before,
@@ -823,6 +826,7 @@ def duty_snapshot(s: Session, d: PersonDuty) -> dict:
         "label": duty_label(d),
         "valid_from": _json(d.valid_from),
         "valid_to": _json(d.valid_to),
+        "basis_note": d.basis_note,
     }
 
 
@@ -888,7 +892,19 @@ def _require_post_free(s: Session, dept_id: int, duty: str, mode: str, start, en
             )
 
 
-def _new_duty(ctx: Ctx, engagement_id: int, dept_id: int, duty: str, mode: str, start, end):
+def _require_basis(note: str | None, what: str) -> str:
+    if not note:
+        raise ItemError(
+            f"{what}须写明任职依据",
+            "basis_note",
+            hint="写明任命文件或会议纪要，如“院发〔2026〕12 号”。",
+        )
+    return note
+
+
+def _new_duty(
+    ctx: Ctx, engagement_id: int, dept_id: int, duty: str, mode: str, start, end, basis: str
+):
     s = ctx.session
     _require_post_free(s, dept_id, duty, mode, start, end)
     d = PersonDuty(
@@ -898,6 +914,7 @@ def _new_duty(ctx: Ctx, engagement_id: int, dept_id: int, duty: str, mode: str, 
         mode=mode,
         valid_from=start,
         valid_to=end,
+        basis_note=basis,
         change_id=ctx.change_id,
         recorded_by=ctx.user_id,
     )
@@ -916,8 +933,9 @@ def person_duty_assign(ctx: Ctx, item: PersonDutyAssign) -> dict:
     dept = _department(s, item.department_code, "department_code")
     if item.duty == "DEPUTY" and item.mode == "CARETAKER":
         raise ItemError("代管只用于部长职务（临时管理另一个部门）", "mode")
+    basis = _require_basis(item.basis_note, "任命部门职务")
     end = item.valid_to if item.valid_to is not None else e.valid_to
-    d = _new_duty(ctx, e.id, dept.id, item.duty, item.mode, item.valid_from, end)
+    d = _new_duty(ctx, e.id, dept.id, item.duty, item.mode, item.valid_from, end, basis)
     snap = duty_snapshot(s, d)
     return {
         "target": f"人员 {snap['person']} {snap['person_name']}",
@@ -958,16 +976,18 @@ def person_duty_set_end(ctx: Ctx, item: PersonDutySetEnd) -> dict:
         )
     _set_end(ctx, d, end)
     ctx.new_duties[d.id] = ctx.index
+    # 结束的依据选填，只留在申请里（职务行上的依据是任命依据）
     return {
         "target": f"人员 {before['person']} {before['person_name']}",
         "before": before,
-        "after": duty_snapshot(s, d),
+        "after": duty_snapshot(s, d) | {"end_basis_note": item.basis_note},
     }
 
 
 def person_duty_handover(ctx: Ctx, item: PersonDutyHandover) -> dict:
     s = ctx.session
     d = _locked_duty(s, item.duty_id, item.expected_valid_to)
+    basis = _require_basis(item.basis_note, "职务交接")
     to = _locked_engagement(s, item.to_engagement_id)
     day = item.effective_date
     before = duty_snapshot(s, d)
@@ -987,7 +1007,7 @@ def person_duty_handover(ctx: Ctx, item: PersonDutyHandover) -> dict:
     _set_end(ctx, d, day - DAY)
     ctx.new_duties[d.id] = ctx.index
     end = to.valid_to
-    new = _new_duty(ctx, to.id, d.department_id, d.duty, d.mode, day, end)
+    new = _new_duty(ctx, to.id, d.department_id, d.duty, d.mode, day, end, basis)
     after = duty_snapshot(s, new)
     return {
         "target": f"{before['department_name']} {before['label']}",

@@ -21,4 +21,5 @@ export interface PersonDutyAssign {
   mode?: PersonDutyAssignMode;
   valid_from: string;
   valid_to?: string | null;
+  basis_note?: string | null;
 }

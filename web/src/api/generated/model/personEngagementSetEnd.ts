@@ -11,7 +11,7 @@
  *
  * 下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；
  * 推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长
- * （extend_assignments 为假时归属不动）。
+ * （extend_assignments 为假时归属不动）；职务不随任用延长（A1），续任另行登记。
  * 结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。
  */
 export interface PersonEngagementSetEnd {

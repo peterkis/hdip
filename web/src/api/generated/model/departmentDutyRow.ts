@@ -22,4 +22,5 @@ export interface DepartmentDutyRow {
   valid_from: string;
   valid_to: string | null;
   not_yet_effective: boolean;
+  basis_note: string | null;
 }

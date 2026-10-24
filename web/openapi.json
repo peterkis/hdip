@@ -3582,7 +3582,7 @@
           "export"
         ],
         "summary": "Export Csv",
-        "description": "导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。",
+        "description": "导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。\n\n人员数据集带上页面的筛选，导出的行与页面一致；某数据集不支持的筛选直接拒绝，不悄悄导出全量。",
         "operationId": "exportCsv",
         "parameters": [
           {
@@ -3603,7 +3603,8 @@
                 "classifications",
                 "department-lineage",
                 "persons",
-                "person-relations"
+                "person-relations",
+                "person-duties"
               ],
               "type": "string",
               "title": "Dataset"
@@ -3627,6 +3628,128 @@
               "title": "As Of"
             },
             "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "检索词（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Q"
+            },
+            "description": "检索词（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "ENGAGED",
+                    "PLANNED",
+                    "NONE"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "人员状态（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Status"
+            },
+            "description": "人员状态（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
+          },
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "主部门 / 任职部门（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Department Id"
+            },
+            "description": "主部门 / 任职部门（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "含计划（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Include Future"
+            },
+            "description": "含计划（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
+          },
+          {
+            "name": "duty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "HEAD",
+                    "DEPUTY"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "职务（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Duty"
+            },
+            "description": "职务（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "FORMAL",
+                    "ACTING",
+                    "CARETAKER"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "任职方式（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）",
+              "title": "Mode"
+            },
+            "description": "任职方式（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）"
           },
           {
             "name": "x-hdip-user",
@@ -4199,6 +4322,188 @@
                     "$ref": "#/components/schemas/DepartmentDutyRow"
                   },
                   "title": "Response Listdepartmentduties"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/person-duties": {
+      "get": {
+        "tags": [
+          "persons"
+        ],
+        "summary": "List Person Duties",
+        "description": "部门任职台账（A1）：一行一条职务，附此人当天的主部门；另给全院负责人一览。\n\n登记的是已确定的任命结果；不办理任命决策，职务不等于系统权限。",
+        "operationId": "listPersonDuties",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "查看日期 YYYY-MM-DD，默认今天",
+              "title": "As Of"
+            },
+            "description": "查看日期 YYYY-MM-DD，默认今天"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "description": "人员（姓名、曾用名、拼音码、代码、工号）或任职部门名称",
+              "default": "",
+              "title": "Q"
+            },
+            "description": "人员（姓名、曾用名、拼音码、代码、工号）或任职部门名称"
+          },
+          {
+            "name": "department_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "任职部门（不含下级）",
+              "title": "Department Id"
+            },
+            "description": "任职部门（不含下级）"
+          },
+          {
+            "name": "duty",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "HEAD",
+                    "DEPUTY"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Duty"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "FORMAL",
+                    "ACTING",
+                    "CARETAKER"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "include_future",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "加上之后才开始的职务",
+              "default": false,
+              "title": "Include Future"
+            },
+            "description": "加上之后才开始的职务"
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DutyRegister"
                 }
               }
             }
@@ -7001,6 +7306,17 @@
           "not_yet_effective": {
             "type": "boolean",
             "title": "Not Yet Effective"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
           }
         },
         "type": "object",
@@ -7015,7 +7331,8 @@
           "label",
           "valid_from",
           "valid_to",
-          "not_yet_effective"
+          "not_yet_effective",
+          "basis_note"
         ],
         "title": "DepartmentDutyRow",
         "description": "某部门的一条职务（部门详情的“负责人”与职务清单）。"
@@ -7083,6 +7400,27 @@
         ],
         "title": "DepartmentEdgeOut",
         "description": "一条行政隶属边（本部门 → 上级）。"
+      },
+      "DepartmentLeaderRow": {
+        "properties": {
+          "department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "heads": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentDutyRow"
+            },
+            "type": "array",
+            "title": "Heads"
+          }
+        },
+        "type": "object",
+        "required": [
+          "department",
+          "heads"
+        ],
+        "title": "DepartmentLeaderRow",
+        "description": "一个部门在查看日期的负责人依据：当天的部长职务（正式、主持工作、代管）；为空 = 空缺。\n\n负责人规则与部门详情相同：有主持工作者显示主持工作者并注明部长，否则显示正式部长。"
       },
       "DepartmentPatch": {
         "properties": {
@@ -7931,6 +8269,176 @@
           "name"
         ],
         "title": "DeptRef"
+      },
+      "DutyRegister": {
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of"
+          },
+          "record_count": {
+            "type": "integer",
+            "title": "Record Count"
+          },
+          "person_count": {
+            "type": "integer",
+            "title": "Person Count"
+          },
+          "planned_count": {
+            "type": "integer",
+            "title": "Planned Count"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/DutyRegisterRow"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "leaders": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentLeaderRow"
+            },
+            "type": "array",
+            "title": "Leaders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "as_of",
+          "record_count",
+          "person_count",
+          "planned_count",
+          "rows",
+          "leaders"
+        ],
+        "title": "DutyRegister",
+        "description": "部门任职台账（A1）。计数只算查看日期当天有效的职务，计划中的另计。"
+      },
+      "DutyRegisterRow": {
+        "properties": {
+          "duty_id": {
+            "type": "integer",
+            "title": "Duty Id"
+          },
+          "person_id": {
+            "type": "integer",
+            "title": "Person Id"
+          },
+          "person_code": {
+            "type": "string",
+            "title": "Person Code"
+          },
+          "person_name": {
+            "type": "string",
+            "title": "Person Name"
+          },
+          "engagement_id": {
+            "type": "integer",
+            "title": "Engagement Id"
+          },
+          "duty": {
+            "type": "string",
+            "enum": [
+              "HEAD",
+              "DEPUTY"
+            ],
+            "title": "Duty"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "FORMAL",
+              "ACTING",
+              "CARETAKER"
+            ],
+            "title": "Mode"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From"
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
+          "not_yet_effective": {
+            "type": "boolean",
+            "title": "Not Yet Effective"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          },
+          "department": {
+            "$ref": "#/components/schemas/DeptRef"
+          },
+          "institution_name": {
+            "type": "string",
+            "title": "Institution Name"
+          },
+          "engagement_type": {
+            "type": "string",
+            "title": "Engagement Type"
+          },
+          "primary_department": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DeptRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "change_id": {
+            "type": "integer",
+            "title": "Change Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "duty_id",
+          "person_id",
+          "person_code",
+          "person_name",
+          "engagement_id",
+          "duty",
+          "mode",
+          "label",
+          "valid_from",
+          "valid_to",
+          "not_yet_effective",
+          "basis_note",
+          "department",
+          "institution_name",
+          "engagement_type",
+          "primary_department",
+          "change_id"
+        ],
+        "title": "DutyRegisterRow",
+        "description": "部门任职台账的一行 = 一条职务（A1）。任职部门与此人的主部门可以不同（代管）。"
       },
       "EngagementEndChange": {
         "properties": {
@@ -9988,6 +10496,18 @@
               }
             ],
             "title": "Valid To"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
           }
         },
         "additionalProperties": false,
@@ -10033,6 +10553,18 @@
             "type": "string",
             "format": "date",
             "title": "Effective Date"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
           }
         },
         "additionalProperties": false,
@@ -10094,6 +10626,17 @@
             ],
             "title": "Valid To"
           },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          },
           "change_id": {
             "type": "integer",
             "title": "Change Id"
@@ -10123,6 +10666,7 @@
           "label",
           "valid_from",
           "valid_to",
+          "basis_note",
           "change_id",
           "closed_change_id",
           "void"
@@ -10164,6 +10708,18 @@
               }
             ],
             "title": "Valid To"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
           }
         },
         "additionalProperties": false,
@@ -10522,7 +11078,7 @@
           "valid_to"
         ],
         "title": "PersonEngagementSetEnd",
-        "description": "结束任用、调整尚未到达的结束日（提前、推后、清空），\n或撤销尚未开始的任用（valid_to = 开始日前一日）。\n\n下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；\n推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长\n（extend_assignments 为假时归属不动）。\n结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。"
+        "description": "结束任用、调整尚未到达的结束日（提前、推后、清空），\n或撤销尚未开始的任用（valid_to = 开始日前一日）。\n\n下属的部门归属与工号随之处理：提前时跨过新结束日的止于新结束日、之后才开始的撤销；\n推后 / 清空时，工号与“结束日恰好等于原结束日”的归属一起延长\n（extend_assignments 为假时归属不动）；职务不随任用延长（A1），续任另行登记。\n结束日到达后不能再改，也不“接续”：再次任用 = 新建任用。"
       },
       "PersonRevise": {
         "properties": {

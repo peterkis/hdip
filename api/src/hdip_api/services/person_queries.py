@@ -8,6 +8,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date
+from functools import cached_property
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -30,8 +31,11 @@ from hdip_api.models import (
 )
 from hdip_api.schemas.read import (
     DepartmentDutyRow,
+    DepartmentLeaderRow,
     DepartmentPersonRow,
     DeptRef,
+    DutyRegister,
+    DutyRegisterRow,
     EngagementEndChange,
     PersonAssignmentOut,
     PersonDetail,
@@ -69,6 +73,10 @@ class _World:
     dept_versions: dict[int, list[DepartmentVersion]]
     institutions: dict[int, Institution]
     inst_versions: dict[int, list[InstitutionVersion]]
+
+    @cached_property
+    def engagement_of(self) -> dict[int, PersonEngagement]:
+        return {e.id: e for es in self.engagements.values() for e in es}
 
     @classmethod
     def load(cls, s: Session) -> "_World":
@@ -379,6 +387,7 @@ def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDe
                         label=duty_label(d),
                         valid_from=d.valid_from,
                         valid_to=d.valid_to,
+                        basis_note=d.basis_note,
                         change_id=d.change_id,
                         closed_change_id=d.closed_change_id,
                         void=is_void(d),
@@ -431,7 +440,7 @@ def department_persons(
     w = _World.load(s)
     if department_id not in w.departments:
         raise NotFound("部门不存在")
-    engagement_of = {e.id: e for es in w.engagements.values() for e in es}
+    engagement_of = w.engagement_of
     rows: list[DepartmentPersonRow] = []
     for es in w.assignments.values():
         for a in _live(es):
@@ -465,6 +474,40 @@ def department_persons(
     return sorted(rows, key=lambda r: (r.not_yet_effective, r.person_code, r.valid_from))
 
 
+def _duty_row(w: _World, d: PersonDuty, day: date) -> DepartmentDutyRow:
+    e = w.engagement_of[d.engagement_id]
+    v = w.name(e.person_id, max(day, d.valid_from))
+    return DepartmentDutyRow(
+        duty_id=d.id,
+        person_id=e.person_id,
+        person_code=w.persons[e.person_id].code,
+        person_name=v.name if v else "",
+        engagement_id=e.id,
+        duty=d.duty,
+        mode=d.mode,
+        label=duty_label(d),
+        valid_from=d.valid_from,
+        valid_to=d.valid_to,
+        not_yet_effective=d.valid_from > day,
+        basis_note=d.basis_note,
+    )
+
+
+_DUTY_ORDER = {"HEAD": 0, "DEPUTY": 1}
+
+
+def _duty_sort(r: DepartmentDutyRow):
+    return (r.not_yet_effective, _DUTY_ORDER[r.duty], r.mode != "FORMAL")
+
+
+def _duties_on(w: _World, day: date, include_future: bool):
+    """查看日期有效的职务（include_future 加上之后才开始的），不含生效前撤销的。"""
+    for ds in w.duties.values():
+        for d in _live(ds):
+            if covers(d.valid_from, d.valid_to, day) or (include_future and d.valid_from > day):
+                yield d
+
+
 def department_duties(
     s: Session, department_id: int, day: date, *, include_future: bool = False
 ) -> list[DepartmentDutyRow]:
@@ -472,40 +515,91 @@ def department_duties(
     w = _World.load(s)
     if department_id not in w.departments:
         raise NotFound("部门不存在")
-    engagement_of = {e.id: e for es in w.engagements.values() for e in es}
-    rows = []
-    for ds in w.duties.values():
-        for d in _live(ds):
-            if d.department_id != department_id:
-                continue
-            later = d.valid_from > day
-            if not (covers(d.valid_from, d.valid_to, day) or (later and include_future)):
-                continue
-            e = engagement_of[d.engagement_id]
-            v = w.name(e.person_id, max(day, d.valid_from))
-            rows.append(
-                DepartmentDutyRow(
-                    duty_id=d.id,
-                    person_id=e.person_id,
-                    person_code=w.persons[e.person_id].code,
-                    person_name=v.name if v else "",
-                    engagement_id=e.id,
-                    duty=d.duty,
-                    mode=d.mode,
-                    label=duty_label(d),
-                    valid_from=d.valid_from,
-                    valid_to=d.valid_to,
-                    not_yet_effective=later,
+    rows = [
+        _duty_row(w, d, day)
+        for d in _duties_on(w, day, include_future)
+        if d.department_id == department_id
+    ]
+    return sorted(rows, key=_duty_sort)
+
+
+# ------------------------------------------------------------------ 部门任职台账（A1）
+def duty_register(
+    s: Session,
+    user: AppUser,
+    day: date,
+    *,
+    q: str = "",
+    department_id: int | None = None,
+    duty: str | None = None,
+    mode: str | None = None,
+    include_future: bool = False,
+) -> DutyRegister:
+    """全院部门任职：一行一条职务；负责人一览按部门列出当天的部长职务（空 = 空缺）。
+
+    q 匹配人员（姓名、曾用名、拼音码、代码、工号）或任职部门名称。台账、部门详情、人员详情
+    读的是同一批职务行，规则相同。"""
+    w = _World.load(s)
+    if department_id is not None and department_id not in w.departments:
+        raise NotFound("部门不存在")
+    needle = q.strip().lower()
+    rows: list[DutyRegisterRow] = []
+    for d in _duties_on(w, day, include_future):
+        if department_id is not None and d.department_id != department_id:
+            continue
+        if (duty and d.duty != duty) or (mode and d.mode != mode):
+            continue
+        e = w.engagement_of[d.engagement_id]
+        anchor = max(day, d.valid_from)
+        dept = w.dept_ref(d.department_id, anchor)
+        if needle and needle not in dept.name.lower() and not _match(w, e.person_id, q, day)[0]:
+            continue
+        primary = w.on([x for x in w.assignments[e.id] if x.kind == "PRIMARY"], anchor)
+        base = _duty_row(w, d, day)
+        rows.append(
+            DutyRegisterRow(
+                **base.model_dump(),
+                department=dept,
+                institution_name=w.inst_name(e.institution_id, anchor),
+                engagement_type=e.engagement_type,
+                primary_department=w.dept_ref(primary.department_id, anchor) if primary else None,
+                change_id=d.change_id,
+            )
+        )
+    rows.sort(key=lambda r: (r.department.code, *_duty_sort(r), r.person_code))
+    current = [r for r in rows if not r.not_yet_effective]
+
+    heads: dict[int, list[DepartmentDutyRow]] = defaultdict(list)
+    for d in _duties_on(w, day, False):
+        if d.duty == "HEAD":
+            heads[d.department_id].append(_duty_row(w, d, day))
+    leaders = []
+    for dept_id, _dept in sorted(w.departments.items(), key=lambda x: x[1].code):
+        if department_id is not None and dept_id != department_id:
+            continue
+        v, later, _ = _pick(w.dept_versions[dept_id], day)
+        active = v is not None and not later and v.lifecycle == "ACTIVE"
+        if active or heads.get(dept_id):
+            leaders.append(
+                DepartmentLeaderRow(
+                    department=w.dept_ref(dept_id, day),
+                    heads=sorted(heads.get(dept_id, []), key=_duty_sort),
                 )
             )
-    order = {"HEAD": 0, "DEPUTY": 1}
-    return sorted(rows, key=lambda r: (r.not_yet_effective, order[r.duty], r.mode != "FORMAL"))
+    return DutyRegister(
+        as_of=day,
+        record_count=len(current),
+        person_count=len({r.person_id for r in current}),
+        planned_count=len(rows) - len(current),
+        rows=rows,
+        leaders=leaders,
+    )
 
 
 # ------------------------------------------------------------------ 导出
-def export_persons(s: Session, user: AppUser, day: date):
-    """当天有有效任用的人员，一人一行。"""
-    for r in list_persons(s, user, day):
+def export_persons(s: Session, user: AppUser, day: date, **filters):
+    """与名册同口径（同日期、同筛选），一人一行；默认只含当天有有效任用的人。"""
+    for r in list_persons(s, user, day, **filters):
         yield {
             "person_code": r.code,
             "name": r.name,
@@ -514,39 +608,52 @@ def export_persons(s: Session, user: AppUser, day: date):
         }
 
 
-def export_relations(s: Session, user: AppUser, day: date):
-    """当天有效的任用 × 当天的主归属，一行一项任用；暂未分配时部门列为空。"""
+def export_relations(s: Session, user: AppUser, day: date, **filters):
+    """与名册同口径：名册里每人的每项任用一行，附当天（计划中的取最早计划）的主归属；
+    暂未分配时部门列为空。不带筛选时 = 当天有效的任用。"""
     w = _World.load(s)
-    hidden = _hidden(user)
-    for pid, p in sorted(w.persons.items(), key=lambda x: x[1].code):
-        v = w.name(pid, day)
-        for e in w.live_engagements(pid):
-            if not covers(e.valid_from, e.valid_to, day):
-                continue
-            a = next(
-                (
-                    x
-                    for x in _live(w.assignments[e.id])
-                    if x.kind == "PRIMARY" and covers(x.valid_from, x.valid_to, day)
-                ),
-                None,
-            )
-            n = next(
-                (x for x in _live(w.work_nos[e.id]) if covers(x.valid_from, x.valid_to, day)),
-                None,
-            )
+    engagement_of = w.engagement_of
+    assignment_of = {a.id: a for rows in w.assignments.values() for a in rows}
+    for r in list_persons(s, user, day, **filters):
+        for b in r.engagements:
+            e = engagement_of[b.id]
+            a = assignment_of[b.assignment_id] if b.assignment_id else None
             yield {
-                "person_code": p.code,
-                "name": v.name if v else "",
+                "person_code": r.code,
+                "name": r.name,
                 "institution_code": w.institutions[e.institution_id].code,
-                "institution_name": w.inst_name(e.institution_id, day),
+                "institution_name": b.institution_name,
                 "engagement_type": e.engagement_type,
-                "work_no": None if (n is None or "work_no" in hidden) else n.work_no,
+                "work_no": b.work_no,
                 "engagement_valid_from": e.valid_from,
                 "engagement_valid_to": e.valid_to,
                 "assignment_kind": a.kind if a else None,
-                "department_code": w.departments[a.department_id].code if a else None,
-                "department_name": w.dept_version(a.department_id, day).name if a else None,
+                "department_code": b.department.code if b.department else None,
+                "department_name": b.department.name if b.department else None,
                 "assignment_valid_from": a.valid_from if a else None,
                 "assignment_valid_to": a.valid_to if a else None,
+                "not_yet_effective": b.not_yet_effective,
             }
+
+
+def export_duties(s: Session, user: AppUser, day: date, **filters):
+    """与部门任职台账同日期、同筛选、同粒度：一行一条职务。"""
+    for r in duty_register(s, user, day, **filters).rows:
+        yield {
+            "department_code": r.department.code,
+            "department_name": r.department.name,
+            "duty": r.duty,
+            "mode": r.mode,
+            "label": r.label,
+            "person_code": r.person_code,
+            "name": r.person_name,
+            "institution_name": r.institution_name,
+            "engagement_type": r.engagement_type,
+            "primary_department_code": r.primary_department.code if r.primary_department else None,
+            "primary_department_name": r.primary_department.name if r.primary_department else None,
+            "valid_from": r.valid_from,
+            "valid_to": r.valid_to,
+            "not_yet_effective": r.not_yet_effective,
+            "basis_note": r.basis_note,
+            "change_id": r.change_id,
+        }

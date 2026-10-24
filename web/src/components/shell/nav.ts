@@ -65,16 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: IdentityCardIcon,
     items: [
       { label: '人员名册', icon: IdentityCardIcon, to: '/persons', permission: 'person.view' },
-      {
-        label: '部门任职',
-        icon: Briefcase01Icon,
-        planned: 'department-duty',
-        permission: 'person.view',
-        note:
-          '全院部门负责人、副部长、主持工作、代管的任职台账（查看日期、按部门与职务筛选、导出），在实施计划的 A1 交付。' +
-          '任职事实已在人员详情与部门详情“人员”标签维护；这里只是统一查询。' +
-          '不办理任命决策、干部考核，也不管理 HR 岗位、编制与职级。',
-      },
+      { label: '部门任职', icon: Briefcase01Icon, to: '/person-duties', permission: 'person.view' },
     ],
   },
   {

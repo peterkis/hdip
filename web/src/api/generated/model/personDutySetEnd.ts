@@ -13,4 +13,5 @@ export interface PersonDutySetEnd {
   duty_id: number;
   expected_valid_to: string | null;
   valid_to: string | null;
+  basis_note?: string | null;
 }

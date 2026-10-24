@@ -4,10 +4,37 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ExportCsvDuty } from './exportCsvDuty';
+import type { ExportCsvMode } from './exportCsvMode';
+import type { ExportCsvStatus } from './exportCsvStatus';
 
 export type ExportCsvParams = {
 /**
  * 查看日期 YYYY-MM-DD，默认今天
  */
 as_of?: string | null;
+/**
+ * 检索词（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+q?: string | null;
+/**
+ * 人员状态（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+status?: ExportCsvStatus;
+/**
+ * 主部门 / 任职部门（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+department_id?: number | null;
+/**
+ * 含计划（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+include_future?: boolean | null;
+/**
+ * 职务（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+duty?: ExportCsvDuty;
+/**
+ * 任职方式（仅人员数据集；与对应页面同口径，见 docs/人员共享数据契约.md）
+ */
+mode?: ExportCsvMode;
 };

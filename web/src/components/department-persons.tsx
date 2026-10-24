@@ -9,6 +9,7 @@ import { Tag } from '@/components/kit/tag'
 import { useApp } from '@/lib/app-context'
 import { period, today } from '@/lib/format'
 import { PLANNED_TONE } from '@/lib/tones'
+import { cn } from '@/lib/utils'
 
 export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonRow[]; suspended: boolean }) {
   const { asOf } = useApp()
@@ -52,6 +53,17 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
   )
 }
 
+/** 任职依据（A1）：A1 之前登记的职务没有依据，如实说明，不补写 */
+export function DutyBasis({ note, className }: { note?: string | null; className?: string }) {
+  return note ? (
+    <span className={cn('text-fg-secondary text-caption', className)} title={note}>
+      依据：{note}
+    </span>
+  ) : (
+    <span className={cn('text-fg-muted text-caption', className)}>历史记录未提供依据</span>
+  )
+}
+
 /** 负责人：有主持工作者（代理或代管）时显示主持工作者并注明部长；没有时显示部长（人员设计 10.1） */
 export function DepartmentLeader({ duties }: { duties: DepartmentDutyRow[] }) {
   const now = duties.filter((d) => !d.not_yet_effective && d.duty === 'HEAD')
@@ -84,7 +96,7 @@ export function DepartmentLeader({ duties }: { duties: DepartmentDutyRow[] }) {
 export function DepartmentDuties({ rows, onAction }: { rows: DepartmentDutyRow[]; onAction?: (kind: 'handover' | 'end', d: DepartmentDutyRow) => void }) {
   if (rows.length === 0) return <p className="text-fg-muted text-xs">没有登记职务。</p>
   return (
-    <DbTable columns={[{ label: '职务' }, { label: '姓名' }, { label: '期间' }, { label: '' }]}>
+    <DbTable columns={[{ label: '职务' }, { label: '姓名' }, { label: '期间' }, { label: '依据' }, { label: '' }]}>
       {rows.map((d) => (
         <DbRow key={d.duty_id}>
           <DbCell>
@@ -98,6 +110,9 @@ export function DepartmentDuties({ rows, onAction }: { rows: DepartmentDutyRow[]
             <span className="text-fg-muted ml-1.5 font-mono text-caption">{d.person_code}</span>
           </DbCell>
           <DbCell className="text-fg-secondary whitespace-nowrap">{period(d.valid_from, d.valid_to)}</DbCell>
+          <DbCell className="max-w-56 truncate">
+            <DutyBasis note={d.basis_note} />
+          </DbCell>
           <DbCell className="whitespace-nowrap">
             {onAction && (!d.valid_to || d.valid_to >= today()) && (
               <>
