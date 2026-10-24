@@ -9,6 +9,11 @@
  */
 @custom-variant dark (&:is(.dark *));
 
+/* 容器查询断点：申请核对页的净内容宽 ≥1040 时把目录放到右侧（统一规范 R-LAY 2.4）；容器查询条件里不能用 var()，所以写数值 */
+@theme {
+  --container-review: 65rem;
+}
+
 @theme inline {
   /* ---- 字体与字号：重定 Tailwind 字号阶，现有 shadcn 组件（大量 text-xs）随之变为 Notion 尺寸 */
   --font-sans: var(--hd-font-sans);
@@ -292,5 +297,24 @@
   .hd-breathe {
     animation: none;
     opacity: 0;
+  }
+}
+
+/* 定位反馈：从问题清单跳到变更项后，该项底色闪一下再淡出（只一次，统一规范 R-ACT 7.3 / R-MOTION） */
+@keyframes hd-flash {
+  0%,
+  30% {
+    background-color: var(--hd-accent-soft);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.hd-flash {
+  animation: hd-flash 1.6s ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hd-flash {
+    animation: none;
   }
 }

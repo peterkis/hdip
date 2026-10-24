@@ -19,12 +19,12 @@ import { useListDepartments } from '@/api/generated/master/master'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, SearchBox } from '@/components/kit/database'
 import { Segmented } from '@/components/kit/segmented'
-import { Missing } from '@/components/kit/missing'
+import { DetailFallback } from '@/components/kit/missing'
 import { ProblemCard } from '@/components/problem-card'
 import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks } from '@/components/change-review'
-import { Section } from '@/components/kit/section'
+import { InlineAction, Section } from '@/components/kit/section'
 import { Steps, type StepItem } from '@/components/kit/steps'
-import { FileEditIcon, QuoteDownIcon } from '@hugeicons/core-free-icons'
+import { QuoteDownIcon } from '@hugeicons/core-free-icons'
 import { PageHeader, usePageFrame } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
@@ -311,8 +311,10 @@ function ListSkeleton() {
 
 // ------------------------------------------------------------------ 详情
 export function ChangeDetailPage() {
+  usePageFrame('work')
   const id = Number(useParams().id)
-  const { data: cr, isError } = useGetChangeRequest(id)
+  const query = useGetChangeRequest(id)
+  const { data: cr } = query
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
@@ -321,10 +323,18 @@ export function ChangeDetailPage() {
   const [itemLimit, setItemLimit] = useState(50)
   const groups = useMemo(() => (cr ? groupItems(cr) : []), [cr])
   const checks = useReviewChecks(cr ? `${cr.id}-${cr.updated_at}` : null, groups)
-  // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）
+  // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）；焦点移过去，底色闪一下作为定位反馈
   const jumpTo = (index: number) => {
     if (index >= itemLimit) setItemLimit(index + 1)
-    requestAnimationFrame(() => document.getElementById(`item-${index}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`item-${index}`)
+      if (!el) return
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      el.focus({ preventScroll: true })
+      el.classList.remove('hd-flash')
+      void el.offsetWidth
+      el.classList.add('hd-flash')
+    })
   }
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
@@ -343,7 +353,8 @@ export function ChangeDetailPage() {
     },
   })
 
-  if (!cr) return isError || !Number.isInteger(id) ? <Missing what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} /> : null
+  if (!cr)
+    return <DetailFallback what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} query={query} invalid={!Number.isInteger(id)} />
   const p = cr.permissions
   /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
   const run = (fn: () => Promise<ChangeRequestOut>, done?: string) =>
@@ -354,8 +365,10 @@ export function ChangeDetailPage() {
   // 逐组核对：能提交（草稿）或能确认（已提交）的人，全部组核对完才能继续
   const checkable = (cr.status === 'draft' && p.can_submit) || (cr.status === 'submitted' && p.can_confirm)
   const gateTitle = checkable && !checks.all ? '逐组看完并点“我已核对”后才能继续' : undefined
+  // 主动作只在页头（统一规范 R-ACT 7.4 / C-02）：草稿“提交申请”，已提交“确认申请”；文案对应真实后果（R-ACT 7.1）
   const primary = p.can_submit ? (
     <Button
+      id="change-primary-action"
       disabled={action.isPending || (checkable && !checks.all)}
       title={gateTitle}
       onClick={() =>
@@ -366,30 +379,45 @@ export function ChangeDetailPage() {
         }, `申请 #${id} 已提交，等待确认`)
       }
     >
-      提交
+      提交申请
     </Button>
   ) : cr.status === 'submitted' ? (
     <Button
+      id="change-primary-action"
       disabled={!p.can_confirm || action.isPending || (checkable && !checks.all)}
       title={gateTitle ?? p.confirm_hint ?? undefined}
-      onClick={() => run(() => confirmChangeRequest(id), `申请 #${id} 已确认生效`)}
+      onClick={() => run(() => confirmChangeRequest(id), `申请 #${id} 已确认：已正式登记，各项按自己的业务日期适用`)}
     >
-      确认生效
+      确认申请
     </Button>
   ) : null
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
   const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
 
+  // 统一规范 SC-03：页头（编号、状态、动作）→ 处理步骤 → 阻塞信息（问题、权限、隐去说明）→ 变更说明 → 逐组核对 + 目录 → 结束提醒。
+  // 净内容宽 ≥1040 时目录在右侧（200px），更窄时在上方并可展开
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={FileEditIcon}
         title={
           <span className="flex flex-wrap items-center gap-2">
             变更申请 #{cr.id} <ChangeStatusBadge status={cr.status} />
           </span>
         }
-        description={cr.copied_from_id ? <>复制自 <Link className="underline" to={`/changes/${cr.copied_from_id}`}>#{cr.copied_from_id}</Link></> : undefined}
+        description={
+          <>
+            {cr.created_by.display_name} 起草 · {cr.items.length} 项变更
+            {cr.copied_from_id && (
+              <>
+                {' '}
+                · 复制自{' '}
+                <Link className="underline" to={`/changes/${cr.copied_from_id}`}>
+                  #{cr.copied_from_id}
+                </Link>
+              </>
+            )}
+          </>
+        }
         actions={
           <>
             {p.can_edit && reorg && (
@@ -399,7 +427,7 @@ export function ChangeDetailPage() {
             )}
             {p.can_cancel && (
               <Button variant="ghost" disabled={action.isPending} onClick={() => run(() => cancelChangeRequest(id), `申请 #${id} 已撤销`)}>
-                撤销
+                撤销申请
               </Button>
             )}
             {p.can_copy && (
@@ -409,7 +437,7 @@ export function ChangeDetailPage() {
             )}
             {p.can_return && (
               <Button variant="outline" disabled={action.isPending} onClick={() => setReturning(true)}>
-                退回
+                退回申请
               </Button>
             )}
             {primary}
@@ -418,7 +446,7 @@ export function ChangeDetailPage() {
       />
 
       <div className="grid gap-4">
-        <div className="border-line-subtle rounded-lg border px-5 py-4">
+        <div className="border-line-subtle border-b pb-4">
           <Steps steps={progress(cr, groups.length)} />
         </div>
         {action.error && (
@@ -426,92 +454,112 @@ export function ChangeDetailPage() {
             {action.error.message}
           </Callout>
         )}
+        {cr.status === 'submitted' && !p.can_confirm && p.confirm_hint && (
+          <Callout tone="neutral" title="你不能确认这张申请">
+            {p.confirm_hint}
+          </Callout>
+        )}
         {(cr.masked_fields ?? []).length > 0 && (
           <Callout tone="neutral" title="部分敏感信息已隐去">
             你没有“查看人员敏感信息”的权限，本申请里的{(cr.masked_fields ?? []).map((f) => SENSITIVE_FIELD[f] ?? f).join('、')}显示为“（已隐去）”；这张申请也不能由你编辑。
           </Callout>
         )}
-        <div className="grid items-start gap-10 lg:grid-cols-4">
-          <main className="grid min-w-0 gap-9 lg:col-span-3">
-            {cr.problems.length > 0 && (
-              <section className="grid gap-2" aria-label="需要处理的问题">
-                <h2 className="text-danger-text text-sm font-semibold">
-                  还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
-                </h2>
-                {cr.problems.map((pr, k) => (
-                  <ProblemCard
-                    key={k}
-                    problem={pr}
-                    title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
-                    onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
-                  />
-                ))}
-              </section>
-            )}
+        <div className="@container">
+          <div className="grid items-start gap-6 @review:grid-cols-(--hd-review-columns)">
+            <div className="grid min-w-0 gap-9">
+              {cr.problems.length > 0 && (
+                <section className="grid gap-2" aria-label="需要处理的问题">
+                  <h2 className="text-danger-text text-section font-semibold">
+                    还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
+                  </h2>
+                  {cr.problems.map((pr, k) => (
+                    <ProblemCard
+                      key={k}
+                      problem={pr}
+                      title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
+                      onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
+                    />
+                  ))}
+                </section>
+              )}
 
-            {p.can_edit ? (
-              <Section
-                title={
-                  <>
-                    变更说明
-                    <span className="text-fg-muted text-caption font-normal">选填；提交后确认人会在页面上方看到</span>
-                  </>
-                }
-                action={
-                  <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
-                    保存说明
-                  </Button>
-                }
-              >
-                <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
-              </Section>
-            ) : (
-              cr.note && (
-                <Callout
-                  tone="info"
-                  icon={QuoteDownIcon}
+              {p.can_edit ? (
+                <Section
                   title={
-                    <span className="flex items-center gap-2">
+                    <>
                       变更说明
-                      <span className="text-fg-muted font-normal">
-                        {cr.created_by.display_name}
-                        {cr.submitted_at && ` · 提交于 ${stamp(cr.submitted_at)}`}
-                      </span>
-                    </span>
+                      <span className="text-fg-secondary text-caption font-normal">选填；提交后确认人会在页面上方看到</span>
+                    </>
+                  }
+                  action={
+                    <Button size="sm" variant="outline" disabled={!noteDirty || action.isPending} onClick={() => saveNote()}>
+                      保存说明
+                    </Button>
                   }
                 >
-                  <p className="text-fg text-sm whitespace-pre-wrap">{cr.note}</p>
-                </Callout>
-              )
-            )}
+                  <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
+                </Section>
+              ) : (
+                cr.note && (
+                  <Callout
+                    tone="info"
+                    icon={QuoteDownIcon}
+                    title={
+                      <span className="flex items-center gap-2">
+                        变更说明
+                        <span className="text-fg-secondary font-normal">
+                          {cr.created_by.display_name}
+                          {cr.submitted_at && ` · 提交于 ${stamp(cr.submitted_at)}`}
+                        </span>
+                      </span>
+                    }
+                  >
+                    <p className="text-fg text-sm whitespace-pre-wrap">{cr.note}</p>
+                  </Callout>
+                )
+              )}
 
-            {cr.items.length === 0 && <p className="text-fg-disabled text-xs">没有变更项</p>}
-            {groups.map((g, k) => (
-              <ReviewGroupSection
-                key={g.key}
-                cr={cr}
-                group={g}
-                number={k + 1}
-                checkable={checkable}
-                checked={checks.checked.has(g.key)}
-                onCheck={() => checks.toggle(g.key)}
-                renderDiff={(o) => <OutcomeDiff outcome={o} />}
-              />
-            ))}
-            <ReorgExtras cr={cr} number={groups.length + 1} />
+              {cr.items.length === 0 && <p className="text-fg-secondary text-xs">没有变更项</p>}
+              {groups.map((g, k) => (
+                <ReviewGroupSection
+                  key={g.key}
+                  cr={cr}
+                  group={g}
+                  number={k + 1}
+                  checkable={checkable}
+                  checked={checks.checked.has(g.key)}
+                  onCheck={() => checks.toggle(g.key)}
+                  renderDiff={(o) => <OutcomeDiff outcome={o} />}
+                />
+              ))}
+              <ReorgExtras cr={cr} number={groups.length + 1} />
 
-            {primary && (
-              <div className="border-line-subtle flex flex-wrap items-center gap-4 border-t pt-6">
-                <div className="min-w-0 flex-1">
-                  <div className="text-fg-strong text-sm font-semibold">{checks.all || !checkable ? '看完了？' : `还有 ${checks.total - checks.done} 组没核对`}</div>
-                  <div className="text-fg-secondary text-xs">
-                    {cr.status === 'draft' ? '提交后不能再改；确认人确认时会按当天的数据再预演一次。' : '确认后在一个事务里全部生效，之后不能撤回。'}
+              {primary && (
+                <div className="border-line-subtle flex flex-wrap items-center gap-4 border-t pt-6">
+                  <div className="grid min-w-0 flex-1 gap-1">
+                    <div className="text-fg-strong text-sm font-semibold">
+                      {checks.all || !checkable ? '看完了？' : `还有 ${checks.total - checks.done} 组没核对`}
+                    </div>
+                    <div className="text-fg-secondary text-xs">
+                      {cr.status === 'draft'
+                        ? '提交后不能再改；确认人确认时会按当天的数据再预演一次。'
+                        : '确认后整张申请在一个事务里正式登记，不能撤回；每一项按它自己的业务日期适用，未来日期的变化到那天才生效。'}
+                    </div>
                   </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+                      document.getElementById('change-primary-action')?.focus({ preventScroll: true })
+                    }}
+                  >
+                    回到页头操作
+                  </Button>
                 </div>
-              </div>
-            )}
-          </main>
-          <ReviewNav cr={cr} groups={groups} checks={checks} checkable={checkable} />
+              )}
+            </div>
+            <ReviewNav cr={cr} groups={groups} checks={checks} checkable={checkable} />
+          </div>
         </div>
       </div>
 
@@ -531,7 +579,7 @@ export function ChangeDetailPage() {
       {reorgEditing && reorg?.kind === 'department.reorganize' && (
         <ReorgEditor cr={cr} sourceCode={reorg.sources[0].code} onClose={() => setReorgEditing(false)} />
       )}
-    </div>
+    </>
   )
 }
 
@@ -561,28 +609,28 @@ function ReorgEditor({ cr, sourceCode, onClose }: { cr: ChangeRequestOut; source
 
 /** 申请的三步：起草 → 提交 → 确认生效；节点名称后括号里是操作人，第二行是时间或提示。退回、撤销停在发生的那一步 */
 function progress(cr: ChangeRequestOut, groupCount: number): StepItem[] {
-  // 时间按原型写成“10-19 11:20”；悬停看完整时间
-  const at = (t?: string | null) => (t ? <span title={stamp(t)}>{stamp(t).slice(5)}</span> : undefined)
+  // 详情页写精确时间（YYYY-MM-DD HH:mm，统一规范 R-DAT 8.1；列表上才用相对说法）
+  const at = (t?: string | null) => (t ? <time dateTime={t}>{stamp(t)}</time> : undefined)
   const name = (u?: { display_name: string } | null) => u?.display_name
   const draft: StepItem = { label: '起草', state: 'done', who: name(cr.created_by), detail: at(cr.created_at) }
   let submit: StepItem
   let confirm: StepItem
   if (cr.status === 'draft') {
     submit = { label: '提交', state: 'current', detail: groupCount > 1 ? `看完下面 ${groupCount} 组后提交` : '核对后提交' }
-    confirm = { label: '确认生效', state: 'upcoming', detail: '由确认人确认' }
+    confirm = { label: '确认', state: 'upcoming', detail: '由确认人确认' }
   } else if (cr.status === 'cancelled' && !cr.submitted_at) {
     submit = { label: '已撤销', state: 'stopped', who: name(cr.cancelled_by), detail: <>未提交即撤销 · {at(cr.cancelled_at)}</> }
-    confirm = { label: '确认生效', state: 'skipped' }
+    confirm = { label: '确认', state: 'skipped' }
   } else {
     submit = { label: '提交', state: 'done', who: name(cr.submitted_by), detail: at(cr.submitted_at) }
     confirm =
       cr.status === 'confirmed'
-        ? { label: '确认生效', state: 'done', who: name(cr.confirmed_by), detail: at(cr.confirmed_at) }
+        ? { label: '确认', state: 'done', who: name(cr.confirmed_by), detail: at(cr.confirmed_at) }
         : cr.status === 'returned'
           ? { label: '已退回', state: 'stopped', who: name(cr.returned_by), detail: <>{at(cr.returned_at)} · 原因：{cr.return_reason}</> }
           : cr.status === 'cancelled'
             ? { label: '已撤销', state: 'stopped', who: name(cr.cancelled_by), detail: at(cr.cancelled_at) }
-            : { label: '确认生效', state: 'current', detail: cr.permissions.confirm_hint ?? (groupCount > 1 ? `看完下面 ${groupCount} 组后确认` : '等待确认人确认') }
+            : { label: '确认', state: 'current', detail: cr.permissions.confirm_hint ?? (groupCount > 1 ? `看完下面 ${groupCount} 组后确认` : '等待确认人确认') }
   }
   return [draft, submit, confirm]
 }
@@ -705,17 +753,20 @@ function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
       )}
       {versioned && before && before.valid_from !== after.valid_from && (
         <p className="text-xs">
-          原第 {String(before.version_no)} 版期间变为 {String(before.valid_from)} ~ {dayBefore(String(after.valid_from))}；
+          原第 {String(before.version_no)} 版期间变为 {String(before.valid_from)} 至 {dayBefore(String(after.valid_from))}；
           新第 {String(after.version_no)} 版自 {String(after.valid_from)} 起{after.valid_to ? `至 ${after.valid_to}` : '长期有效'}。
         </p>
       )}
       {versioned && !before && <p className="text-xs">新建，自 {String(after.valid_from)} 起生效。</p>}
-      <DbTable columns={[{ label: '字段', className: 'w-36' }, ...(before ? [{ label: '变更前' }] : []), { label: before ? '变更后' : '内容' }]}>
+      <DbTable
+        variant="compare"
+        columns={[{ label: '字段', className: 'w-36' }, ...(before ? [{ label: '变更前' }] : []), { label: before ? '变更后' : '内容' }]}
+      >
         {rows.map((k) => {
           const changed = before && before[k] !== after[k]
           return (
             <DbRow key={k} className={cn(changed && 'bg-surface-subtle font-medium')}>
-              <DbCell className="text-fg-muted whitespace-nowrap">{FIELD_LABELS[k]}</DbCell>
+              <DbCell className="text-fg-secondary whitespace-nowrap">{FIELD_LABELS[k]}</DbCell>
               {before && <DbCell className="text-fg-secondary">{formatValue(k, before[k], optionLabels)}</DbCell>}
               <DbCell>{formatValue(k, after[k], optionLabels)}</DbCell>
             </DbRow>
@@ -723,9 +774,11 @@ function PlainDiff({ outcome }: { outcome: ItemOutcome }) {
         })}
       </DbTable>
       {before && keys.length > changedKeys.length && (
-        <button className="text-fg-muted hover:text-fg justify-self-start text-xs hover:underline" onClick={() => setShowAll(!showAll)}>
-          {showAll ? '只看改动的字段' : `显示全部 ${keys.length} 个字段`}
-        </button>
+        <span>
+          <InlineAction className="-ml-2" onClick={() => setShowAll(!showAll)}>
+            {showAll ? '只看改动的字段' : `显示全部 ${keys.length} 个字段`}
+          </InlineAction>
+        </span>
       )}
     </div>
   )
@@ -762,7 +815,7 @@ function ReturnDialog({
             取消
           </Button>
           <Button variant="destructive" disabled={!reason.trim() || pending} onClick={() => onReturn(reason.trim())}>
-            退回
+            退回申请
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -174,8 +174,8 @@ function GroupHeader({ number, title, rule, muted, children }: { number: number;
       >
         {number}
       </span>
-      <h2 className="text-fg-strong text-sm font-semibold">{title}</h2>
-      {rule && <span className="text-fg-muted text-caption">{rule}</span>}
+      <h2 className="text-fg-strong text-section font-semibold">{title}</h2>
+      {rule && <span className="text-fg-secondary text-caption">{rule}</span>}
       {children}
     </div>
   )
@@ -243,14 +243,20 @@ function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: num
   const outcomes = all.flatMap((i) => cr.outcomes?.filter((o) => o.index === i) ?? [])
   const [open, setOpen] = useState(false)
   return (
-    <div id={`item-${index}`} className="grid scroll-mt-6 gap-2">
-      <div className={cn('hover:bg-surface-sidebar flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
+    // tabIndex=-1：从问题清单跳过来时焦点落在这一项（统一规范 R-ACT 7.3）
+    <div id={`item-${index}`} tabIndex={-1} className="grid scroll-mt-6 gap-2 rounded-lg outline-none">
+      <div className={cn('flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
         {view ? view.parts.map((part, k) => <RowPart key={k} kind={part.kind} text={part.text} tone={part.tone ?? undefined} />) : <span className="text-fg">{cr.item_summaries?.[index]}</span>}
         <span className="ml-auto flex items-center gap-3">
-          {view?.meta && <span className="text-fg-disabled font-mono text-caption">{view.meta}</span>}
+          {view?.meta && <span className="text-fg-muted font-mono text-caption">{view.meta}</span>}
           {outcomes.length > 0 && (
-            <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="text-fg-disabled hover:text-fg inline-flex items-center gap-0.5 text-caption">
-              详情
+            <button
+              type="button"
+              onClick={() => setOpen(!open)}
+              aria-expanded={open}
+              className="text-fg-secondary hover:bg-surface-hover hover:text-fg -my-1 inline-flex h-(--hd-control-height-sm) items-center gap-0.5 rounded-md px-2 text-caption"
+            >
+              前后对照
               <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3" strokeWidth={2} />
             </button>
           )}
@@ -352,24 +358,39 @@ export function ReviewNav({
   checkable: boolean
 }) {
   const reorg = reorgInfo(cr)
-  const jump = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // 净内容宽不足 1040 时目录在核对内容上方，默认收起，点开再看（统一规范 R-LAY 2.4、SC-03）
+  const [open, setOpen] = useState(false)
+  const jump = (id: string) => {
+    setOpen(false)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
   const pct = checks.total ? Math.round((checks.done / checks.total) * 100) : 0
+  const problemCount = cr.problems.length
   return (
-    <aside aria-label="本页目录与核对进度" className="order-first grid gap-3 lg:sticky lg:top-6 lg:order-none">
+    <aside aria-label="本页目录与核对进度" className="order-first grid gap-3 @review:sticky @review:top-6 @review:order-none">
       {checkable && (
         <div className="grid gap-2 px-2.5">
           <div className="flex items-baseline gap-2">
             <span className="text-fg-strong text-sm font-semibold tabular-nums">
               已核对 {checks.done} / {checks.total} 组
             </span>
-            <span className="text-fg-muted text-caption">{checks.all ? '可以继续了' : `还差 ${checks.total - checks.done} 组`}</span>
+            <span className="text-fg-secondary text-caption">{checks.all ? '可以继续了' : `还差 ${checks.total - checks.done} 组`}</span>
           </div>
           <div role="progressbar" aria-valuemin={0} aria-valuemax={checks.total} aria-valuenow={checks.done} className="bg-surface-subtle h-1.5 overflow-hidden rounded-full">
-            <div className="bg-success-text h-full rounded-full transition-all duration-500 ease-out" style={{ width: `${pct}%` }} />
+            <div className="bg-success-text h-full rounded-full transition-all duration-500 ease-out motion-reduce:transition-none" style={{ width: `${pct}%` }} />
           </div>
         </div>
       )}
-      <nav className="border-line-subtle grid gap-0.5 border-l pl-1.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="text-fg-secondary hover:bg-surface-hover hover:text-fg flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2.5 text-xs @review:hidden"
+      >
+        <Icon icon={open ? ArrowDown01Icon : ArrowRight01Icon} className="size-3.5" strokeWidth={2} />
+        分组目录（{groups.length} 组{problemCount ? `，${problemCount} 个问题` : ''}）
+      </button>
+      <nav className={cn('border-line-subtle gap-0.5 border-l pl-1.5 @review:grid', open ? 'grid' : 'hidden')}>
         {groups.map((g) => {
           const problems = g.indices.filter((i) => cr.problems.some((p) => p.item_index === i)).length
           const done = checks.checked.has(g.key)
@@ -380,7 +401,9 @@ export function ReviewNav({
                 className={cn('size-2 shrink-0 rounded-full', problems ? 'bg-danger' : done ? 'bg-success-text' : 'bg-line-strong')}
               />
               <span className="min-w-0 flex-1 truncate">{g.title}</span>
-              <span className="text-fg-disabled tabular-nums">{g.indices.length}</span>
+              {problems > 0 && <span className="sr-only">，{problems} 个问题</span>}
+              {checkable && done && <span className="sr-only">，已核对</span>}
+              <span className="text-fg-muted tabular-nums">{g.indices.length}</span>
             </NavLink>
           )
         })}
@@ -393,7 +416,7 @@ export function ReviewNav({
 
 function NavLink({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} className="text-fg-secondary hover:bg-surface-hover hover:text-fg flex items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs">
+    <button type="button" onClick={onClick} className="text-fg-secondary hover:bg-surface-hover hover:text-fg flex min-h-(--hd-control-height) items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs">
       {children}
     </button>
   )

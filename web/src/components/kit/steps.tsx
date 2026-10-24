@@ -54,7 +54,8 @@ export function Steps({ steps, className }: { steps: StepItem[]; className?: str
           <span className="grid min-w-0 leading-snug">
             <span className={cn('truncate text-xs', LABEL[s.state])}>{s.label}</span>
             {(s.who || s.detail) && (
-              <span className="text-fg-muted truncate text-caption">
+              // 第二行可换行：退回原因等需要读全的说明不截断（统一规范 R-TYP 3.4）
+              <span className="text-fg-secondary text-caption break-words">
                 {s.who && <span className="text-fg-secondary">{s.who}</span>}
                 {s.who && s.detail && ' '}
                 {s.detail}
