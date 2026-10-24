@@ -15,6 +15,7 @@ import { ExpandableText } from '@/components/kit/expandable-text'
 export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonRow[]; suspended: boolean }) {
   const { asOf } = useApp()
   const current = new Set(rows.filter((r) => !r.not_yet_effective).map((r) => r.person_id))
+  const planned = new Set(rows.filter((r) => r.not_yet_effective && !current.has(r.person_id)).map((r) => r.person_id))
   return (
     <div className="grid gap-2">
       {suspended && current.size > 0 && (
@@ -23,10 +24,10 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
       {rows.length === 0 ? (
         <DbEmpty title={`${asOf} 没有归属本部门的人员`} hint="人员归属在人员名册里登记；下级部门的人员不计入本部门。" />
       ) : (
-        <DbTable columns={[{ label: '姓名' }, { label: '人员代码' }, { label: '任用' }, { label: '归属期间' }]}>
+        <DbTable columns={[{ label: '人员' }, { label: '任用' }, { label: '归属期间' }]}>
           {rows.map((r) => (
             <DbRow key={r.assignment_id}>
-              <DbCell>
+              <DbCell className="py-1.5">
                 <span className="flex items-center gap-1.5">
                   <Link className="text-fg-strong font-medium hover:underline" to={`/persons/${r.person_id}`}>
                     {r.person_name}
@@ -34,8 +35,8 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
                   {r.kind === 'ADDITIONAL' && <Tag tone="purple">附加归属</Tag>}
                   {r.not_yet_effective && <Tag tone={PLANNED_TONE}>{r.valid_from} 起</Tag>}
                 </span>
+                <span className="text-fg-secondary block font-mono text-caption">{r.person_code}</span>
               </DbCell>
-              <DbCell className="text-fg-secondary font-mono text-caption">{r.person_code}</DbCell>
               <DbCell className="text-fg-secondary whitespace-nowrap">
                 <span className="inline-flex items-center gap-1.5">
                   {r.institution_name}
@@ -48,7 +49,8 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
         </DbTable>
       )}
       <p className="text-fg-muted text-caption">
-        {asOf} 当天 {current.size} 人（主部门与附加归属，按人员去重，不含下级部门）；部门更名、调整隶属不迁人。
+        {asOf} 当天 {current.size} 人（主部门与附加归属，按人员去重，不含下级部门）
+        {planned.size > 0 && `；另有 ${planned.size} 人计划调入，未计入`}；部门更名、调整隶属不迁人。
       </p>
     </div>
   )

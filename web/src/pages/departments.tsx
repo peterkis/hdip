@@ -6,8 +6,6 @@ import {
   ArrowRight01Icon,
   Building03Icon,
   HierarchyIcon,
-  Calendar03Icon,
-  Certificate01Icon,
   Download01Icon,
   Hospital01Icon,
   Layers01Icon,
@@ -15,8 +13,6 @@ import {
   Loading03Icon,
   Tag01Icon,
   TextFontIcon,
-  UserGroupIcon,
-  UserIcon,
 } from '@hugeicons/core-free-icons'
 import { useMutation } from '@tanstack/react-query'
 import { useDeferredValue, useMemo, useState } from 'react'
@@ -42,12 +38,13 @@ import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { OrgFlow } from '@/components/org-flow'
 import { Callout } from '@/components/kit/callout'
-import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
+import { ChangeLink, InlineAction, InlineLink, Section } from '@/components/kit/section'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip, type DbColumn } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
-import { Missing } from '@/components/kit/missing'
+import { DetailFallback } from '@/components/kit/missing'
+import { MoreActions } from '@/components/kit/more-actions'
 import { PageHeader, usePageFrame } from '@/components/layout'
 import { Segmented } from '@/components/kit/segmented'
 import { useCrumb } from '@/components/shell/crumbs'
@@ -63,7 +60,7 @@ import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline, type TimelineEvent } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
+import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, period, versionNote, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
@@ -514,12 +511,15 @@ const VERSION_FIELDS: (keyof DepartmentVersionOut)[] = [
 
 type Dialog = 'revise' | 'lifecycle' | 'classify' | 'otherClass' | 'affiliate' | 'alias' | 'unit' | 'parent' | 'relation' | 'reorg'
 type TabKey = 'props' | 'class' | 'org' | 'units' | 'persons' | 'history' | 'codes'
+const TAB_KEYS: TabKey[] = ['props', 'class', 'org', 'units', 'persons', 'history', 'codes']
 
 export function DepartmentDetailPage() {
+  usePageFrame('document')
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer, can } = useMe()
-  const { data, isError } = useGetDepartment(id, { as_of: asOf })
+  const query = useGetDepartment(id, { as_of: asOf })
+  const { data } = query
   const { data: persons = [] } = useListDepartmentPersons(
     id,
     { as_of: asOf, include_future: true },
@@ -536,9 +536,21 @@ export function DepartmentDetailPage() {
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
   const [closingClass, setClosingClass] = useState<DepartmentClassificationOut | null>(null)
   const { data: views = [] } = useListOrgViews()
-  const [tab, setTab] = useState<TabKey>('props')
+  // 当前标签写在网址里（?tab=），返回、刷新、转发链接都回到同一标签（统一规范 0.2）
+  const [params, setParams] = useSearchParams()
+  const asked = params.get('tab') as TabKey | null
+  const tab: TabKey = asked && TAB_KEYS.includes(asked) && (asked !== 'persons' || can('person.view')) ? asked : 'props'
+  const setTab = (v: TabKey) =>
+    setParams(
+      (p) => {
+        if (v === 'props') p.delete('tab')
+        else p.set('tab', v)
+        return p
+      },
+      { replace: true },
+    )
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return isError || !Number.isInteger(id) ? <Missing what="部门" back={{ to: '/departments', label: '返回部门列表' }} /> : null
+  if (!data) return <DetailFallback what="部门" back={{ to: '/departments', label: '返回部门列表' }} query={query} invalid={!Number.isInteger(id)} />
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
@@ -550,36 +562,35 @@ export function DepartmentDetailPage() {
   const terminal = latest.lifecycle === 'REVOKED' || latest.lifecycle === 'SUPERSEDED'
   const formerNames = data.versions.filter((v, i, arr) => v.name !== shown.name && arr.findIndex((x) => x.name === v.name) === i)
   const close = (o: boolean) => !o && setDialog(null)
-  const edit = (label: string, d: Dialog) =>
-    isMaintainer && !terminal ? (
-      <button type="button" className="text-fg-muted hover:text-fg ml-2 text-caption hover:underline" onClick={() => setDialog(d)}>
-        {label}
-      </button>
-    ) : null
+  const edit = (label: string, d: Dialog) => (isMaintainer && !terminal ? <InlineAction onClick={() => setDialog(d)}>{label}</InlineAction> : null)
+  // 人员数按人员去重，计划调入另计（统一规范 SC-05）；无人员查看权时不查也不显示 0
+  const personNow = new Set(persons.filter((p) => !p.not_yet_effective).map((p) => p.person_id))
 
+  // 统一规范 SC-05：名称 / 管理编码 / 版本 → 关键事实（生命周期、行政隶属、主体归属、主分类、负责人、承担职责、设立形式与级别）
+  // → 标签页 → 当前分区。“修订属性”是页头主动作；组织变更、变更生命周期是低频动作，收进“更多”
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={UserGroupIcon}
         title={shown.name}
         description={
-          onDay
-            ? `管理编码 ${data.code} · 部门 ID ${data.id} · ${asOf} 有效的是第 ${onDay.version_no} 版`
-            : `管理编码 ${data.code} · ${asOf} 尚未设立，自 ${shown.valid_from} 起`
+          <>
+            管理编码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
+            <span className="text-fg-muted"> · 内部 ID {data.id}</span>
+          </>
         }
         actions={
           <>
-            <Button variant="ghost" nativeButton={false} render={<Link to={`/organization-overview?tab=matrix&dept=${data.id}&planned=1`} />}>
+            <Button variant="outline" nativeButton={false} render={<Link to={`/organization-overview?tab=matrix&dept=${data.id}&planned=1`} />}>
               查看跨院区布局
             </Button>
             {isMaintainer && !terminal && (
               <>
-                <Button variant="outline" onClick={() => setDialog('reorg')}>
-                  组织变更
-                </Button>
-                <Button variant="outline" onClick={() => setDialog('lifecycle')}>
-                  变更生命周期
-                </Button>
+                <MoreActions
+                  items={[
+                    { label: '组织变更（拆分、合并等）…', onClick: () => setDialog('reorg') },
+                    { label: '变更生命周期…', onClick: () => setDialog('lifecycle') },
+                  ]}
+                />
                 <Button onClick={() => setDialog('revise')}>修订属性</Button>
               </>
             )}
@@ -590,60 +601,21 @@ export function DepartmentDetailPage() {
       <PropertyList
         items={[
           {
-            label: '部门管理主分类',
-            icon: Tag01Icon,
-            value: (
-              <>
-                {mainClass ? <MainClassTag code={mainClass.code} name={mainClass.name} /> : <span className="text-fg-disabled">未分类</span>}
-                {edit(mainClass ? '调整' : '设置', 'classify')}
-              </>
-            ),
-          },
-          {
-            label: '承担职责',
-            icon: ListViewIcon,
-            value: shown.duties.length ? (
-              <span className="flex flex-wrap gap-1">
-                {shown.duties.map((t) => (
-                  <Tag key={t}>{t}</Tag>
-                ))}
-              </span>
-            ) : null,
-          },
-          {
             label: '组织生命周期',
-            icon: Loading03Icon,
             value: (
               <>
                 <LifecycleTag value={shown.lifecycle} />
-                <span className="text-fg-muted ml-2 text-caption">自 {shown.valid_from}</span>
+                <span className="text-fg-secondary ml-2 text-caption">自 {shown.valid_from}</span>
               </>
             ),
           },
-          {
-            label: '设立形式',
-            icon: Certificate01Icon,
-            value: `${ESTABLISHMENT_FORM[shown.establishment_form]}${shown.temporary_until ? `，期限至 ${shown.temporary_until}` : ''}`,
-          },
-          {
-            label: '主体归属',
-            icon: Hospital01Icon,
-            value: (
-              <>
-                {affiliation?.institution_name ?? <span className="text-fg-disabled">未填</span>}
-                {edit(affiliation ? '调整' : '设置', 'affiliate')}
-              </>
-            ),
-          },
-          { label: '行政级别', icon: Layers01Icon, value: shown.admin_grade },
           {
             label: '行政隶属',
-            icon: HierarchyIcon,
             value: (
               <span className="flex flex-wrap items-center gap-1">
                 {data.path.map((p, i) => (
                   <span key={p.id} className="flex items-center gap-1">
-                    {i > 0 && <span className="text-fg-disabled">›</span>}
+                    {i > 0 && <span className="text-fg-muted">›</span>}
                     {p.id === data.id ? (
                       <span className="text-fg-strong">{p.name}</span>
                     ) : (
@@ -661,12 +633,57 @@ export function DepartmentDetailPage() {
             ),
           },
           {
+            label: '主体归属',
+            value: affiliation ? (
+              <>
+                {affiliation.institution_name}
+                {edit('调整', 'affiliate')}
+              </>
+            ) : isMaintainer && !terminal ? (
+              <>
+                <span className="text-fg-muted">未登记</span>
+                {edit('设置', 'affiliate')}
+              </>
+            ) : null,
+          },
+          {
+            label: '部门管理主分类',
+            value: (
+              <>
+                {mainClass ? <MainClassTag code={mainClass.code} name={mainClass.name} /> : <span className="text-fg-muted">尚未分类</span>}
+                {edit(mainClass ? '调整' : '设置', 'classify')}
+              </>
+            ),
+          },
+          {
             label: '当前负责人',
-            icon: UserIcon,
             value: can('person.view') ? <DepartmentLeader duties={duties} /> : <span className="text-fg-muted">无权查看人员</span>,
           },
+          {
+            label: '承担职责',
+            value: shown.duties.length ? (
+              <span className="flex flex-wrap gap-1">
+                {shown.duties.map((t) => (
+                  <Tag key={t}>{t}</Tag>
+                ))}
+              </span>
+            ) : null,
+          },
+          {
+            label: '设立形式',
+            value: `${ESTABLISHMENT_FORM[shown.establishment_form]}${shown.temporary_until ? `，期限至 ${shown.temporary_until}` : ''}`,
+          },
+          { label: '行政级别', value: shown.admin_grade },
         ]}
       />
+
+      {terminal && (
+        <div className="mt-6">
+          <Callout tone="warning" title={`该部门已${DEPARTMENT_LIFECYCLE[latest.lifecycle as DepartmentLifecycle]}`}>
+            终态，不能再调整，历史仍可查看；代码 {data.code} 永久绑定，不会被复用。
+          </Callout>
+        </div>
+      )}
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="mt-6">
         <TabsList variant="line" className="max-w-full justify-start overflow-x-auto">
@@ -674,9 +691,7 @@ export function DepartmentDetailPage() {
           <TabsTrigger value="class">分类与归属</TabsTrigger>
           <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
           <TabsTrigger value="units">服务单元（{data.units.length}）</TabsTrigger>
-          {can('person.view') && (
-            <TabsTrigger value="persons">人员（{persons.filter((p) => !p.not_yet_effective).length}）</TabsTrigger>
-          )}
+          {can('person.view') && <TabsTrigger value="persons">人员（{personNow.size}）</TabsTrigger>}
           <TabsTrigger value="codes">外部编码（{data.external_codes.length}）</TabsTrigger>
           <TabsTrigger value="history">版本与事件</TabsTrigger>
         </TabsList>
@@ -693,27 +708,39 @@ export function DepartmentDetailPage() {
                   { label: '拼音码', value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
                   {
                     label: '曾用名',
-                    value: formerNames.length ? formerNames.map((v) => `${v.name}（${v.valid_from} → ${v.valid_to ?? '长期'}）`).join('；') : null,
+                    value: formerNames.length ? formerNames.map((v) => `${v.name}（${period(v.valid_from, v.valid_to)}）`).join('；') : null,
                   },
                   {
                     label: '别名',
                     value: (
-                      <span className="flex flex-wrap items-center gap-1">
+                      <span className="grid gap-1">
                         {data.aliases.map((a) => (
-                          <Tag key={a.id} tone="gray" className={cn(a.valid_to && a.valid_to < asOf && 'opacity-50')}>
-                            {a.kind === 'SEARCH_CODE' ? '检索码 ' : ''}
-                            {a.value}
-                            {a.valid_to ? ` · 至 ${a.valid_to}` : ''}
-                          </Tag>
+                          <span key={a.id} className="flex flex-wrap items-center gap-1.5">
+                            <Tag tone="gray">
+                              {a.kind === 'SEARCH_CODE' ? '检索码 ' : ''}
+                              {a.value}
+                            </Tag>
+                            {a.valid_to ? (
+                              <span className="text-fg-secondary text-caption">{a.valid_to < asOf ? `已于 ${a.valid_to} 停用` : `至 ${a.valid_to}`}</span>
+                            ) : (
+                              isMaintainer && !terminal && <InlineAction onClick={() => setClosingAlias(a)}>停用</InlineAction>
+                            )}
+                          </span>
                         ))}
-                        {data.aliases.length === 0 && <span className="text-fg-disabled">空</span>}
-                        {edit('添加', 'alias')}
+                        {data.aliases.length === 0 && !(isMaintainer && !terminal) && <span className="text-fg-muted">未登记</span>}
+                        {isMaintainer && !terminal && (
+                          <span>
+                            <InlineAction className="-ml-2" onClick={() => setDialog('alias')}>
+                              添加别名
+                            </InlineAction>
+                          </span>
+                        )}
                       </span>
                     ),
                   },
                 ]}
               />
-              <p className="text-fg-muted text-caption">名称不是身份。更名产生新版本，旧名称即曾用名；别名只用于检索。</p>
+              <p className="text-fg-secondary text-caption">名称不是身份。更名产生新版本，旧名称即曾用名；别名只用于检索，添加、停用别名不改名称。</p>
             </Section>
             <Section title="职责与依据">
               <PropertyList
@@ -723,18 +750,6 @@ export function DepartmentDetailPage() {
                 ]}
               />
             </Section>
-            {isMaintainer && data.aliases.some((a) => !a.valid_to) && (
-              <p className="text-fg-muted text-caption">
-                停用别名：
-                {data.aliases
-                  .filter((a) => !a.valid_to)
-                  .map((a) => (
-                    <button key={a.id} type="button" className="ml-2 hover:underline" onClick={() => setClosingAlias(a)}>
-                      {a.value}
-                    </button>
-                  ))}
-              </p>
-            )}
           </>
         )}
 
@@ -748,7 +763,8 @@ export function DepartmentDetailPage() {
                   .map((c) => ({
                     key: c.id,
                     current: c === mainClass,
-                    cells: [<MainClassTag code={c.code} name={c.name} />, `${c.valid_from} → ${c.valid_to ?? '长期'}`, <ChangeLink id={c.change_id} />],
+                    ended: c.valid_to !== null && c.valid_to < asOf,
+                    cells: [<MainClassTag code={c.code} name={c.name} />, period(c.valid_from, c.valid_to), <ChangeLink id={c.change_id} />],
                   }))}
                 empty="尚未分类"
               />
@@ -762,6 +778,7 @@ export function DepartmentDetailPage() {
                   .map((c) => ({
                     key: c.id,
                     current: c.valid_from <= asOf && (c.valid_to === null || c.valid_to >= asOf),
+                    ended: c.valid_to !== null && c.valid_to < asOf,
                     cells: [
                       <span>
                         <span className="text-fg-secondary">{c.scheme_name}：</span>
@@ -769,10 +786,10 @@ export function DepartmentDetailPage() {
                           {c.code} {c.name}
                         </Tag>
                       </span>,
-                      `${c.valid_from} → ${c.valid_to ?? '长期'}`,
+                      period(c.valid_from, c.valid_to),
                       <ChangeLink id={c.change_id} />,
                       isMaintainer && !terminal && c.valid_to === null ? (
-                        <Button size="xs" variant="ghost" onClick={() => setClosingClass(c)}>
+                        <Button size="sm" variant="ghost" onClick={() => setClosingClass(c)}>
                           结束
                         </Button>
                       ) : null,
@@ -788,9 +805,10 @@ export function DepartmentDetailPage() {
                 rows={data.affiliations.map((a) => ({
                   key: a.id,
                   current: a === affiliation,
-                  cells: [a.institution_name, `${a.valid_from} → ${a.valid_to ?? '长期'}`, <ChangeLink id={a.change_id} />],
+                  ended: a.valid_to !== null && a.valid_to < asOf,
+                  cells: [a.institution_name, period(a.valid_from, a.valid_to), <ChangeLink id={a.change_id} />],
                 }))}
-                empty="未填主体归属"
+                empty="未登记主体归属"
               />
             </Section>
           </>
@@ -822,11 +840,12 @@ export function DepartmentDetailPage() {
                 rows={data.parents.map((e) => ({
                   key: e.id,
                   current: e.valid_from <= asOf && (e.valid_to === null || e.valid_to >= asOf),
+                  ended: e.valid_to !== null && e.valid_to < asOf,
                   cells: [
                     <Link to={`/departments/${e.parent.id}`} className="hover:underline">
                       {e.parent.name}
                     </Link>,
-                    `${e.valid_from} → ${e.valid_to ?? '长期'}`,
+                    period(e.valid_from, e.valid_to),
                     <ChangeLink id={e.change_id} />,
                   ],
                 }))}
@@ -846,13 +865,7 @@ export function DepartmentDetailPage() {
             </Section>
             <Section
               title="管理关系"
-              action={
-                isMaintainer && !terminal ? (
-                  <Button size="sm" variant="outline" onClick={() => setDialog('relation')}>
-                    建立关系
-                  </Button>
-                ) : null
-              }
+              action={isMaintainer && !terminal ? <InlineAction onClick={() => setDialog('relation')}>建立管理关系</InlineAction> : null}
             >
               <RelationsTable
                 deptId={data.id}
@@ -870,13 +883,7 @@ export function DepartmentDetailPage() {
         {tab === 'units' && (
           <Section
             title={`服务单元（${asOf}）`}
-            action={
-              isMaintainer && latest.lifecycle === 'ACTIVE' ? (
-                <Button size="sm" variant="outline" onClick={() => setDialog('unit')}>
-                  新建服务单元
-                </Button>
-              ) : null
-            }
+            action={isMaintainer && latest.lifecycle === 'ACTIVE' ? <InlineAction onClick={() => setDialog('unit')}>新建服务单元</InlineAction> : null}
           >
             <UnitsTable rows={data.units} hide={['department']} />
             <p className="text-fg-muted text-caption">部门在新院区开展服务 = 新建或重新绑定服务单元，部门身份不变。</p>
@@ -892,7 +899,7 @@ export function DepartmentDetailPage() {
               <DepartmentDuties rows={duties} onAction={can('person.change') ? (kind, duty) => setDutyDialog({ kind, duty }) : undefined} />
               <p className="text-fg-muted text-caption">负责人由职务按日期带出，不写在部门上；代管者可以不归属本部门；职务不等于系统权限。</p>
             </Section>
-            <Section title={`人员（${asOf}）`}>
+            <Section title={`人员归属（${asOf}）`}>
               <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
             </Section>
           </div>
@@ -912,11 +919,7 @@ export function DepartmentDetailPage() {
           <>
             <Section
               title="本部门的外部代码"
-              action={
-                <Link to="/standards/code-mapping" className="text-fg-muted hover:text-fg text-caption hover:underline">
-                  到编码映射台账维护
-                </Link>
-              }
+              action={<InlineLink to="/standards/code-mapping">到编码映射台账维护</InlineLink>}
             >
               <ExternalCodeLinks rows={data.external_codes} asOf={asOf} empty="没有外部代码的解释指向本部门" />
               <p className="text-fg-muted text-caption">
@@ -936,23 +939,19 @@ export function DepartmentDetailPage() {
           </Section>
         )}
         {tab === 'history' && (
-          <VersionTimeline
-            versions={data.versions}
-            fields={VERSION_FIELDS}
-            asOf={asOf}
-            first={{
-              title: '设立',
-              detail: (v) => `${ESTABLISHMENT_FORM[v.establishment_form]}，${DEPARTMENT_LIFECYCLE[v.lifecycle as DepartmentLifecycle]}`,
-            }}
-            extra={departmentEvents(data)}
-            order="desc"
-          />
-        )}
-
-        {terminal && (
-          <Callout tone="warning" title={`该部门已${DEPARTMENT_LIFECYCLE[latest.lifecycle as DepartmentLifecycle]}`}>
-            终态，不能再调整；代码 {data.code} 永久绑定，不会被复用。
-          </Callout>
+          <Section title="版本与事件">
+            <VersionTimeline
+              versions={data.versions}
+              fields={VERSION_FIELDS}
+              asOf={asOf}
+              first={{
+                title: '设立',
+                detail: (v) => `${ESTABLISHMENT_FORM[v.establishment_form]}，${DEPARTMENT_LIFECYCLE[v.lifecycle as DepartmentLifecycle]}`,
+              }}
+              extra={departmentEvents(data)}
+              order="desc"
+            />
+          </Section>
         )}
       </div>
 
@@ -996,7 +995,7 @@ export function DepartmentDetailPage() {
       {closingRelation && (
         <DepartmentRelationCloseDialog open relation={closingRelation} onOpenChange={(o) => !o && setClosingRelation(null)} />
       )}
-    </div>
+    </>
   )
 }
 
@@ -1012,14 +1011,14 @@ function RelationsTable({
   asOf: string
   onClose?: (r: DepartmentRelationOut) => void
 }) {
-  if (relations.length === 0) return <p className="text-fg-disabled text-xs">没有专业管理、协作或院区管理关系</p>
+  if (relations.length === 0) return <p className="text-fg-secondary text-xs">没有专业管理、协作或院区管理关系</p>
   return (
     <DbTable
       columns={[
         { label: '类型' },
         { label: '关系' },
         { label: '事项 / 范围', className: 'min-w-40' },
-        { label: '期间', icon: Calendar03Icon },
+        { label: '关系期间' },
         { label: '' },
       ]}
     >
@@ -1045,12 +1044,10 @@ function RelationsTable({
               {r.campus_name && <span className="text-fg-muted ml-1.5 text-caption">@ {r.campus_name}</span>}
             </DbCell>
             <DbCell className="py-2 whitespace-normal">{r.scope}</DbCell>
-            <DbCell className="whitespace-nowrap">
-              {r.valid_from} → {r.valid_to ?? '长期'}
-            </DbCell>
+            <DbCell className="whitespace-nowrap">{period(r.valid_from, r.valid_to)}</DbCell>
             <DbCell className="text-right">
               {onClose && r.valid_to === null && (
-                <Button size="xs" variant="ghost" onClick={() => onClose(r)}>
+                <Button size="sm" variant="ghost" onClick={() => onClose(r)}>
                   结束
                 </Button>
               )}
@@ -1146,29 +1143,42 @@ function dayBefore(day: string): string {
   return d.toISOString().slice(0, 10)
 }
 
-
-
+/** 按期间的关系表：当前与计划的行先列出，已结束的行收起，点开再看（统一规范 SC-05：当前值先展示，历史期间展开） */
 function PeriodTable({
   head,
   rows,
   empty,
 }: {
   head: string[]
-  rows: { key: number; current: boolean; cells: React.ReactNode[] }[]
+  rows: { key: number; current: boolean; ended: boolean; cells: React.ReactNode[] }[]
   empty: string
 }) {
-  if (rows.length === 0) return <p className="text-fg-disabled text-xs">{empty}</p>
+  const [showEnded, setShowEnded] = useState(false)
+  if (rows.length === 0) return <p className="text-fg-secondary text-xs">{empty}</p>
+  const ended = rows.filter((r) => r.ended).length
+  const visible = rows.filter((r) => showEnded || !r.ended)
   return (
-    <DbTable columns={head.map((label, i) => ({ label, icon: i === 1 ? Calendar03Icon : undefined }))}>
-      {rows.map((r) => (
-        <DbRow key={r.key} className={cn(!r.current && 'text-fg-muted')}>
-          {r.cells.map((c, i) => (
-            <DbCell key={i} className="whitespace-nowrap">
-              {c}
-            </DbCell>
+    <div className="grid gap-1">
+      {visible.length > 0 ? (
+        <DbTable columns={head.map((label) => ({ label }))}>
+          {visible.map((r) => (
+            <DbRow key={r.key} className={cn(!r.current && 'text-fg-muted')}>
+              {r.cells.map((c, i) => (
+                <DbCell key={i} className="whitespace-nowrap">
+                  {c}
+                </DbCell>
+              ))}
+            </DbRow>
           ))}
-        </DbRow>
-      ))}
-    </DbTable>
+        </DbTable>
+      ) : (
+        <p className="text-fg-secondary text-xs">查看日期当天及以后没有记录。</p>
+      )}
+      {ended > 0 && (
+        <span>
+          <InlineAction className="-ml-2" onClick={() => setShowEnded(!showEnded)}>{showEnded ? '收起已结束的记录' : `显示已结束的 ${ended} 条`}</InlineAction>
+        </span>
+      )}
+    </div>
   )
 }

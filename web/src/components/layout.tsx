@@ -404,7 +404,7 @@ function AsOfPicker() {
         <DateInput
           bare
           aria-label="查看日期"
-          className={cn('w-20 bg-transparent', isToday && 'text-fg')}
+          className={cn('w-22 bg-transparent', isToday && 'text-fg')}
           value={asOf}
           onChange={(v) => v && setAsOf(v)}
         />

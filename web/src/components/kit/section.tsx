@@ -23,7 +23,18 @@ const INLINE =
   'hover:bg-surface-hover focus-visible:ring-ring/30 -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none focus-visible:ring-2'
 
 /** 属性值旁、区块标题旁的轻量操作；danger 用于低频且后果重的动作（如永久退出），仍只打开原表单 */
-export function InlineAction({ onClick, children, danger }: { onClick: () => void; children: ReactNode; danger?: boolean }) {
+export function InlineAction({
+  onClick,
+  children,
+  danger,
+  className,
+}: {
+  onClick: () => void
+  children: ReactNode
+  danger?: boolean
+  /** 单独成行时用 -ml-2 让文字与所在列对齐 */
+  className?: string
+}) {
   const spec = useFrame() !== 'legacy'
   return (
     <button
@@ -32,6 +43,7 @@ export function InlineAction({ onClick, children, danger }: { onClick: () => voi
         spec
           ? cn(INLINE, danger ? 'text-danger-text' : 'text-fg-secondary hover:text-fg')
           : cn('ml-2 text-caption hover:underline', danger ? 'text-danger-text' : 'text-fg-muted hover:text-fg'),
+        className,
       )}
       onClick={onClick}
     >
