@@ -3,7 +3,6 @@
 // 查看日期、视图与筛选都写在地址栏，复制链接即可恢复同一视角。口径见页面底部注释与设计文档剧本 21。
 import {
   Building03Icon,
-  DashboardSquare02Icon,
   Hospital01Icon,
   Link04Icon,
   ListViewIcon,
@@ -26,7 +25,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbToolbar, FilterPill, ToggleChip } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useApp } from '@/lib/app-context'
@@ -116,6 +115,7 @@ type Selection =
   | { key: string; title: string; note?: string; codes: { label: string; count: number; to: string }[] }
 
 export function OrganizationOverviewPage() {
+  usePageFrame('canvas')
   const { asOf, unitTypeOptions } = useApp()
   const p = useOverviewParams()
   const [sel, setSel] = useState<Selection | null>(null)
@@ -274,11 +274,10 @@ export function OrganizationOverviewPage() {
   return (
     <>
       <PageHeader
-        icon={DashboardSquare02Icon}
         title="全院组织与服务布局"
-        description={`按 ${asOf} 当天的主数据生成。服务布局只计服务单元，行政上下级看部门层级树。`}
+        description={`按查看日期 ${asOf} 的主数据生成。服务布局只计服务单元，行政上下级看部门层级树。`}
         actions={
-          <Button variant="ghost" nativeButton={false} render={<Link to="/departments" />}>
+          <Button variant="outline" nativeButton={false} render={<Link to="/departments?view=tree" />}>
             <Icon icon={UserGroupIcon} inline="start" />
             部门层级树
           </Button>
@@ -370,56 +369,66 @@ export function OrganizationOverviewPage() {
         </div>
       )}
 
-      <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
-        <div className="min-w-0">
-          {p.tab === 'layout' && (
-            <LayoutView
-              lens={p.lens}
-              onLens={(v) => p.set({ lens: v === 'class' ? '' : v })}
-              flow={flow}
-              empty={!isPending && scoped.length === 0}
-              onSelect={selectLayout}
-              onMatrix={() => p.set({ tab: 'matrix' })}
-            />
-          )}
-          {p.tab === 'matrix' &&
-            (rows.length === 0 ? (
-              !isPending && <EmptyScope />
-            ) : (
-              <>
-                <DeptCampusMatrix
-                  rows={rows}
-                  campuses={sortedCampuses}
-                  selected={sel?.key}
-                  onSelect={(r, c, list) =>
-                    setSel({
-                      key: `${r.dept.id}:${c.id}`,
-                      title: `${r.dept.version.name} · ${c.version.name}`,
-                      note: '本部门（不含下级部门）在该院区的单元',
-                      units: list,
-                      actions: (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          nativeButton={false} render={<Link to={listLink({ campus: String(c.id), dept: String(r.dept.id) })} />}
-                        >
-                          在服务单元列表中查看
-                        </Button>
-                      ),
-                    })
-                  }
-                />
-                <Footnote>
-                  格子里是该部门本身（不含下级部门）在该院区登记的服务单元数与类型。“—”表示当前日期下未登记符合条件的单元，实际开展情况待核实，不等于院方确认不设。
-                </Footnote>
-              </>
-            ))}
-          {p.tab === 'codes' && <CodesView gov={gov} systems={systems} onSelect={selectCodes} />}
+      {/* 统一规范 SC-10：没有点选时图占满宽度，不留一块空卡片；点选后面板在容器够宽时并列，否则在图下 */}
+      {!sel && <p className="text-fg-secondary mt-4 text-caption">{SELECT_HINT[p.tab]}</p>}
+      <div className="@container mt-4">
+        <div className={cn('grid items-start gap-4', sel && '@5xl:grid-cols-(--hd-overview-columns)')}>
+          <div className="min-w-0">
+            {p.tab === 'layout' && (
+              <LayoutView
+                lens={p.lens}
+                onLens={(v) => p.set({ lens: v === 'class' ? '' : v })}
+                flow={flow}
+                empty={!isPending && scoped.length === 0}
+                onSelect={selectLayout}
+                onMatrix={() => p.set({ tab: 'matrix' })}
+              />
+            )}
+            {p.tab === 'matrix' &&
+              (rows.length === 0 ? (
+                !isPending && <EmptyScope />
+              ) : (
+                <>
+                  <DeptCampusMatrix
+                    rows={rows}
+                    campuses={sortedCampuses}
+                    selected={sel?.key}
+                    onSelect={(r, c, list) =>
+                      setSel({
+                        key: `${r.dept.id}:${c.id}`,
+                        title: `${r.dept.version.name} · ${c.version.name}`,
+                        note: '本部门（不含下级部门）在该院区的单元',
+                        units: list,
+                        actions: (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            nativeButton={false} render={<Link to={listLink({ campus: String(c.id), dept: String(r.dept.id) })} />}
+                          >
+                            在服务单元列表中查看
+                          </Button>
+                        ),
+                      })
+                    }
+                  />
+                  <Footnote>
+                    格子里是该部门本身（不含下级部门）在该院区登记的服务单元数与类型。“—”表示当前日期下未登记符合条件的单元，实际开展情况待核实，不等于院方确认不设。
+                  </Footnote>
+                </>
+              ))}
+            {p.tab === 'codes' && <CodesView gov={gov} systems={systems} onSelect={selectCodes} />}
+          </div>
+          <SelectionPanel sel={sel} onClose={() => setSel(null)} />
         </div>
-        <SelectionPanel sel={sel} onClose={() => setSel(null)} tab={p.tab} />
       </div>
     </>
   )
+}
+
+const SELECT_HINT: Record<TabKey, string> = {
+  layout: '点图上的节点或连带，查看背后的服务单元；概况里的“跨院区部门”等也可以点。',
+  matrix: '点有数字的格子，查看该部门在该院区的服务单元。',
+  codes: '点图上的系统、字典、状态或连带，查看数量并进入编码映射台账。',
 }
 
 // ------------------------------------------------------------------ 概况
@@ -614,20 +623,11 @@ function CodesView({
 
 // ------------------------------------------------------------------ 点选侧栏
 
-function SelectionPanel({ sel, onClose, tab }: { sel: Selection | null; onClose: () => void; tab: TabKey }) {
+function SelectionPanel({ sel, onClose }: { sel: Selection | null; onClose: () => void }) {
   const { optionLabels } = useApp()
-  if (!sel)
-    return (
-      <aside className="border-line-subtle text-fg-muted hidden rounded-md border border-dashed px-4 py-6 text-caption xl:block">
-        {tab === 'codes'
-          ? '点图上的系统、字典、状态或连带，查看数量并进入编码映射台账。'
-          : tab === 'matrix'
-            ? '点有数字的格子，查看该部门在该院区的服务单元。'
-            : '点图上的节点或连带，查看背后的服务单元。概况里的“跨院区部门”等也可以点。'}
-      </aside>
-    )
+  if (!sel) return null
   return (
-    <aside className="border-line-subtle bg-surface-raised grid gap-3 rounded-md border p-4 shadow-(--hd-elevation-card) xl:sticky xl:top-4">
+    <aside aria-label={`选中：${sel.title}`} className="border-line-subtle bg-surface-raised grid gap-3 rounded-md border p-4 shadow-(--hd-elevation-card) @5xl:sticky @5xl:top-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-fg-strong text-sm font-semibold">{sel.title}</div>

@@ -283,6 +283,7 @@
   --hd-page-bottom-gap: var(--hd-space-48);
   --hd-review-nav-width: 12.5rem;     /* 200：申请核对目录，净内容宽 ≥1040 时用 */
   --hd-review-columns: minmax(0, 1fr) var(--hd-review-nav-width);
+  --hd-overview-columns: minmax(0, 1fr) 18rem;   /* 组织总览：图 + 选中面板 */
   /* 行与密度（R-ROW）：标准行 ≥44、显式紧凑行 ≥36、双行工作列表 ≥64（12 + 20 + 4 + 16 + 12）；
      表头 36；单元格水平内边距 12。都是最小高度，内容换行时自然增高 */
   --hd-row-height: 2.75rem;
