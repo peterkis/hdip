@@ -14,6 +14,7 @@
 
 import os
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 from alembic import command
@@ -424,7 +425,94 @@ PERSONS = [
     # 部门职务（P3）走查：医务部两人，任命、交接、主持工作、代管从页面上做
     *_person("PT-CL", "陈立", "YWB", "2020-01-01", "STAFF", work_no="0101"),
     *_person("PT-YF", "杨帆", "YWB", "2021-05-01", "STAFF", work_no="0102"),
+    # 部门任职台账（A1）与人员变化的演示：各科负责人、离职后再次任用
+    *_person("PT-ZM2", "周明", "XNK", "2020-03-01", "STAFF", work_no="0310"),
+    *_person("PT-SL", "孙丽", "HXNK", "2020-01-01", "STAFF", work_no="0168"),
+    *_person("PT-WG", "吴刚", "SJNK", "2020-01-01", "STAFF", work_no="0057"),
+    *_person("PT-HJ", "何静", "JZK", "2020-04-01", "STAFF", work_no="0192"),
+    *_person(
+        "PT-FT", "冯涛", "GK", "2020-01-01", "CONTRACT", work_no="0119", valid_to="2025-12-31"
+    ),
 ]
+
+
+def _day(n: int) -> str:
+    """今天起 n 天后（计划中的职务、调科按走查当天推算）。"""
+    return (date.today() + timedelta(days=n)).isoformat()
+
+
+def _basis(n: int) -> str:
+    return f"（合成）院发〔2024〕{n} 号"
+
+
+def _people_flows(s) -> list[dict]:
+    """人员登记确认后的业务变化（合成，模拟）：部门职务、调科、附加归属、再次任用。
+
+    职务、调科要引用任用 / 归属 id，所以在登记那张申请确认后按人员代码查出来再拼。
+    覆盖 A1 的演示：代管（任职部门 ≠ 主部门）、一人兼两职、部长在任时他人主持工作、
+    计划中的职务、带结束日的任期（可演示“延长任期须写依据”）、
+    职务止于任用结束日（可演示“任用延长不自动续职”）；多数科室仍未登记负责人。"""
+    from hdip_api.models import Person, PersonAssignment, PersonEngagement
+
+    def eng(temp: str) -> int:
+        p = s.query(Person).filter_by(code=KNOWN[temp]).one()
+        return s.query(PersonEngagement).filter_by(person_id=p.id).order_by("id").first().id
+
+    def primary(temp: str) -> int:
+        return s.query(PersonAssignment).filter_by(engagement_id=eng(temp), kind="PRIMARY").one().id
+
+    def duty(temp, dept, duty="HEAD", mode="FORMAL", valid_from="2020-01-01", n=1, **kw):
+        return {
+            "kind": "person.duty_assign",
+            "engagement_id": eng(temp),
+            "department_code": dept,
+            "duty": duty,
+            "mode": mode,
+            "valid_from": valid_from,
+            "basis_note": _basis(n),
+            **kw,
+        }
+
+    return [
+        duty("PT-CL", "YWB", n=3),
+        duty("PT-YF", "CWB", mode="CARETAKER", valid_from="2025-07-01", n=41),
+        duty("PT-ZM2", "XNK", valid_from="2022-01-01", n=12),
+        duty("PT-ZW2", "XNK", "DEPUTY", valid_from="2023-01-01", n=13),
+        duty("PT-SL", "HXNK", valid_from="2021-01-01", n=8),
+        duty("PT-LXY", "HXNK", "DEPUTY", valid_from=_day(30), n=88),
+        duty("PT-WG", "SJNK", valid_from="2020-01-01", n=5),
+        # 王芳：副部长止于返聘结束日；吴刚外出学习期间主持工作（与正式部长并存）
+        duty("PT-WF", "SJNK", "DEPUTY", valid_from="2025-01-01", n=21),
+        duty("PT-WF", "SJNK", mode="ACTING", valid_from="2026-09-01", valid_to="2026-12-31", n=66),
+        duty("PT-SXX", "GK", valid_from="2021-01-01", n=9),
+        duty("PT-OZQ", "EK", valid_from="2023-02-01", n=15),
+        duty("PT-HJ", "JZK", valid_from="2024-01-01", valid_to=_day(45), n=30),
+        # 孙丽兼任呼吸介入室（附加归属）；张伟预约调到呼吸介入室
+        {
+            "kind": "person.assign",
+            "engagement_id": eng("PT-SL"),
+            "department_code": "HXJR",
+            "assignment_kind": "ADDITIONAL",
+            "valid_from": "2025-01-01",
+        },
+        {
+            "kind": "person.transfer",
+            "assignment_id": primary("PT-ZW"),
+            "expected_valid_to": None,
+            "department_code": "HXJR",
+            "effective_date": _day(20),
+        },
+        # 冯涛 2025-12-31 离开后再次任用（新任用，不接续）
+        {
+            "kind": "person.engage",
+            "person_code": "PT-FT",
+            "institution_code": "CD3",
+            "engagement_type": "REHIRE",
+            "valid_from": _day(40),
+            "department_code": "GK",
+            "work_no": "0119",
+        },
+    ]
 
 
 def _register_more(s, user) -> None:
@@ -504,9 +592,13 @@ with SessionLocal() as s:
         _register_more(s, user)
         third = _apply(s, user, OVERVIEW, "走查起点数据：组织总览的跨院区单元与编码治理（模拟）")
         fourth = _apply(s, user, PERSONS, "走查起点数据：人员登记（合成人员，模拟）")
+        fifth = _apply(
+            s, user, _people_flows(s), "走查起点数据：部门职务、调科、兼任、再次任用（合成，模拟）"
+        )
     s.commit()
 suffix = (
     f"、#{second}（组织变更与批量操作）、#{third}（组织总览）、#{fourth}（人员）"
+    f"、#{fifth}（部门任职与人员变化）"
     if second
     else "；只含最小起点（--minimal）"
 )
