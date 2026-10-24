@@ -39,7 +39,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
-import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, stamp } from '@/lib/format'
+import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, SENSITIVE_FIELD, stamp } from '@/lib/format'
 import { useScrollMemory } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
@@ -47,8 +47,6 @@ import { notify } from '@/lib/notify'
 // ------------------------------------------------------------------ 列表
 
 /** 敏感字段的中文名（后端 PERSON_FIELD_PERMISSIONS 登记的字段） */
-const SENSITIVE_FIELD: Record<string, string> = { work_no: '工号', id_number: '身份证号', phone: '联系电话' }
-
 // 变更申请列表（统一规范 v1.0 SC-02 的版式 + 2026-10-24 Peter 选定的组合）：
 // 规范版的 work 外框、24px 标题、单选导航、三列双行工作列表；第一行用服务端的“对象 · 变化”摘要（headline，
 // 与详情的一句话说明同源、同规则脱敏）；导航加“待我确认”（按 approval_rule）、“我的草稿”；处理时间写相对说法，

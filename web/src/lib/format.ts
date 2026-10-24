@@ -179,6 +179,9 @@ export function today(): string {
   return new Date().toLocaleDateString('sv-SE')
 }
 
+/** 人员敏感字段的中文名（后端 masked_fields 给的是字段键；PERSON_FIELD_PERMISSIONS 登记新字段时同步这里） */
+export const SENSITIVE_FIELD: Record<string, string> = { work_no: '业务工号', id_number: '身份证号', phone: '联系电话' }
+
 /** 期间显示：闭区间，结束为空即长期有效。 */
 export function period(from: string, to: string | null | undefined): string {
   // 结束日早于开始日 = 生效前已被更正的版本，从未生效

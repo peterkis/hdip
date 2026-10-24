@@ -7,8 +7,6 @@ import {
   Calendar03Icon,
   Download01Icon,
   HashtagIcon,
-  Hospital01Icon,
-  IdentityCardIcon,
   Loading03Icon,
   TextFontIcon,
   UserGroupIcon,
@@ -43,7 +41,7 @@ import {
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, nextSort, SearchBox, ToggleChip, type DbSort } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
-import { Missing } from '@/components/kit/missing'
+import { DetailFallback } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -54,7 +52,7 @@ import { Button } from '@/components/ui/button'
 import { Timeline, type TimelineEvent } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { DEPARTMENT_LIFECYCLE, period, today } from '@/lib/format'
+import { DEPARTMENT_LIFECYCLE, period, SENSITIVE_FIELD, stamp, today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, primaryOn, WORK_NO_REASON } from '@/lib/person'
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
@@ -319,26 +317,37 @@ function Stacked({
 const covers = (from: string, to: string | null | undefined, day: string) => from <= day && (!to || to >= day)
 
 export function PersonDetailPage() {
+  usePageFrame('document')
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { can } = useMe()
-  const { data, isError } = useGetPerson(id, { as_of: asOf })
+  const query = useGetPerson(id, { as_of: asOf })
+  const { data } = query
   const [engaging, setEngaging] = useState(false)
   const [dialog, setDialog] = useState<PersonDialog | null>(null)
   useCrumb(data && `${data.code} ${data.name}`)
-  if (!data) return isError || !Number.isInteger(id) ? <Missing what="人员" back={{ to: '/persons', label: '返回人员名册' }} /> : null
+  if (!data) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
 
   const close = (o: boolean) => !o && setDialog(null)
   const live = data.engagements.filter((e) => !e.void)
   const current = live.filter((e) => covers(e.valid_from, e.valid_to, asOf))
   const formerNames = data.versions.filter((v, i) => !v.void && i > 0 && data.versions[i - 1].revise_reason === 'RENAME')
+  // 没有任用记录与查看日期当天没有有效任用分开说（统一规范 SC-14）
+  const noCurrent = (
+    <span className="text-fg-muted">{live.length ? '查看日期当天没有有效任用' : '没有任用记录'}</span>
+  )
 
+  // 统一规范 SC-14：姓名 / 人员代码 → 当前身份与关系摘要 → 每项任用一个分区 → 姓名历史。
+  // 页头只有两个次级动作（改姓名、建立任用），不强推主按钮；任用级动作在任用分区标题右侧，调科、结束、交接在对应行
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={IdentityCardIcon}
         title={data.name}
-        description={`人员代码 ${data.code} · 按 ${asOf} 显示 · 人员代码由系统分配、永不改变，与业务工号无关`}
+        description={
+          <>
+            人员代码 <span className="font-mono">{data.code}</span>（系统分配、永不改变，与业务工号无关）· 按查看日期 {asOf} 显示
+          </>
+        }
         actions={
           can('person.change') && (
             <>
@@ -354,25 +363,27 @@ export function PersonDetailPage() {
       />
       <PropertyList
         items={[
-          { label: '状态', icon: Loading03Icon, value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },
-          { label: '拼音码', icon: TextFontIcon, value: data.pinyin && <span className="font-mono">{data.pinyin}</span> },
+          { label: '状态', value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },
           {
             label: '当前任用',
-            icon: Hospital01Icon,
-            value: current.length
-              ? current.map((e) => (
+            value: current.length ? (
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                {current.map((e) => (
                   <span key={e.id} className="inline-flex items-center gap-1.5">
                     {e.institution_name}
                     <EngagementTypeTag code={e.engagement_type} />
                   </span>
-                ))
-              : null,
+                ))}
+              </span>
+            ) : (
+              noCurrent
+            ),
           },
           {
             label: '当前主部门',
-            icon: UserGroupIcon,
-            value: current.length
-              ? current.map((e) => {
+            value: current.length ? (
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                {current.map((e) => {
                   const a = primaryOn(e.assignments, asOf)
                   return a ? (
                     <Link key={e.id} className="hover:underline" to={`/departments/${a.department.id}`}>
@@ -383,31 +394,37 @@ export function PersonDetailPage() {
                       暂未分配
                     </Tag>
                   )
-                })
-              : null,
+                })}
+              </span>
+            ) : (
+              noCurrent
+            ),
           },
           {
-            label: '当前工号',
-            icon: HashtagIcon,
-            value:
-              current
-                .map((e) => e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no)
-                .filter(Boolean)
-                .join('、') || null,
+            label: '当前业务工号',
+            value: current.length
+              ? current
+                  .map((e) => e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no)
+                  .filter(Boolean)
+                  .join('、') || null
+              : noCurrent,
           },
-          { label: '曾用名', icon: TextFontIcon, value: formerNames.map((v) => v.name).join('、') || null },
+          { label: '曾用名', value: formerNames.map((v) => v.name).join('、') || null },
+          { label: '拼音码', value: data.pinyin && <span className="font-mono">{data.pinyin}</span> },
         ]}
       />
       {(data.masked_fields ?? []).length > 0 && (
-        <Callout tone="neutral" title="部分信息无权查看">
-          以下字段按权限隐去：{(data.masked_fields ?? []).join('、')}。
-        </Callout>
+        <div className="mt-4">
+          <Callout tone="neutral" title="部分信息无权查看">
+            你没有“查看人员敏感信息”的权限，{(data.masked_fields ?? []).map((f) => SENSITIVE_FIELD[f] ?? f).join('、')}不显示。
+          </Callout>
+        </div>
       )}
 
       <div className="mt-8 grid gap-8">
         <Section title={`任用与部门归属（${live.length}）`}>
-          {live.length === 0 ? (
-            <p className="text-fg-muted text-xs">没有任用记录。</p>
+          {data.engagements.length === 0 ? (
+            <p className="text-fg-secondary text-xs">没有任用记录。人员身份保留；建立任用后再登记部门归属与工号。</p>
           ) : (
             <div className="grid gap-4">
               {data.engagements.map((e) => (
@@ -416,7 +433,7 @@ export function PersonDetailPage() {
             </div>
           )}
         </Section>
-        <Section title="姓名">
+        <Section title="姓名历史">
           <Timeline events={nameEvents(data)} asOf={asOf} order="desc" />
         </Section>
       </div>
@@ -430,7 +447,7 @@ export function PersonDetailPage() {
       {dialog?.kind === 'assign' && <AssignDialog open onOpenChange={close} engagement={dialog.engagement} />}
       {dialog?.kind === 'transfer' && <TransferDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
       {dialog?.kind === 'end' && <AssignmentEndDialog open onOpenChange={close} person={data.name} assignment={dialog.assignment} />}
-    </div>
+    </>
   )
 }
 
@@ -443,6 +460,8 @@ type PersonDialog =
 /** 还能调整的一段：未撤销，结束日为空或尚未过去（结束日到达前可改，人员设计 P-3） */
 const adjustable = (r: { void: boolean; valid_to?: string | null }) => !r.void && (!r.valid_to || r.valid_to >= today())
 
+/** 一项任用一个分区：标题写任用主体、类型、状态、期间与来源申请，右侧是任用级动作；
+ *  正文依次是主部门、附加归属、部门职务、业务工号，各段的开始 / 结束日分开写；已结束、已撤销的段收起 */
 function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: string; onAction?: (d: PersonDialog) => void }) {
   const state = e.void
     ? { label: '生效前已撤销', tone: 'gray' as const }
@@ -451,58 +470,74 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
       : e.valid_to && e.valid_to < asOf
         ? { label: '已结束', tone: 'gray' as const }
         : { label: '有效', tone: 'green' as const }
+  const duties = e.duties ?? []
+  // 任用本身已结束或已撤销时，它下面的段都是历史，全部列出，不再收起
+  const fold = !e.void && !(e.valid_to && e.valid_to < asOf)
   return (
-    <div className={cn('border-line rounded-md border', e.void && 'opacity-60')}>
-      <div className="border-line-subtle flex flex-wrap items-center gap-x-2 gap-y-1 border-b px-3 py-2 text-xs">
-        <span className="text-fg-strong font-medium">{e.institution_name}</span>
-        <EngagementTypeTag code={e.engagement_type} />
-        <Tag tone={state.tone}>{state.label}</Tag>
-        <span className="text-fg-secondary tabular-nums">{period(e.valid_from, e.valid_to)}</span>
-        {e.note && <span className="text-fg-muted text-caption">· {e.note}</span>}
-        <span className="ml-auto flex items-center gap-2">
-          {onAction && adjustable(e) && (
-            <>
-              <InlineAction onClick={() => onAction({ kind: 'work_no', engagement: e })}>
-                {e.work_nos.some((n) => !n.void) ? '换工号' : '登记工号'}
-              </InlineAction>
-              <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>添加归属</InlineAction>
-              <InlineAction onClick={() => onAction({ kind: 'duty_assign', engagement: e })}>任命职务</InlineAction>
-              <InlineAction onClick={() => onAction({ kind: 'engagement_end', engagement: e })}>
-                {e.valid_to ? '调整期限' : '结束任用'}
-              </InlineAction>
-            </>
-          )}
-          <ChangeLink id={e.change_id} />
-          {e.closed_change_id && <ChangeLink id={e.closed_change_id} />}
-        </span>
-      </div>
-      <div className="grid gap-3 px-3 py-2 sm:grid-cols-2">
+    <section className="border-line rounded-lg border" aria-label={`${e.institution_name} 任用`}>
+      <header className="border-line-subtle flex flex-wrap items-start gap-x-3 gap-y-2 border-b px-4 py-3">
+        <div className="grid min-w-0 gap-1">
+          <span className="flex flex-wrap items-center gap-2 text-xs">
+            <span className={cn('font-semibold', e.void ? 'text-fg-secondary' : 'text-fg-strong')}>{e.institution_name}</span>
+            <EngagementTypeTag code={e.engagement_type} />
+            <Tag tone={state.tone}>{state.label}</Tag>
+          </span>
+          <span className="text-fg-secondary flex flex-wrap items-center gap-x-2 text-caption">
+            <span className="tabular-nums">任用期间 {e.void ? `${e.valid_from} 起（生效前已撤销，未生效）` : period(e.valid_from, e.valid_to)}</span>
+            <span>
+              来源申请 <ChangeLink id={e.change_id} />
+              {e.closed_change_id && (
+                <>
+                  ，结束登记 <ChangeLink id={e.closed_change_id} />
+                </>
+              )}
+            </span>
+            {e.note && <span>· {e.note}</span>}
+          </span>
+        </div>
+        {onAction && adjustable(e) && (
+          <span className="ml-auto flex flex-wrap items-center gap-0.5">
+            <InlineAction onClick={() => onAction({ kind: 'work_no', engagement: e })}>
+              {e.work_nos.some((n) => !n.void) ? '换工号' : '登记工号'}
+            </InlineAction>
+            <InlineAction onClick={() => onAction({ kind: 'assign', engagement: e })}>添加归属</InlineAction>
+            <InlineAction onClick={() => onAction({ kind: 'duty_assign', engagement: e })}>任命职务</InlineAction>
+            <InlineAction onClick={() => onAction({ kind: 'engagement_end', engagement: e })}>{e.valid_to ? '调整期限' : '结束任用'}</InlineAction>
+          </span>
+        )}
+      </header>
+      <div className="grid gap-3 px-4 py-3">
         <SegmentList
           title="主部门"
           empty="这项任用没有部门归属（暂未分配）"
-          rows={e.assignments.filter((a) => a.kind === 'PRIMARY').map((a) => ({
-            key: a.id,
-            void: a.void,
-            from: a.valid_from,
-            to: a.valid_to,
-            label: (
-              <>
-                <Link className="hover:underline" to={`/departments/${a.department.id}`}>
-                  {a.department.name}
-                </Link>
-                {a.department_lifecycle && a.department_lifecycle !== 'ACTIVE' && (
-                  <Tag tone={DEPARTMENT_LIFECYCLE_TONE[a.department_lifecycle]}>{DEPARTMENT_LIFECYCLE[a.department_lifecycle as keyof typeof DEPARTMENT_LIFECYCLE]}</Tag>
-                )}
-                {onAction && adjustable(a) && (
-                  <span className="order-last">
-                    <InlineAction onClick={() => onAction({ kind: 'transfer', assignment: a })}>调科</InlineAction>
-                    <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>
-                  </span>
-                )}
-              </>
-            ),
-          }))}
+          rows={e.assignments
+            .filter((a) => a.kind === 'PRIMARY')
+            .map((a) => ({
+              key: a.id,
+              void: a.void,
+              from: a.valid_from,
+              to: a.valid_to,
+              label: (
+                <>
+                  <Link className="hover:underline" to={`/departments/${a.department.id}`}>
+                    {a.department.name}
+                  </Link>
+                  {a.department_lifecycle && a.department_lifecycle !== 'ACTIVE' && (
+                    <Tag tone={DEPARTMENT_LIFECYCLE_TONE[a.department_lifecycle]}>
+                      {DEPARTMENT_LIFECYCLE[a.department_lifecycle as keyof typeof DEPARTMENT_LIFECYCLE]}
+                    </Tag>
+                  )}
+                </>
+              ),
+              actions: onAction && adjustable(a) && (
+                <>
+                  <InlineAction onClick={() => onAction({ kind: 'transfer', assignment: a })}>调科</InlineAction>
+                  <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>
+                </>
+              ),
+            }))}
           asOf={asOf}
+          fold={fold}
         />
         {e.assignments.some((a) => a.kind === 'ADDITIONAL') && (
           <SegmentList
@@ -516,26 +551,21 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
                 from: a.valid_from,
                 to: a.valid_to,
                 label: (
-                  <>
-                    <Link className="hover:underline" to={`/departments/${a.department.id}`}>
-                      {a.department.name}
-                    </Link>
-                    {onAction && adjustable(a) && (
-                      <span className="order-last">
-                        <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>
-                      </span>
-                    )}
-                  </>
+                  <Link className="hover:underline" to={`/departments/${a.department.id}`}>
+                    {a.department.name}
+                  </Link>
                 ),
+                actions: onAction && adjustable(a) && <InlineAction onClick={() => onAction({ kind: 'end', assignment: a })}>结束</InlineAction>,
               }))}
             asOf={asOf}
+            fold={fold}
           />
         )}
-        {(e.duties ?? []).length > 0 && (
+        {duties.length > 0 && (
           <SegmentList
             title="部门职务"
             empty=""
-            rows={(e.duties ?? []).map((d) => ({
+            rows={duties.map((d) => ({
               key: d.id,
               void: d.void,
               from: d.valid_from,
@@ -546,17 +576,18 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
                     {d.department.name}
                   </Link>
                   <Tag tone={d.mode === 'FORMAL' ? 'blue' : 'orange'}>{d.label}</Tag>
-                  {onAction && adjustable(d) && (
-                    <span className="order-last">
-                      <InlineAction onClick={() => onAction({ kind: 'duty_handover', duty: d })}>交接</InlineAction>
-                      <InlineAction onClick={() => onAction({ kind: 'duty_end', duty: d })}>结束</InlineAction>
-                    </span>
-                  )}
-                  <DutyBasis note={d.basis_note} className="order-last basis-full pl-3" />
                 </>
               ),
+              actions: onAction && adjustable(d) && (
+                <>
+                  <InlineAction onClick={() => onAction({ kind: 'duty_handover', duty: d })}>交接</InlineAction>
+                  <InlineAction onClick={() => onAction({ kind: 'duty_end', duty: d })}>结束</InlineAction>
+                </>
+              ),
+              extra: <DutyBasis note={d.basis_note} expandable />,
             }))}
             asOf={asOf}
+            fold={fold}
           />
         )}
         <SegmentList
@@ -570,15 +601,16 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
             label: (
               <>
                 <span className="font-mono">{n.work_no ?? '（无权查看）'}</span>
-                {n.revise_reason !== 'INITIAL' && <span className="text-fg-muted text-caption">{WORK_NO_REASON[n.revise_reason]}</span>}
+                {n.revise_reason !== 'INITIAL' && <span className="text-fg-secondary text-caption">{WORK_NO_REASON[n.revise_reason]}</span>}
               </>
             ),
           }))}
           asOf={asOf}
+          fold={fold}
         />
+        {(e.end_changes ?? []).length > 0 && <EndChanges changes={e.end_changes ?? []} />}
       </div>
-      {(e.end_changes ?? []).length > 0 && <EndChanges changes={e.end_changes ?? []} />}
-    </div>
+    </section>
   )
 }
 
@@ -591,55 +623,83 @@ const END_ACTION: Record<string, string> = {
   CANCEL: '撤销计划',
 }
 
-/** 任用结束日的逐次登记与调整：原结束日 → 新结束日，每次对应一张已确认的申请（PERS-06） */
+/** 任用结束日的逐次登记与调整：原结束日 → 新结束日，每次对应一张已确认的申请（PERS-06）；默认收起，点开看 */
 function EndChanges({ changes }: { changes: EngagementEndChange[] }) {
+  const [open, setOpen] = useState(false)
   const show = (d?: string | null) => d ?? '长期'
   return (
-    <div className="border-line-subtle grid gap-1 border-t px-3 py-2">
-      <div className="text-fg-muted text-caption font-medium">结束日调整记录</div>
-      {changes.map((c) => (
-        <div key={`${c.change_id}-${c.action}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-          <span className="text-fg-strong">{END_ACTION[c.action]}</span>
-          <span className="text-fg-secondary tabular-nums">
-            {c.action === 'REGISTER' ? show(c.to_valid_to) : `${show(c.from_valid_to)} → ${c.action === 'CANCEL' ? '从未生效' : show(c.to_valid_to)}`}
-          </span>
-          <ChangeLink id={c.change_id} className="text-caption" />
-          {c.confirmed_at && <span className="text-fg-muted text-caption">{c.confirmed_at.slice(0, 16).replace('T', ' ')} 确认</span>}
-          {(c.handled ?? []).length > 0 && <span className="text-fg-muted w-full text-caption">随之：{(c.handled ?? []).join('；')}</span>}
-        </div>
-      ))}
+    <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:gap-3">
+      <div className="text-fg-secondary text-xs">结束日调整</div>
+      <div className="grid gap-1">
+        <span>
+          <InlineAction className="-ml-2" onClick={() => setOpen(!open)}>
+            {open ? '收起调整记录' : `查看 ${changes.length} 次登记与调整`}
+          </InlineAction>
+        </span>
+        {open &&
+          changes.map((c) => (
+            <div key={`${c.change_id}-${c.action}`} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+              <span className="text-fg-strong">{END_ACTION[c.action]}</span>
+              <span className="text-fg-secondary tabular-nums">
+                {c.action === 'REGISTER' ? show(c.to_valid_to) : `${show(c.from_valid_to)} → ${c.action === 'CANCEL' ? '从未生效' : show(c.to_valid_to)}`}
+              </span>
+              <ChangeLink id={c.change_id} className="text-caption" />
+              {c.confirmed_at && <span className="text-fg-secondary text-caption">{stamp(c.confirmed_at)} 确认</span>}
+              {(c.handled ?? []).length > 0 && <span className="text-fg-secondary w-full text-caption">随之：{(c.handled ?? []).join('；')}</span>}
+            </div>
+          ))}
+      </div>
     </div>
   )
 }
 
-function SegmentList({
-  title,
-  empty,
-  rows,
-  asOf,
-}: {
-  title: string
-  empty: string
-  rows: { key: number; void: boolean; from: string; to: string | null; label: React.ReactNode }[]
-  asOf: string
-}) {
+type Segment = {
+  key: number
+  void: boolean
+  from: string
+  to: string | null
+  label: React.ReactNode
+  actions?: React.ReactNode
+  extra?: React.ReactNode
+}
+
+/** 任用里的一类关系：左列名称，右列逐段写“开始 至 结束”；fold 时当前与计划的段先列，已结束、生效前已撤销的段收起
+ *  （有文字标识，不只靠变淡） */
+function SegmentList({ title, empty, rows, asOf, fold }: { title: string; empty: string; rows: Segment[]; asOf: string; fold: boolean }) {
+  const [showPast, setShowPast] = useState(false)
+  const past = (r: Segment) => fold && (r.void || (r.to !== null && r.to < asOf))
+  const hidden = rows.filter(past).length
+  const visible = rows.filter((r) => showPast || !past(r))
   return (
-    <div className="grid content-start gap-1">
-      <div className="text-fg-muted text-caption font-medium">{title}</div>
-      {rows.length === 0 ? (
-        <div className="text-fg-disabled text-xs">{empty}</div>
-      ) : (
-        rows.map((r) => {
+    <div className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:gap-3">
+      <div className="text-fg-secondary text-xs">{title}</div>
+      <div className="grid content-start gap-1.5">
+        {rows.length === 0 && <div className="text-fg-muted text-xs">{empty}</div>}
+        {rows.length > 0 && visible.length === 0 && <div className="text-fg-muted text-xs">查看日期当天及以后没有</div>}
+        {visible.map((r) => {
           const now = !r.void && covers(r.from, r.to, asOf)
           return (
-            <div key={r.key} className={cn('flex flex-wrap items-center gap-1.5 text-xs', r.void && 'line-through opacity-60', !now && 'text-fg-secondary')}>
-              <span className={cn('size-1.5 shrink-0 rounded-full', now ? 'bg-brand' : 'bg-line-strong')} aria-hidden />
-              {r.label}
-              <span className="text-fg-muted tabular-nums">{r.void ? '生效前已撤销' : period(r.from, r.to)}</span>
+            <div key={r.key} className="grid gap-0.5">
+              <div className={cn('flex flex-wrap items-center gap-1.5 text-xs', !now && 'text-fg-secondary')}>
+                <span className={cn('size-1.5 shrink-0 rounded-full', now ? 'bg-brand' : 'bg-line-strong')} aria-hidden />
+                {r.label}
+                <span className="text-fg-secondary tabular-nums">
+                  {r.void ? `${r.from} 起 · 生效前已撤销` : `${period(r.from, r.to)}${!now && r.from > asOf ? ' · 计划' : ''}`}
+                </span>
+                {r.actions}
+              </div>
+              {r.extra && <div className="pl-3">{r.extra}</div>}
             </div>
           )
-        })
-      )}
+        })}
+        {hidden > 0 && (
+          <span>
+            <InlineAction className="-ml-2" onClick={() => setShowPast(!showPast)}>
+              {showPast ? '收起已结束的' : `显示已结束或已撤销的 ${hidden} 段`}
+            </InlineAction>
+          </span>
+        )}
+      </div>
     </div>
   )
 }
