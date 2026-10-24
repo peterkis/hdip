@@ -1,16 +1,5 @@
-// 服务单元详情：页头属性 + 分区（演变关系、分类、外部编码、版本时间线）。
+// 服务单元详情：页头属性 + 分区（演变关系、分类、外部编码、版本与事件）。
 // 服务单元 = 部门 × 院区 × 运营主体 × 期间；拆分、合并产生新身份，前身与后继在“演变关系”里互相可达。
-import {
-  Building03Icon,
-  Calendar03Icon,
-  CallIcon,
-  GridViewIcon,
-  Hospital01Icon,
-  ListViewIcon,
-  Loading03Icon,
-  TextFontIcon,
-  UserGroupIcon,
-} from '@hugeicons/core-free-icons'
 import { useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useGetServiceUnit } from '@/api/generated/master/master'
@@ -28,18 +17,19 @@ import {
   UnitStatusDialog,
 } from '@/components/forms/unit-forms'
 import { Callout } from '@/components/kit/callout'
-import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
+import { ChangeLink, InlineAction, InlineLink, Section } from '@/components/kit/section'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
-import { Missing } from '@/components/kit/missing'
+import { DetailFallback } from '@/components/kit/missing'
+import { MoreActions } from '@/components/kit/more-actions'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
-import { formatValue, stamp, UNIT_STATUS, type UnitStatus } from '@/lib/format'
-import { DEPARTMENT_LIFECYCLE_TONE, UNIT_STATUS_TONE } from '@/lib/tones'
+import { formatValue, period, stamp, UNIT_STATUS, versionNote, type UnitStatus } from '@/lib/format'
+import { UNIT_STATUS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -56,14 +46,19 @@ const UNIT_FIELDS: (keyof ServiceUnitVersionOut)[] = [
 type UnitDialog = 'revise' | 'rebind' | 'department' | 'status' | 'retire' | 'classify' | 'split' | 'merge'
 
 export function ServiceUnitDetailPage() {
+  usePageFrame('document')
   const id = Number(useParams().id)
   const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
-  const { data, isError } = useGetServiceUnit(id, { as_of: asOf })
+  const query = useGetServiceUnit(id, { as_of: asOf })
+  const { data } = query
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
   const [closing, setClosing] = useState<DepartmentClassificationOut | null>(null)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return isError || !Number.isInteger(id) ? <Missing what="服务单元" back={{ to: '/service-units', label: '返回服务单元列表' }} /> : null
+  if (!data)
+    return (
+      <DetailFallback what="服务单元" back={{ to: '/service-units', label: '返回服务单元列表' }} query={query} invalid={!Number.isInteger(id)} />
+    )
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
@@ -76,27 +71,28 @@ export function ServiceUnitDetailPage() {
   const statusKey = gone ? 'RETIRED' : shown.status
   const canEdit = isMaintainer && !retired
 
+  // 统一规范 SC-07：名称 / 代码 / 版本 → 关键关系（类型、状态、所属部门、院区、运营主体、业务期间）→ 次要属性 →
+  // 演变关系 → 分类 → 外部编码 → 版本与事件。“修订”是页头主动作；拆分、合并是低频动作，收进“更多”；
+  // 暂停 / 恢复、更换部门、重新绑定院区留在对应属性旁；永久退出放在版本与事件一节，不与修订并排。
+  // 属性按查看日期那一版显示；所有动作都作用在最新一版上
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={GridViewIcon}
         title={shown.name}
         description={
-          onDay
-            ? `单元代码 ${data.code} · ${asOf} 有效的是第 ${onDay.version_no} 版`
-            : gone
-              ? `单元代码 ${data.code} · 已于 ${data.retired_after} 后永久退出，下面显示最后一版`
-              : `单元代码 ${data.code} · ${asOf} 尚未生效，自 ${data.versions.at(-1)!.valid_from} 起`
+          <>
+            单元代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
+          </>
         }
         actions={
           canEdit && (
             <>
-              <Button variant="outline" onClick={() => setDialog('split')}>
-                拆分
-              </Button>
-              <Button variant="outline" onClick={() => setDialog('merge')}>
-                合并
-              </Button>
+              <MoreActions
+                items={[
+                  { label: '拆分为新单元…', onClick: () => setDialog('split') },
+                  { label: '与其他单元合并…', onClick: () => setDialog('merge') },
+                ]}
+              />
               <Button onClick={() => setDialog('revise')}>修订</Button>
             </>
           )
@@ -105,11 +101,9 @@ export function ServiceUnitDetailPage() {
 
       <PropertyList
         items={[
-          { label: '单元类型', icon: ListViewIcon, value: <Tag>{typeName}</Tag> },
-          { label: '拼音码', icon: TextFontIcon, value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
+          { label: '单元类型', value: typeName },
           {
             label: '状态',
-            icon: Loading03Icon,
             value: (
               <>
                 <Tag tone={UNIT_STATUS_TONE[statusKey]}>{gone ? '已退出' : UNIT_STATUS[shown.status as UnitStatus]}</Tag>
@@ -119,14 +113,13 @@ export function ServiceUnitDetailPage() {
           },
           {
             label: '所属部门',
-            icon: UserGroupIcon,
             value: (
               <>
                 <Link className="hover:underline" to={`/departments/${shown.department_id}`}>
                   {shown.department_name}
                 </Link>
                 {shown.department_lifecycle !== 'ACTIVE' && (
-                  <Tag tone={DEPARTMENT_LIFECYCLE_TONE[shown.department_lifecycle]} className="ml-2">
+                  <Tag tone="orange" className="ml-2">
                     部门非正式履职
                   </Tag>
                 )}
@@ -136,7 +129,6 @@ export function ServiceUnitDetailPage() {
           },
           {
             label: '所属院区',
-            icon: Building03Icon,
             value: (
               <>
                 <Link className="hover:underline" to={`/campuses/${shown.campus_id}`}>
@@ -147,49 +139,71 @@ export function ServiceUnitDetailPage() {
             ),
           },
           {
-            label: '所属运营主体',
-            icon: Hospital01Icon,
+            label: '运营主体',
             value: (
               <Link className="hover:underline" to={`/institutions/${shown.institution_id}`}>
                 {shown.institution_name}
               </Link>
             ),
           },
-          { label: '期间', icon: Calendar03Icon, value: `${shown.valid_from} → ${shown.valid_to ?? '长期'}` },
-          { label: '电话', icon: CallIcon, value: shown.phone },
-          { label: '范围说明', icon: TextFontIcon, value: shown.scope_note },
+          {
+            label: '业务期间',
+            value: (
+              <>
+                {period(shown.valid_from, shown.valid_to)}
+                {shown.valid_to && shown.valid_to >= shown.valid_from && <span className="text-fg-secondary text-caption ml-2">结束日当天仍有效</span>}
+              </>
+            ),
+          },
         ]}
       />
+      <div className="border-line-subtle mt-3 border-t pt-3">
+        <PropertyList
+          items={[
+            { label: '电话', value: shown.phone },
+            { label: '拼音码', value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
+            { label: '范围说明', value: shown.scope_note },
+          ]}
+        />
+      </div>
 
       <div className="mt-8 grid gap-8">
         {retired && (
           <Callout tone="warning" title={`最后有效日 ${data.retired_after}`}>
-            该单元已永久退出（最后有效日当天仍有效）；代码 {data.code} 永久绑定，不会被复用。
+            该单元已永久退出（最后有效日当天仍有效），之后不再有新版本；代码 {data.code} 永久绑定，不会被复用。
             {data.successors.length > 0 && ' 后继单元见下方“演变关系”。'}
           </Callout>
         )}
 
         <Section title="演变关系">
-          {data.predecessors.length > 0 ? (
-            <LineageFlow rows={data.predecessors} side="predecessor" self={{ name: latest.name, code: data.code }} />
+          {data.predecessors.length === 0 && data.successors.length === 0 ? (
+            <p className="text-fg-secondary text-xs">
+              本单元不是由拆分或合并产生的，也没有拆分或合并成其他单元。
+              <br />
+              拆分、合并的后继是新身份、新代码，不继承前身的版本历史，也不自动迁移外部编码等引用。
+            </p>
           ) : (
-            <p className="text-fg-disabled text-xs">前身：不是由拆分或合并产生的</p>
+            <>
+              {data.predecessors.length > 0 && (
+                <LineageFlow rows={data.predecessors} side="predecessor" self={{ name: latest.name, code: data.code }} />
+              )}
+              {data.successors.length > 0 && (
+                <LineageFlow rows={data.successors} side="successor" self={{ name: latest.name, code: data.code }} />
+              )}
+              <p className="text-fg-secondary text-caption">
+                {data.predecessors.length === 0 && '本单元不是由拆分或合并产生的。'}
+                {data.successors.length === 0 && '本单元没有拆分或合并成其他单元。'}
+                拆分、合并只填一个生效日：前身最后有效日为其前一日，后继自生效日起。后继是新身份、新代码，不继承前身的版本历史，也不自动迁移引用（如外部编码）。
+              </p>
+            </>
           )}
-          {data.successors.length > 0 ? (
-            <LineageFlow rows={data.successors} side="successor" self={{ name: latest.name, code: data.code }} />
-          ) : (
-            <p className="text-fg-disabled text-xs">后继：没有拆分或合并成其他单元</p>
-          )}
-          <p className="text-fg-muted text-caption">
-            拆分、合并只填一个生效日：前身最后有效日为其前一日，后继自生效日起。后继是新身份、新代码，不继承前身的版本历史，也不自动迁移引用（如外部代码）。
-          </p>
         </Section>
 
         <Section title="分类" action={canEdit ? <InlineAction onClick={() => setDialog('classify')}>设置分类</InlineAction> : null}>
           {data.classifications.length === 0 ? (
-            <p className="text-fg-disabled text-xs">没有分类。所属部门的分类不会自动下发给单元。</p>
+            <p className="text-fg-secondary text-xs">没有分类。所属部门的分类不会自动下发给单元。</p>
           ) : (
-            <DbTable columns={[{ label: '分类方案' }, { label: '分类' }, { label: '期间', icon: Calendar03Icon }, { label: '来源申请' }, { label: '' }]}>
+            <DbTable columns={[{ label: '分类方案' }, { label: '分类' }, { label: '分类期间' }, { label: '来源申请' }, { label: '' }]}>
               {data.classifications.map((c) => {
                 const current = c.valid_from <= asOf && (c.valid_to === null || c.valid_to >= asOf)
                 return (
@@ -200,15 +214,13 @@ export function ServiceUnitDetailPage() {
                         {c.code} {c.name}
                       </Tag>
                     </DbCell>
-                    <DbCell className="whitespace-nowrap">
-                      {c.valid_from} → {c.valid_to ?? '长期'}
-                    </DbCell>
+                    <DbCell className="whitespace-nowrap">{period(c.valid_from, c.valid_to)}</DbCell>
                     <DbCell>
                       <ChangeLink id={c.change_id} />
                     </DbCell>
                     <DbCell className="text-right">
                       {canEdit && c.valid_to === null && (
-                        <Button size="xs" variant="ghost" onClick={() => setClosing(c)}>
+                        <Button size="sm" variant="ghost" onClick={() => setClosing(c)}>
                           结束
                         </Button>
                       )}
@@ -220,18 +232,20 @@ export function ServiceUnitDetailPage() {
           )}
         </Section>
 
-        <Section
-          title="外部编码"
-          action={
-            <Link to="/standards/code-mapping" className="text-fg-muted hover:text-fg text-caption hover:underline">
-              到编码映射台账维护
-            </Link>
-          }
-        >
+        <Section title="外部编码" action={<InlineLink to="/standards/code-mapping">到编码映射台账维护</InlineLink>}>
           <ExternalCodeLinks rows={data.external_codes} asOf={asOf} empty="没有外部代码的解释指向本单元" />
         </Section>
 
-        <Section title="版本时间线">
+        <Section
+          title="版本与事件"
+          action={
+            canEdit ? (
+              <InlineAction danger onClick={() => setDialog('retire')}>
+                永久退出…
+              </InlineAction>
+            ) : null
+          }
+        >
           <VersionTimeline
             versions={data.versions}
             fields={UNIT_FIELDS}
@@ -241,13 +255,8 @@ export function ServiceUnitDetailPage() {
               detail: (v) => `${formatValue('unit_type', data.unit_type, optionLabels)} · ${v.department_name} · ${v.campus_name}`,
             }}
           />
-          <p className="text-fg-muted text-caption">
-            新建于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。
-            {canEdit && (
-              <button type="button" className="text-danger-text ml-2 hover:underline" onClick={() => setDialog('retire')}>
-                永久退出…
-              </button>
-            )}
+          <p className="text-fg-secondary text-caption">
+            登记于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。
           </p>
         </Section>
       </div>
@@ -261,13 +270,11 @@ export function ServiceUnitDetailPage() {
       {dialog === 'merge' && <UnitMergeDialog {...dialogProps} unitType={data.unit_type} />}
       {dialog === 'classify' && <ClassifyDialog open onOpenChange={close} owner="unit" code={data.code} name={latest.name} />}
       {closing && <ClassificationCloseDialog open onOpenChange={(o) => !o && setClosing(null)} owner="unit" classification={closing} />}
-    </div>
+    </>
   )
 }
 
 // ------------------------------------------------------------------ 小件
-
-
 
 const LINEAGE_LABEL = { SPLIT: '拆分', MERGE: '合并' } as const
 

@@ -43,7 +43,7 @@ export function UnitsTable({ rows, hide = [] }: { rows: ServiceUnitRow[]; hide?:
                 {r.version.department_name}
               </Link>
               {r.version.department_lifecycle !== 'ACTIVE' && (
-                <Tag tone="red" className="ml-1.5">
+                <Tag tone="orange" className="ml-1.5">
                   部门非正式履职
                 </Tag>
               )}

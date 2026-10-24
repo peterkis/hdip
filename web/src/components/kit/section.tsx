@@ -19,21 +19,33 @@ export function Section({ title, action, children }: { title: ReactNode; action?
   )
 }
 
-/** 属性值旁、区块标题旁的轻量操作 */
-export function InlineAction({ onClick, children }: { onClick: () => void; children: ReactNode }) {
+const INLINE =
+  'hover:bg-surface-hover focus-visible:ring-ring/30 -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none focus-visible:ring-2'
+
+/** 属性值旁、区块标题旁的轻量操作；danger 用于低频且后果重的动作（如永久退出），仍只打开原表单 */
+export function InlineAction({ onClick, children, danger }: { onClick: () => void; children: ReactNode; danger?: boolean }) {
   const spec = useFrame() !== 'legacy'
   return (
     <button
       type="button"
       className={cn(
         spec
-          ? 'text-fg-secondary hover:bg-surface-hover hover:text-fg focus-visible:ring-ring/30 -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none focus-visible:ring-2'
-          : 'text-fg-muted hover:text-fg ml-2 text-caption hover:underline',
+          ? cn(INLINE, danger ? 'text-danger-text' : 'text-fg-secondary hover:text-fg')
+          : cn('ml-2 text-caption hover:underline', danger ? 'text-danger-text' : 'text-fg-muted hover:text-fg'),
       )}
       onClick={onClick}
     >
       {children}
     </button>
+  )
+}
+
+/** 区块标题旁的轻量跳转（到另一个页面维护），外观与 InlineAction 一致 */
+export function InlineLink({ to, children }: { to: string; children: ReactNode }) {
+  return (
+    <Link to={to} className={cn(INLINE, 'text-fg-secondary hover:text-fg')}>
+      {children}
+    </Link>
   )
 }
 
