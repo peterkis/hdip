@@ -3,7 +3,7 @@
 版本：1.0 · 编制日期：2026-10-24  
 适用项目：peterkis/hdip · 核对基线：8c400c49757e2443ceeaa7e1358ba290c786e7c6  
 状态：本版为待实施的目标规范；基线中已存在的能力与待调整项见 [迁移矩阵](ui-migration-matrix.md)。  
-接入状态：2026-10-24 在分支 `ui/spec-v1`（工作树 `.worktrees/ui-spec-v1`）完成 **U0**——本文件成为唯一规范入口，补充了布局、文字与行高的语义令牌和页面外框模式（可选接入，尚无页面使用）；**业务页面尚未迁移**。实际基线比 8c400c4 新，增量与本规范的关系见 [迁移矩阵第 11 节](ui-migration-matrix.md#11-u0-接入时的实际基线与增量)，阶段记录见 [实施文档第 13 节](ui-implementation-plan.md#13-阶段记录)。旧版（Notion 风格）存档于 [archive/ui-tokens-notion-2026-10-24.md](archive/ui-tokens-notion-2026-10-24.md)，不再有效。  
+接入状态：2026-10-24 在分支 `ui/spec-v1` 完成 **U0**（本文件成为唯一规范入口，补充布局、文字、行高的语义令牌与页面外框模式）与 **U1**（变更申请列表定稿：本规范版式 + 服务端对象摘要、待我确认 / 我的草稿、相对处理时间，见下文各“项目决定”），同日对比后**合并回 main**；其他页面按 U2 → U3 逐批迁移。实际基线比 8c400c4 新，增量见 [迁移矩阵第 11 节](ui-migration-matrix.md#11-u0-接入时的实际基线与增量)，阶段记录见 [实施文档第 13 节](ui-implementation-plan.md#13-阶段记录)。旧版（Notion 风格）存档于 [archive/ui-tokens-notion-2026-10-24.md](archive/ui-tokens-notion-2026-10-24.md)，不再有效。  
 配套：[逐场景规范](ui-scenarios.md) · [实施与验收](ui-implementation-plan.md) · [需求追溯](ui-requirements-traceability.md) · [目标令牌清单](ui-target-tokens.json)
 
 ## 0. 使用方式与适用边界

@@ -322,7 +322,7 @@ function Overview() {
               value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法）',
             },
             { label: '组件底层', icon: Layers01Icon, value: 'shadcn/ui Base UI（base-mira）+ hugeicons' },
-            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0：规范接入，业务页面尚未迁移）' },
+            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0 规范接入、U1 变更申请列表；其他页面按 U2 → U3 迁移）' },
           ]}
         />
       </div>
