@@ -1,0 +1,186 @@
+{
+  "schema_version": "1.0",
+  "document_version": "1.0",
+  "status": "proposed_not_applied",
+  "authoritative_document": "ui-tokens.md",
+  "purpose": "Implementation checklist; do not load as runtime configuration",
+  "source_commit": "8c400c49757e2443ceeaa7e1358ba290c786e7c6",
+  "reference_commit": "904205c626918ee96054eb35495c394a60c0c601",
+  "layout": {
+    "unit": "CSS px",
+    "sidebar_width": 240,
+    "topbar_desktop_height": 44,
+    "gutter": 24,
+    "gutter_below_768": 16,
+    "page_top_gap": 24,
+    "page_top_gap_narrow": 20,
+    "page_bottom_gap": 48,
+    "frame_width_is": "net_content_width_excluding_gutter",
+    "work_max": 1440,
+    "document_max": 900,
+    "canvas_max": null,
+    "frame_formula": "min(W - 2*G, M), centered inside the post-sidebar region",
+    "review_nav_width": 200,
+    "review_nav_gap": 24,
+    "review_nav_min_frame": 1040
+  },
+  "typography": {
+    "font_strategy": "existing_system_stack_no_network_font",
+    "work_title": {
+      "size": 24,
+      "line_height": 32,
+      "weight": 600,
+      "letter_spacing": 0
+    },
+    "document_title": {
+      "size": 32,
+      "line_height": 40,
+      "weight": [
+        600,
+        700
+      ],
+      "letter_spacing": 0
+    },
+    "section": {
+      "size": 16,
+      "line_height": 24,
+      "weight": 600
+    },
+    "ui": {
+      "size": 14,
+      "line_height": 20,
+      "weight": 400
+    },
+    "row_title": {
+      "size": 14,
+      "line_height": 20,
+      "weight": [
+        500,
+        600
+      ]
+    },
+    "caption": {
+      "size": 12,
+      "line_height": 16,
+      "weight": 400
+    },
+    "long_prose": {
+      "size": 16,
+      "line_height": 24,
+      "weight": 400
+    },
+    "micro_noncritical_graph_only": {
+      "size": 11,
+      "line_height": 14,
+      "weight": 500
+    },
+    "existing_text_xs_alias": "14px; do not assume Tailwind default"
+  },
+  "rows": {
+    "default_min_height": 44,
+    "explicit_compact_min_height": 36,
+    "work_min_height": 64,
+    "header_height": 36,
+    "cell_padding_x": 12,
+    "work_padding_y": 12,
+    "work_internal_gap": 4,
+    "row_gap": 0,
+    "default_separator": "horizontal",
+    "vertical_separator": "explicit_comparison_or_matrix_variant"
+  },
+  "controls": {
+    "default_height": 32,
+    "inline_height": 28,
+    "touch_primary_height": 44,
+    "standalone_pointer_target_min": [
+      24,
+      24
+    ],
+    "icon_visual_size": 16
+  },
+  "radius": {
+    "tag": 4,
+    "control": 6,
+    "container": 8,
+    "popover": 12
+  },
+  "motion_ms": {
+    "hover": 100,
+    "normal": 200,
+    "reduced_motion": "remove translation, breathing, flow and counting; preserve textual state"
+  },
+  "business_status_policy": {
+    "planned": "yellow",
+    "stopped": "red_low_emphasis_tag",
+    "ended": "gray",
+    "source": "lib/tones.ts",
+    "chart_palette": "separate role; keep legend and mapping",
+    "code_pending_tag": "CODE_STATUS_TONE.pending = yellow",
+    "code_pending_chart": "CODE_BREAKDOWN_TONE.pending = orange",
+    "code_pending_label": "待裁决"
+  },
+  "review_action": {
+    "primary_scope": "one per active task context; modal is its own context",
+    "submit_confirm_location": "page_header_only",
+    "review_end_action": "anchor_to_page_header"
+  },
+  "graph_labels": {
+    "anchor": "midpoint of final segment entering target",
+    "same_target_stack_offset": 22,
+    "implementation": "existing LabeledStepEdge stack/stackOf"
+  },
+  "button_states": {
+    "light": {
+      "foreground": "#ffffff",
+      "blue": [
+        "#0075de",
+        "#005bab",
+        "#00396b"
+      ],
+      "purple": [
+        "#7237ae",
+        "#562983",
+        "#391c57"
+      ],
+      "teal": [
+        "#0a7b77",
+        "#126764",
+        "#0a4d4b"
+      ]
+    },
+    "dark": {
+      "foreground": "#191918",
+      "blue": [
+        "#93cdfe",
+        "#e6f3fe",
+        "#62aef0"
+      ],
+      "purple": [
+        "#d6b6f6",
+        "#eadbfa",
+        "#ad6ded"
+      ],
+      "teal": [
+        "#83cbc9",
+        "#bde6e4",
+        "#2a9d99"
+      ]
+    },
+    "state_order": [
+      "default",
+      "hover",
+      "pressed"
+    ],
+    "contrast_target": 4.5
+  },
+  "contract_guards": [
+    "configuration_dictionary_direct_save_exception",
+    "current_summary_fields_only_in_U1",
+    "no_per_row_detail_N_plus_1",
+    "no_inferred_action_permissions",
+    "closed_date_interval_no_timezone_conversion",
+    "existing_group_review_gate",
+    "no_individual_item_removal",
+    "no_new_HR_qualification_or_clinical_authorization_scope"
+  ]
+}

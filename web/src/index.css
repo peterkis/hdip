@@ -28,6 +28,11 @@
   --text-lg--line-height: var(--hd-type-heading-leading);
   --text-headline: var(--hd-type-headline-size);
   --text-headline--line-height: var(--hd-type-headline-leading);
+  /* 统一规范 v1.0 新增的文字角色（U0）：字号类只管大小与行高，字重另用 font-semibold */
+  --text-work-title: var(--hd-type-work-title-size);
+  --text-work-title--line-height: var(--hd-type-work-title-leading);
+  --text-section: var(--hd-type-section-size);
+  --text-section--line-height: var(--hd-type-section-leading);
   --text-xl: var(--hd-type-title-size);
   --text-xl--line-height: var(--hd-type-title-leading);
 

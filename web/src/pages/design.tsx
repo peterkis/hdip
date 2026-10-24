@@ -62,6 +62,7 @@ import { cn } from '@/lib/utils'
 
 const SECTIONS: { id: string; label: string; icon: AppIcon }[] = [
   { id: 'overview', label: '概览', icon: BookOpen01Icon },
+  { id: 'v1', label: '统一规范 v1.0 落地', icon: CheckmarkCircle02Icon },
   { id: 'color', label: '语义颜色', icon: ColorsIcon },
   { id: 'palette', label: '原始色板', icon: DropletIcon },
   { id: 'type', label: '文字', icon: TextFontIcon },
@@ -88,6 +89,7 @@ export function DesignPage() {
         <main id="design-scroll" className="flex-1 overflow-y-auto">
           <article className="mx-auto w-full max-w-(--hd-page-max-width) px-(--hd-page-padding-x-narrow) pt-12 pb-32">
             <Overview />
+            <SpecV1Section />
             <ColorSection />
             <PaletteSection />
             <TypeSection />
@@ -296,12 +298,31 @@ function Overview() {
       <div className="mt-4">
         <PropertyList
           items={[
-            { label: '风格', icon: PaintBoardIcon, value: 'Notion：安静的暖灰中性色、内容优先、用透明度叠加表达层次' },
+            {
+              label: '风格',
+              icon: PaintBoardIcon,
+              value: '统一规范 v1.0：暖灰侧栏 + 白色工作面、共享左边线、连续行、名称先于代码；色彩只表达业务语义',
+            },
             { label: '令牌文件', icon: File01Icon, value: <Code>web/src/styles/tokens.css</Code> },
-            { label: '规范说明', icon: BookOpen01Icon, value: <Code>docs/design/ui-tokens.md</Code> },
-            { label: '依据', icon: InformationCircleIcon, value: <Code>docs/design/notion-design-md.md</Code> },
+            {
+              label: '规范说明',
+              icon: BookOpen01Icon,
+              value: (
+                <span className="grid gap-0.5">
+                  <Code>docs/design/ui-tokens.md</Code>
+                  <span className="text-fg-muted text-caption">
+                    唯一规范入口；场景 ui-scenarios.md，实施 ui-implementation-plan.md，迁移 ui-migration-matrix.md
+                  </span>
+                </span>
+              ),
+            },
+            {
+              label: '参考材料',
+              icon: InformationCircleIcon,
+              value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法）',
+            },
             { label: '组件底层', icon: Layers01Icon, value: 'shadcn/ui Base UI（base-mira）+ hugeicons' },
-            { label: '更新', icon: Calendar03Icon, value: '2026-10-14' },
+            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0：规范接入，业务页面尚未迁移）' },
           ]}
         />
       </div>
@@ -312,6 +333,109 @@ function Overview() {
         </Callout>
       </div>
     </section>
+  )
+}
+
+// ================================================================== 统一规范 v1.0 落地状态（U0）
+type Stage = 'done' | 'ready' | 'todo'
+const STAGE: Record<Stage, { label: string; tone: Tone }> = {
+  done: { label: '已实施', tone: 'green' },
+  ready: { label: '令牌已就绪', tone: 'blue' },
+  todo: { label: '待实施', tone: 'gray' },
+}
+
+/** 规范里的每条目标在源码中走到了哪一步：只写真实状态，未迁移的页面不算完成 */
+const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sample?: ReactNode }[] = [
+  {
+    rule: 'R-LAY 页面外框',
+    target: 'work 净宽 ≤1440 / document ≤900 / canvas 不设上限；共享 gutter 24（<768 为 16）',
+    stage: 'ready',
+    note: '令牌与 usePageFrame 已就绪；尚无页面接入，未接入的页面保持旧外框（正文 64px、顶栏 12px）',
+  },
+  {
+    rule: 'R-TYP 工作页标题',
+    target: '24/32 · 600 · 字距 0',
+    stage: 'ready',
+    note: 'text-work-title；页面迁移时由 PageHeader 使用',
+    sample: <span className="text-fg-strong text-work-title font-semibold">变更申请</span>,
+  },
+  {
+    rule: 'R-TYP 章节标题',
+    target: '16/24 · 600',
+    stage: 'ready',
+    note: 'text-section；逐步替代过大的区块标题',
+    sample: <span className="text-fg-strong text-section font-semibold">所属关系</span>,
+  },
+  {
+    rule: 'R-TYP 正文与辅助',
+    target: '正文 14/20，辅助 12/16；text-xs 映射为 14px 不变',
+    stage: 'done',
+    note: '沿用现有桥接',
+  },
+  {
+    rule: 'R-ROW 行高',
+    target: '标准行 ≥44 / 显式紧凑 ≥36 / 双行工作列表 ≥64；表头 36；单元格内边距 12',
+    stage: 'ready',
+    note: '现有 DbCell 为 36px 且带竖线；U2 起按用途改为显式模式',
+    sample: (
+      <span className="grid w-56 gap-1">
+        <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-row-height-compact) items-center border px-(--hd-cell-padding-x) text-caption">紧凑 36</span>
+        <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-row-height) items-center border px-(--hd-cell-padding-x) text-caption">标准 44</span>
+        <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-work-row-min-height) items-center border px-(--hd-cell-padding-x) text-caption">双行工作列表 64</span>
+      </span>
+    ),
+  },
+  {
+    rule: 'R-ROW 表格边线',
+    target: '默认只用横线；矩阵、逐列对照显式启用竖线',
+    stage: 'todo',
+    note: 'U2：DbTable 增加用途模式；本页“表格”一节仍是旧样式',
+  },
+  {
+    rule: 'R-COL 主按钮状态色',
+    target: 'default / hover / pressed 用明确色阶；深色主题浅底深字；18 组 ≥4.5:1',
+    stage: 'todo',
+    note: '现有主按钮 hover 用透明度，深色白字约 4.03:1；U2 修',
+  },
+  {
+    rule: 'C-08 控件尺寸',
+    target: '常规 32 / 行内 28 / 触控主要 44',
+    stage: 'todo',
+    note: '现有 Button 默认 28（h-7）；只改令牌不生效，U2 改组件',
+  },
+  {
+    rule: 'R-COL 业务状态色',
+    target: '计划浅黄、停用红、结束灰；状态 / 分类 / 图表三套分开',
+    stage: 'done',
+    note: '沿用 lib/tones.ts，本次不改',
+  },
+]
+
+function SpecV1Section() {
+  return (
+    <Section
+      id="v1"
+      title="统一规范 v1.0 落地状态"
+      description="docs/design/ui-tokens.md 的目标在源码中走到了哪一步。“令牌已就绪”= 令牌与类已定义，页面迁移时才使用；页面按 U1 → U2 → U3 逐批迁移。"
+    >
+      <Rows head={['规则', '目标', '状态', '说明与样例']}>
+        {SPEC_ROWS.map((r) => (
+          <Row key={r.rule}>
+            <Cell className="text-fg-strong font-medium whitespace-nowrap">{r.rule}</Cell>
+            <Cell className="text-fg-secondary">{r.target}</Cell>
+            <Cell>
+              <Tag tone={STAGE[r.stage].tone}>{STAGE[r.stage].label}</Tag>
+            </Cell>
+            <Cell>
+              <span className="grid gap-1.5">
+                <span className="text-fg-muted text-caption">{r.note}</span>
+                {r.sample}
+              </span>
+            </Cell>
+          </Row>
+        ))}
+      </Rows>
+    </Section>
   )
 }
 

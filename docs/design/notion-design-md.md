@@ -1,3 +1,5 @@
+> **历史参考材料，非实施规范（2026-10-24 统一 UI 规范 v1.0 接入时加注）。** 本文件是 2026-05-28 从 notion.so 营销网站自动抽取的设计报告，原样保留供研究。其中的营销站字号（如 H1 64px）、campaign 色、外链字体安装说明、自动分类与评分**不约束 HDIP 应用页面**；可用的取值材料与不再执行的段落见 [`ui-migration-matrix.md`](ui-migration-matrix.md) 第 3 节。HDIP 现行唯一规范入口是 [`ui-tokens.md`](ui-tokens.md)。
+
 # Design Language: The AI workspace that works for you. | Notion
 
 > Extracted from `https://notion.so` on May 28, 2026

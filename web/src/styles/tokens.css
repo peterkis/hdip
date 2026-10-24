@@ -242,6 +242,15 @@
   --hd-type-title-size: var(--hd-size-600);     /* 页面标题 */
   --hd-type-title-leading: 2.5rem;
   --hd-type-title-tracking: -0.046875rem;
+  /* 统一规范 v1.0（docs/design/ui-tokens.md R-TYP，U0 新增，页面迁移后才消费）：
+     工作页标题 24/32·600（列表、台账、申请列表、总览）；页面内章节标题 16/24·600；中文字距 0 */
+  --hd-type-work-title-size: 1.5rem;
+  --hd-type-work-title-leading: 2rem;
+  --hd-type-work-title-weight: 600;
+  --hd-type-section-size: var(--hd-size-200);
+  --hd-type-section-leading: 1.5rem;
+  --hd-type-section-weight: 600;
+  --hd-type-cjk-tracking: 0;
 
   /* 圆角角色 */
   --hd-radius-tag: var(--hd-radius-200);
@@ -263,8 +272,27 @@
   --hd-topbar-height: 2.75rem;   /* 44 */
   --hd-page-max-width: 56.25rem; /* 900：Notion 正文宽 */
   --hd-page-wide-max-width: 75rem;
-  --hd-page-padding-x: var(--hd-space-96);
+  --hd-page-padding-x: var(--hd-space-96);        /* 旧令牌：正文容器实际没有消费（实际 64px），新外框用 --hd-layout-gutter */
   --hd-page-padding-x-narrow: var(--hd-space-24);
+  /* 统一规范 v1.0 页面外框（R-LAY，U0 新增，页面用 usePageFrame 显式接入；未接入的页面保持旧外框）：
+     共享水平 gutter 24（<768 为 16）；work / document 的最大宽度都指内容净宽（不含 gutter）；canvas 不设上限 */
+  --hd-layout-gutter: var(--hd-space-24);
+  --hd-layout-gutter-narrow: var(--hd-space-16);
+  --hd-page-work-max: 90rem;          /* 1440 */
+  --hd-page-document-max: 56.25rem;   /* 900 */
+  --hd-page-top-gap: var(--hd-space-24);
+  --hd-page-top-gap-narrow: var(--hd-space-20);
+  --hd-page-bottom-gap: var(--hd-space-48);
+  --hd-review-nav-width: 12.5rem;     /* 200：申请核对目录，净内容宽 ≥1040 时用 */
+  /* 行与密度（R-ROW）：标准行 ≥44、显式紧凑行 ≥36、双行工作列表 ≥64（12 + 20 + 4 + 16 + 12）；
+     表头 36；单元格水平内边距 12。都是最小高度，内容换行时自然增高 */
+  --hd-row-height: 2.75rem;
+  --hd-row-height-compact: 2.25rem;
+  --hd-row-header-height: 2.25rem;
+  --hd-work-row-min-height: 4rem;
+  --hd-work-row-padding-y: var(--hd-space-12);
+  --hd-cell-padding-x: var(--hd-space-12);
+  --hd-control-height-touch: 2.75rem; /* 44：触控主要控件 */
   /* 变更申请列表一行（U1）：对象图标 | 标题与辅助信息 | 业务日期 | 状态 | 最近一步 */
   --hd-change-row-columns: 1.75rem minmax(0, 1fr) 8rem 4.5rem 8.5rem;
 

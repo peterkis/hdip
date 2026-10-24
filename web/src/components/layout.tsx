@@ -12,7 +12,7 @@ import {
   UnfoldMoreIcon,
 } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useListChangeRequests } from '@/api/generated/changes/changes'
 import { useListUsers } from '@/api/generated/meta/meta'
@@ -42,8 +42,33 @@ function useNarrow() {
   )
 }
 
+/**
+ * 页面外框（统一规范 v1.0 R-LAY，U0）：work 工作列表 / 台账（净宽 ≤1440）、document 对象文档（净宽 ≤900）、
+ * canvas 总览与图（不设上限）。页面用 usePageFrame 显式声明；没声明的页面保持旧外框（legacy），迁移后再接入。
+ * 声明了外框的页面，顶栏的面包屑内容槽与正文共用同一条左边线（共享 gutter，窄屏 16）。
+ */
+export type PageFrame = 'legacy' | 'work' | 'document' | 'canvas'
+
+const FrameContext = createContext<(frame: PageFrame) => void>(() => {})
+
+export function usePageFrame(frame: PageFrame) {
+  const set = useContext(FrameContext)
+  // 布局 effect：在首次绘制前切换，避免旧外框闪一下
+  useLayoutEffect(() => {
+    set(frame)
+    return () => set('legacy')
+  }, [frame, set])
+}
+
+const FRAME_MAX: Record<Exclude<PageFrame, 'legacy'>, string> = {
+  work: 'max-w-(--hd-page-work-max)',
+  document: 'max-w-(--hd-page-document-max)',
+  canvas: '',
+}
+
 export function Layout() {
   const narrow = useNarrow()
+  const [frame, setFrame] = useState<PageFrame>('legacy')
   // 窄屏默认收起侧栏
   const [collapsed, setCollapsed] = useState(() => window.matchMedia(NARROW).matches)
   const { pathname } = useLocation()
@@ -73,11 +98,26 @@ export function Layout() {
             <Sidebar onCollapse={() => setCollapsed(true)} />
           ))}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar collapsed={collapsed || narrow} onExpand={() => setCollapsed(false)} />
+          <Topbar collapsed={collapsed || narrow} onExpand={() => setCollapsed(false)} frame={frame} />
           <main className="flex-1 overflow-y-auto">
-            <div className="mx-auto w-full max-w-(--hd-page-wide-max-width) px-(--hd-page-padding-x-narrow) pt-8 pb-24 lg:px-(--hd-space-64)">
-              <Outlet />
-            </div>
+            <FrameContext.Provider value={setFrame}>
+              {frame === 'legacy' ? (
+                <div className="mx-auto w-full max-w-(--hd-page-wide-max-width) px-(--hd-page-padding-x-narrow) pt-8 pb-24 lg:px-(--hd-space-64)">
+                  <Outlet />
+                </div>
+              ) : (
+                <div className="px-(--hd-layout-gutter-narrow) md:px-(--hd-layout-gutter)">
+                  <div
+                    className={cn(
+                      'mx-auto w-full pt-(--hd-page-top-gap-narrow) pb-(--hd-page-bottom-gap) md:pt-(--hd-page-top-gap)',
+                      FRAME_MAX[frame],
+                    )}
+                  >
+                    <Outlet />
+                  </div>
+                </div>
+              )}
+            </FrameContext.Provider>
           </main>
         </div>
       </div>
@@ -257,17 +297,49 @@ function UserSwitcher() {
 }
 
 // ================================================================== 顶栏
-function Topbar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => void }) {
+function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: () => void; frame: PageFrame }) {
   const { pathname } = useLocation()
   const crumb = useCurrentCrumb()
   const found = findNav(pathname)
+  const expand = collapsed && (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="展开侧栏"
+      // 有外框时，展开按钮属于外壳控制，不把面包屑往右推（R-LAY：内容槽共用左边线）
+      className={cn('text-fg-muted', frame !== 'legacy' && 'md:absolute md:left-2')}
+      onClick={onExpand}
+    >
+      <Icon icon={SidebarLeftIcon} />
+    </Button>
+  )
+  if (frame !== 'legacy') {
+    return (
+      <header className="relative flex h-(--hd-topbar-height) shrink-0 items-center px-(--hd-layout-gutter-narrow) text-xs md:px-(--hd-layout-gutter)">
+        <div className={cn('mx-auto flex w-full min-w-0 items-center gap-1', FRAME_MAX[frame])}>
+          {expand}
+          <Crumbs found={found} crumb={crumb} />
+          <div className="ml-auto shrink-0">
+            <AsOfPicker />
+          </div>
+        </div>
+      </header>
+    )
+  }
   return (
     <header className="flex h-(--hd-topbar-height) shrink-0 items-center gap-1 px-3 text-xs">
-      {collapsed && (
-        <Button variant="ghost" size="icon-sm" aria-label="展开侧栏" className="text-fg-muted" onClick={onExpand}>
-          <Icon icon={SidebarLeftIcon} />
-        </Button>
-      )}
+      {expand}
+      <Crumbs found={found} crumb={crumb} />
+      <div className="ml-auto shrink-0">
+        <AsOfPicker />
+      </div>
+    </header>
+  )
+}
+
+function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: ReactNode }) {
+  return (
+    <>
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
         {/* 窄屏只留当前页面与当前对象，分组名省略 */}
         {found && <span className="text-fg-muted hidden px-1.5 py-0.5 sm:inline">{found.group.label}</span>}
@@ -292,10 +364,7 @@ function Topbar({ collapsed, onExpand }: { collapsed: boolean; onExpand: () => v
           </>
         )}
       </nav>
-      <div className="ml-auto shrink-0">
-        <AsOfPicker />
-      </div>
-    </header>
+    </>
   )
 }
 
