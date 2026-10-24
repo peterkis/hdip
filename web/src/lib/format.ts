@@ -191,6 +191,17 @@ export function stamp(value: string | null | undefined): string {
   return value ? value.slice(0, 16).replace('T', ' ') : '—'
 }
 
+/** 处理时间的近似说法：今天 / 昨天 / 今年的月-日 / 完整日期，后接时:分（列表里用，详情仍用 stamp） */
+export function relStamp(value: string): string {
+  const day = value.slice(0, 10)
+  const time = value.slice(11, 16)
+  const now = today()
+  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString('sv-SE')
+  if (day === now) return `今天 ${time}`
+  if (day === yesterday) return `昨天 ${time}`
+  return `${day.slice(0, 4) === now.slice(0, 4) ? day.slice(5) : day} ${time}`
+}
+
 export function formatValue(field: string, value: unknown, labels: OptionLabels = {}): string {
   if (field === 'valid_to' && value === null) return '长期'
   if (field === 'parent' && value === null) return '无（一级部门）'

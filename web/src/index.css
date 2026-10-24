@@ -26,6 +26,8 @@
   --text-base--line-height: var(--hd-type-body-leading);
   --text-lg: var(--hd-type-heading-size);
   --text-lg--line-height: var(--hd-type-heading-leading);
+  --text-headline: var(--hd-type-headline-size);
+  --text-headline--line-height: var(--hd-type-headline-leading);
   --text-xl: var(--hd-type-title-size);
   --text-xl--line-height: var(--hd-type-title-leading);
 

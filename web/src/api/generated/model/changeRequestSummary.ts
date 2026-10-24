@@ -4,7 +4,9 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ChangeHeadline } from './changeHeadline';
 import type { ChangeRequestSummaryStatus } from './changeRequestSummaryStatus';
+import type { LastStep } from './lastStep';
 import type { UserRef } from './userRef';
 
 export interface ChangeRequestSummary {
@@ -18,4 +20,10 @@ export interface ChangeRequestSummary {
   confirmed_at: string | null;
   returned_at: string | null;
   cancelled_at: string | null;
+  item_count: number;
+  headline: ChangeHeadline;
+  last_step: LastStep;
+  return_reason: string | null;
+  waiting_for_me: boolean;
+  is_mine: boolean;
 }

@@ -45,6 +45,7 @@ from hdip_api.schemas.read import (
     CampusDetail,
     CampusRow,
     CampusVersionOut,
+    ChangeHeadline,
     ChangeRequestOut,
     ChangeRequestSummary,
     ClassificationCodeOut,
@@ -69,6 +70,7 @@ from hdip_api.schemas.read import (
     InstitutionRow,
     InstitutionVersionOut,
     ItemOutcome,
+    LastStep,
     LineageOut,
     NamespaceOut,
     OrgViewOut,
@@ -86,7 +88,7 @@ from hdip_api.schemas.read import (
 )
 from hdip_api.services import workflow
 from hdip_api.services.apply import dry_run, is_void
-from hdip_api.services.describe import describe_items, item_views
+from hdip_api.services.describe import describe_items, item_views, list_headlines
 from hdip_api.services.masking import hidden_fields, mask, sensitive_values, stored_values
 
 
@@ -1219,25 +1221,40 @@ def _labels(cr: ChangeRequest) -> list[str]:
     return [KIND_LABELS.get(i.get("kind"), i.get("kind", "")) for i in cr.items]
 
 
+def _last_step(cr: ChangeRequest, users: dict) -> LastStep:
+    for action, by, at in (
+        ("confirm", cr.confirmed_by, cr.confirmed_at),
+        ("return", cr.returned_by, cr.returned_at),
+        ("cancel", cr.cancelled_by, cr.cancelled_at),
+        ("submit", cr.submitted_by, cr.submitted_at),
+    ):
+        if at is not None and by is not None:
+            return LastStep(action=action, by=users[by], at=at)
+    return LastStep(action="create", by=users[cr.created_by], at=cr.created_at)
+
+
 def list_changes(s: Session, status: str | None, user: AppUser) -> list[ChangeRequestSummary]:
+    """列表每行：对象与变化、项数与构成、业务日期、最近一步（U1）。标题、说明、退回原因与详情同一规则
+    隐去敏感值（草稿里尚未确认的值也算）；名称一次查出，不逐张取详情。"""
     users = _users(s)
     q = select(ChangeRequest).order_by(ChangeRequest.id.desc())
     if status:
         q = q.where(ChangeRequest.status == status)
-    # 列表里的说明（及悬停提示）与详情同一规则隐去敏感值；草稿里尚未确认的值也算
+    crs = [cr for cr in s.scalars(q) if workflow.visible(cr, user)]
+    heads = list_headlines(s, [cr.items for cr in crs])
     hidden = hidden_fields(user)
     stored = stored_values(s, hidden) if hidden else set()
 
-    def note(cr: ChangeRequest) -> str | None:
-        if not hidden or not cr.note:
-            return cr.note
-        return mask(cr.note, hidden, stored | sensitive_values([cr.items, cr.results], hidden))
+    def safe(cr: ChangeRequest, value):
+        if not hidden:
+            return value
+        return mask(value, hidden, stored | sensitive_values([cr.items, cr.results], hidden))
 
     return [
         ChangeRequestSummary(
             id=cr.id,
             status=cr.status,
-            note=note(cr),
+            note=safe(cr, cr.note),
             item_labels=_labels(cr),
             created_by=users[cr.created_by],
             created_at=cr.created_at,
@@ -1245,9 +1262,15 @@ def list_changes(s: Session, status: str | None, user: AppUser) -> list[ChangeRe
             confirmed_at=cr.confirmed_at,
             returned_at=cr.returned_at,
             cancelled_at=cr.cancelled_at,
+            item_count=len(cr.items),
+            headline=ChangeHeadline.model_validate(safe(cr, head)),
+            last_step=_last_step(cr, users),
+            return_reason=safe(cr, cr.return_reason),
+            waiting_for_me=cr.status == "submitted"
+            and workflow.confirm_block_reason(s, cr, user) is None,
+            is_mine=cr.created_by == user.id,
         )
-        for cr in s.scalars(q)
-        if workflow.visible(cr, user)
+        for cr, head in zip(crs, heads, strict=True)
     ]
 
 

@@ -4679,6 +4679,38 @@
         "title": "AssignmentOut",
         "description": "一条解释，从源记录一侧看。"
       },
+      "BusinessDate": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "from",
+              "until",
+              "multiple"
+            ],
+            "title": "Mode"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mode",
+          "date"
+        ],
+        "title": "BusinessDate",
+        "description": "申请里各项的业务日期：都相同时给出一个（from 某日起 / until 至某日），不同时 multiple。"
+      },
       "CampusChangeStatus": {
         "properties": {
           "kind": {
@@ -5223,6 +5255,67 @@
         ],
         "title": "CampusVersionOut"
       },
+      "ChangeHeadline": {
+        "properties": {
+          "object_kind": {
+            "type": "string",
+            "enum": [
+              "person",
+              "persons",
+              "department",
+              "unit",
+              "campus",
+              "institution",
+              "code",
+              "mixed",
+              "other"
+            ],
+            "title": "Object Kind"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject"
+          },
+          "change": {
+            "type": "string",
+            "title": "Change"
+          },
+          "kind_counts": {
+            "items": {
+              "$ref": "#/components/schemas/KindCount"
+            },
+            "type": "array",
+            "title": "Kind Counts"
+          },
+          "business_date": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BusinessDate"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "object_kind",
+          "subject",
+          "change",
+          "kind_counts",
+          "business_date"
+        ],
+        "title": "ChangeHeadline",
+        "description": "列表行的标题（U1）：先写对象，再写变化；已按当前用户的权限隐去敏感值。"
+      },
       "ChangeRequestOut": {
         "properties": {
           "id": {
@@ -5751,6 +5844,35 @@
               }
             ],
             "title": "Cancelled At"
+          },
+          "item_count": {
+            "type": "integer",
+            "title": "Item Count"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/ChangeHeadline"
+          },
+          "last_step": {
+            "$ref": "#/components/schemas/LastStep"
+          },
+          "return_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Reason"
+          },
+          "waiting_for_me": {
+            "type": "boolean",
+            "title": "Waiting For Me"
+          },
+          "is_mine": {
+            "type": "boolean",
+            "title": "Is Mine"
           }
         },
         "type": "object",
@@ -5764,7 +5886,13 @@
           "submitted_at",
           "confirmed_at",
           "returned_at",
-          "cancelled_at"
+          "cancelled_at",
+          "item_count",
+          "headline",
+          "last_step",
+          "return_reason",
+          "waiting_for_me",
+          "is_mine"
         ],
         "title": "ChangeRequestSummary"
       },
@@ -9709,6 +9837,55 @@
           "parts"
         ],
         "title": "ItemView"
+      },
+      "KindCount": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "KindCount"
+      },
+      "LastStep": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "submit",
+              "confirm",
+              "return",
+              "cancel"
+            ],
+            "title": "Action"
+          },
+          "by": {
+            "$ref": "#/components/schemas/UserRef"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action",
+          "by",
+          "at"
+        ],
+        "title": "LastStep",
+        "description": "最近一步：动作、真实的操作人与时间（不拿创建人冒充确认人）。"
       },
       "LineageOut": {
         "properties": {

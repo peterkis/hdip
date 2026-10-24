@@ -446,6 +446,40 @@ class Permissions(BaseModel):
     """不能确认时的原因（例如需要其他确认人），供页面提示。"""
 
 
+class KindCount(BaseModel):
+    label: str
+    count: int
+
+
+class BusinessDate(BaseModel):
+    """申请里各项的业务日期：都相同时给出一个（from 某日起 / until 至某日），不同时 multiple。"""
+
+    mode: Literal["from", "until", "multiple"]
+    date: date | None
+
+
+class ChangeHeadline(BaseModel):
+    """列表行的标题（U1）：先写对象，再写变化；已按当前用户的权限隐去敏感值。"""
+
+    object_kind: Literal[
+        "person", "persons", "department", "unit", "campus", "institution", "code", "mixed", "other"
+    ]
+    subject: str | None
+    """对象名称；多项时最多 3 个，超出写“等 N 人 / 个部门……”。认不出时为空，只显示变化。"""
+    change: str
+    """变化：一项时是一句话说明（去掉开头的对象名与“自 X 起”）；多项时是数量最多的几类变更。"""
+    kind_counts: list[KindCount]
+    business_date: BusinessDate | None
+
+
+class LastStep(BaseModel):
+    """最近一步：动作、真实的操作人与时间（不拿创建人冒充确认人）。"""
+
+    action: Literal["create", "submit", "confirm", "return", "cancel"]
+    by: UserRef
+    at: datetime
+
+
 class ChangeRequestSummary(BaseModel):
     id: int
     status: ChangeStatus
@@ -457,6 +491,14 @@ class ChangeRequestSummary(BaseModel):
     confirmed_at: datetime | None
     returned_at: datetime | None
     cancelled_at: datetime | None
+    item_count: int
+    headline: ChangeHeadline
+    last_step: LastStep
+    return_reason: str | None
+    waiting_for_me: bool
+    """已提交，且当前用户按确认规则可以确认。"""
+    is_mine: bool
+    """当前用户创建的。"""
 
 
 class ItemPart(BaseModel):

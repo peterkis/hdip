@@ -21,6 +21,7 @@
   --hd-gray-50: #f7f7f5;
   --hd-gray-100: #f9f9f8;
   --hd-gray-200: #f6f5f4;
+  --hd-gray-250: #efeeec;   /* 灰标签底：#f6f5f4 在白底上几乎看不出（U1，2026-10-24） */
   --hd-gray-300: #dfdcd9;
   --hd-gray-400: #a39e98;
   --hd-gray-500: #78736f;
@@ -210,7 +211,7 @@
   --hd-info-soft: var(--hd-blue-100);
 
   /* 标签色（Notion 的彩色选项）：底色 + 文字，九种 */
-  --hd-tag-gray-bg: var(--hd-gray-200);     --hd-tag-gray-text: var(--hd-gray-700);
+  --hd-tag-gray-bg: var(--hd-gray-250);     --hd-tag-gray-text: var(--hd-gray-700);
   --hd-tag-brown-bg: var(--hd-brown-200);   --hd-tag-brown-text: var(--hd-brown-800);
   --hd-tag-orange-bg: var(--hd-orange-200); --hd-tag-orange-text: var(--hd-orange-800);
   --hd-tag-yellow-bg: var(--hd-yellow-200); --hd-tag-yellow-text: var(--hd-yellow-900);
@@ -236,6 +237,8 @@
   --hd-type-heading-size: var(--hd-size-400);   /* 区块标题 */
   --hd-type-heading-leading: 1.75rem;
   --hd-type-heading-tracking: -0.015625rem;
+  --hd-type-headline-size: var(--hd-size-500);  /* 工作类页面的标题（列表、台账），比文档式页面小一号 */
+  --hd-type-headline-leading: 2.125rem;
   --hd-type-title-size: var(--hd-size-600);     /* 页面标题 */
   --hd-type-title-leading: 2.5rem;
   --hd-type-title-tracking: -0.046875rem;
@@ -262,6 +265,8 @@
   --hd-page-wide-max-width: 75rem;
   --hd-page-padding-x: var(--hd-space-96);
   --hd-page-padding-x-narrow: var(--hd-space-24);
+  /* 变更申请列表一行（U1）：对象图标 | 标题与辅助信息 | 业务日期 | 状态 | 最近一步 */
+  --hd-change-row-columns: 1.75rem minmax(0, 1fr) 8rem 4.5rem 8.5rem;
 
   /* 层级 */
   --hd-z-sticky: 90;

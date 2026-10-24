@@ -350,6 +350,158 @@ def describe_items(s: Session, items: list[dict]) -> list[str]:
     return out
 
 
+# ------------------------------------------------------------------ 申请列表的标题（U1）
+# 列表每行先写“对象 · 变化”，再写编号、项数、业务日期。一张申请一项时直接用一句话说明（去掉开头的对象名），
+# 多项时：对象取第一项那一类对象的名称（最多 3 个，超出写“等 N 人 / 个部门……”），变化取数量最多的几类变更。
+_OBJECT_MEASURE = {
+    "person": "人",
+    "department": "个部门",
+    "unit": "个服务单元",
+    "campus": "个院区",
+    "institution": "个主体",
+    "code": "个外部代码",
+}
+_UNTIL_KINDS = ("set_end", "close", "retire")
+
+
+def _subject(n: _Names, i: dict) -> tuple[str, str | None, str | None]:
+    """(对象类别, 对象键, 名称)；认不出具体对象时键与名称为空。"""
+    k = i.get("kind", "")
+    domain = k.split(".")[0]
+    if domain == "person":
+        if k in ("person.create", "person.revise"):
+            code = i.get("code")
+        elif k == "person.engage":
+            code = i.get("person_code")
+        elif "duty_id" in i:
+            code = n.duties.get(i["duty_id"], ("",))[0] or None
+        elif "assignment_id" in i:
+            code = n.person_assignments.get(i["assignment_id"], (None,))[0]
+        else:
+            code = n.engagement_person.get(i.get("engagement_id"))
+        return "person", code, n.p(code) if code else None
+    if domain == "department":
+        if k == "department.reorganize":
+            code = (i.get("sources") or [{}])[0].get("code")
+        else:
+            code = i.get("code") or i.get("from_code")
+        return "department", code, n.dept.get(code, code) if code else None
+    if domain == "service_unit":
+        code = i.get("code") or (i.get("codes") or [None])[0]
+        return "unit", code, n.u(code) if code else None
+    if domain == "campus":
+        return "campus", i.get("code"), n.campus.get(i.get("code"), i.get("code"))
+    if domain == "institution":
+        return "institution", i.get("code"), n.inst.get(i.get("code"), i.get("code"))
+    if domain == "operator_relation":
+        code = i.get("campus_code")
+        return "campus", code, n.campus.get(code, code) if code else None
+    if domain == "external_code":
+        if "assignment_id" in i:
+            code, src = n.assignments.get(i["assignment_id"], (None, None))
+            return "code", code, src or code
+        code = i.get("external_code")
+        return "code", f"{i.get('namespace_code')}:{code}", i.get("source_name") or code
+    return "other", None, None
+
+
+def _business_date(i: dict) -> tuple[str, str] | None:
+    """这一项的业务日期：(“from” 某日起 / “until” 至某日, 日期)。"""
+    k = i.get("kind", "")
+    if i.get("effective_date"):
+        return "from", _day(i["effective_date"])
+    if k.endswith(_UNTIL_KINDS) and i.get("valid_to"):
+        return "until", _day(i["valid_to"])
+    if i.get("valid_from"):
+        return "from", _day(i["valid_from"])
+    return None
+
+
+def headline(n: _Names, items: list[dict]) -> dict:
+    """列表行的标题与辅助信息：object_kind（图标）、subject、change、kind_counts、business_date。"""
+    labels: dict[str, int] = {}
+    for i in items:
+        label = KIND_LABELS.get(i.get("kind", ""), i.get("kind", ""))
+        labels[label] = labels.get(label, 0) + 1
+    kind_counts = [{"label": k, "count": c} for k, c in sorted(labels.items(), key=lambda x: -x[1])]
+    subjects = [_subject(n, i) for i in items]
+    kinds = {k for k, _, _ in subjects}
+    object_kind = next(iter(kinds)) if len(kinds) == 1 else "mixed"
+    if object_kind == "person" and len({key for _, key, _ in subjects if key}) > 1:
+        object_kind = "persons"
+    dates = {d for d in map(_business_date, items) if d}
+    business_date = (
+        {"mode": next(iter(dates))[0], "date": next(iter(dates))[1]}
+        if len(dates) == 1
+        else ({"mode": "multiple", "date": None} if dates else None)
+    )
+
+    if not items:
+        return {
+            "object_kind": "other",
+            "subject": None,
+            "change": "（空）",
+            "kind_counts": [],
+            "business_date": None,
+        }
+    if len(items) == 1:
+        try:
+            sentence = describe(n, items[0])
+        except (KeyError, TypeError, ValueError):
+            sentence = kind_counts[0]["label"]
+        _, _, name = subjects[0]
+        subject = None
+        if name and sentence.startswith(f"“{name}”"):
+            subject, sentence = name, sentence[len(name) + 2 :].lstrip("的")
+        # 业务日期另有一列，标题里不再重复“，自 X 起”
+        if business_date and business_date["mode"] == "from":
+            sentence = sentence.removesuffix(f"，自 {business_date['date']} 起")
+        return {
+            "object_kind": object_kind,
+            "subject": subject,
+            "change": sentence,
+            "kind_counts": kind_counts,
+            "business_date": business_date,
+        }
+
+    first_kind = subjects[0][0]
+    keys: list[str] = []
+    names: list[str] = []
+    for kind, key, name in subjects:
+        if kind == first_kind and key and key not in keys:
+            keys.append(key)
+            if name and name not in names:
+                names.append(name)
+    if names:
+        subject = "、".join(names[:3])
+        if len(keys) > 3:
+            subject += f" 等 {len(keys)} {_OBJECT_MEASURE.get(first_kind, '个对象')}"
+    else:
+        subject = None
+    change = "、".join(k["label"] for k in kind_counts[:3]) + (
+        " 等" if len(kind_counts) > 3 else ""
+    )
+    return {
+        "object_kind": object_kind,
+        "subject": subject,
+        "change": change,
+        "kind_counts": kind_counts,
+        "business_date": business_date,
+    }
+
+
+def list_headlines(s: Session, item_lists: list[list[dict]]) -> list[dict]:
+    """一次查出名称，给多张申请出标题（列表不逐张取详情）。"""
+    n = _Names(s, [i for items in item_lists for i in items])
+    out = []
+    for items in item_lists:
+        # “（新设）”只标本张申请里新建的部门、人员（名称表是各张申请合在一起查的）
+        n.new_depts = {i["code"] for i in items if i.get("kind") == "department.create"}
+        n.new_persons = {i["code"] for i in items if i.get("kind") == "person.create"}
+        out.append(headline(n, items))
+    return out
+
+
 # ------------------------------------------------------------------ 结构化的行（申请页按原型逐行呈现）
 # 一行 = 若干片段：名称标签（chip：普通 / new 新设 / out 退出 / ref 关联对象，如隶属的上级部门）、
 # 状态标签（tag，带色调）、箭头、普通文字；

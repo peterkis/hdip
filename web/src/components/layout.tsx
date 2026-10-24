@@ -51,6 +51,11 @@ export function Layout() {
   useEffect(() => {
     if (narrow) setCollapsed(true)
   }, [pathname, narrow])
+  // 换页面回到顶部（正文的滚动容器是共用的 <main>，不重置就会停在上一页的位置）；
+  // 列表返回时的原位由 lib/scroll-memory.ts 在下一帧恢复
+  useEffect(() => {
+    document.querySelector('main')?.scrollTo({ top: 0 })
+  }, [pathname])
   return (
     <CrumbProvider>
       <div className="bg-surface-page text-fg flex h-svh">
@@ -82,8 +87,9 @@ export function Layout() {
 
 // ================================================================== 侧栏
 function Sidebar({ onCollapse, overlay }: { onCollapse: () => void; overlay?: boolean }) {
+  // 角标 = 等你确认的申请（按确认规则，U1）；不是全部已提交的数量
   const { data: submitted = [] } = useListChangeRequests({ status: 'submitted' })
-  const counts: Record<string, number> = { '/changes': submitted.length }
+  const counts: Record<string, number> = { '/changes': submitted.filter((r) => r.waiting_for_me).length }
   return (
     <aside
       className={cn(
@@ -337,20 +343,28 @@ export function PageHeader({
   description,
   actions,
   icon,
+  compact,
 }: {
   title: ReactNode
   description?: ReactNode
   actions?: ReactNode
   icon?: AppIcon
+  /** 工作类页面（列表、台账）：标题小一号、不放大图标，标题与说明、工具栏、列表左边对齐（U1 试点） */
+  compact?: boolean
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <div className={cn('flex flex-wrap items-start justify-between gap-3', compact ? 'mb-5' : 'mb-6')}>
       <div className="min-w-0">
-        <h1 className="text-fg-strong flex items-center gap-3 text-xl font-bold tracking-(--hd-type-title-tracking)">
-          {icon && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
+        <h1
+          className={cn(
+            'text-fg-strong flex items-center gap-3 font-bold',
+            compact ? 'text-headline tracking-(--hd-type-heading-tracking)' : 'text-xl tracking-(--hd-type-title-tracking)',
+          )}
+        >
+          {icon && !compact && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
           {title}
         </h1>
-        {description && <p className="text-fg-secondary mt-1 text-xs">{description}</p>}
+        {description && <p className={cn('text-fg-secondary text-xs', compact ? 'mt-1.5' : 'mt-1')}>{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 pt-1.5">{actions}</div>}
     </div>
