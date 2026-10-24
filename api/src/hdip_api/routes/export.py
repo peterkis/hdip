@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
@@ -31,6 +31,7 @@ router = APIRouter(
     responses={200: {"content": {"text/csv": {"schema": {"type": "string"}}}}},
 )
 def export_csv(
+    request: Request,
     session: SessionDep,
     user: CurrentUser,
     dataset: Dataset,
@@ -46,7 +47,13 @@ def export_csv(
 ) -> Response:
     """导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。
 
-    人员数据集带上页面的筛选，导出的行与页面一致；某数据集不支持的筛选直接拒绝，不悄悄导出全量。"""
+    人员数据集带上页面的筛选，导出的行与页面一致；某数据集不支持的筛选直接拒绝，不悄悄导出全量。
+    按请求实际带的参数名检查（含未声明、拼错的参数，如 scope=all），不只看已声明的几个。"""
+    allowed = PERSON_DATASETS.get(dataset, set())
+    if dataset in PERSON_DATASETS:
+        require_permission(user, PERSON_EXPORT)
+    if extra := sorted(set(request.query_params) - allowed - {"as_of"}):
+        raise BusinessError(f"{dataset} 不支持按 {'、'.join(extra)} 筛选导出")
     given = {
         k: v
         for k, v in dict(
@@ -59,11 +66,6 @@ def export_csv(
         ).items()
         if v is not None and v != ""
     }
-    allowed = PERSON_DATASETS.get(dataset, set())
-    if dataset in PERSON_DATASETS:
-        require_permission(user, PERSON_EXPORT)
-    if extra := sorted(set(given) - allowed):
-        raise BusinessError(f"{dataset} 不支持按 {'、'.join(extra)} 筛选导出")
     day = as_of or session.scalar(select(func.current_date()))
     body = to_csv(session, dataset, day, user, given)
     filename = f"hdip-{dataset}-{day.isoformat()}.csv"

@@ -721,13 +721,15 @@ export function DutyEndDialog({ duty, ...props }: DialogProps & { duty: DutyRef 
   const [last, setLast] = useState(duty.valid_to ?? today())
   const [basis, setBasis] = useState('')
   const basisNote = basis.trim() || null
+  // 推后已有的结束日 = 延长任期，须写依据；结束、提前、撤销计划选填
+  const extending = !cancelPlan && !!duty.valid_to && !!last && last > duty.valid_to
   return (
     <ItemDialog
       {...props}
-      title={`结束职务：${duty.holder} · ${duty.department}${duty.label}`}
+      title={`结束 / 调整职务：${duty.holder} · ${duty.department}${duty.label}`}
       description="最后有效日当天仍担任；结束日到达前还可以再改。"
       build={() =>
-        requireFields([basisCheck(basis, false)]) ??
+        requireFields([basisCheck(basis, extending)]) ??
         (cancelPlan
           ? { kind: 'person.duty_set_end', duty_id: duty.id, expected_valid_to: duty.valid_to ?? null, valid_to: dayBefore(duty.valid_from), basis_note: basisNote }
           : (requireFields([['valid_to', !!last && last >= duty.valid_from, `最后有效日不能早于开始日 ${duty.valid_from}`]]) ?? {
@@ -741,7 +743,11 @@ export function DutyEndDialog({ duty, ...props }: DialogProps & { duty: DutyRef 
     >
       {planned && <ToggleChip label={`撤销这条计划（原定 ${duty.valid_from} 开始）`} checked={cancelPlan} onChange={setCancelPlan} />}
       {!cancelPlan && <TextField label="最后有效日（含当日）" name="valid_to" type="date" required value={last} onChange={setLast} />}
-      <TextField label="依据（选填）" name="basis_note" value={basis} onChange={setBasis} hint="免职文件等；因任用结束、部门退出而结束的可不填" />
+      {extending ? (
+        <TextField label="任职依据" name="basis_note" required value={basis} onChange={setBasis} hint={`推后结束日（原 ${duty.valid_to}）= 延长任期，须写明依据；${BASIS_HINT}`} />
+      ) : (
+        <TextField label="依据（选填）" name="basis_note" value={basis} onChange={setBasis} hint="免职文件等；因任用结束、部门退出而结束的可不填" />
+      )}
     </ItemDialog>
   )
 }

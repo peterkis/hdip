@@ -974,6 +974,10 @@ def person_duty_set_end(ctx: Ctx, item: PersonDutySetEnd) -> dict:
         raise ItemError(
             f"这条职务已于 {d.valid_from.isoformat()} 生效，不能撤销，只能结束", "valid_to"
         )
+    # 结束、提前、补填结束日、撤销计划：依据选填。推后或清空已有的结束日 = 延长任期，
+    # 是另一项已确定的任职结果，须写依据（与“任用延长不自动续职”同一道理）
+    if d.valid_to is not None and (end is None or end > d.valid_to):
+        _require_basis(item.basis_note, "延长职务任期")
     _set_end(ctx, d, end)
     ctx.new_duties[d.id] = ctx.index
     # 结束的依据选填，只留在申请里（职务行上的依据是任命依据）

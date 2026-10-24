@@ -74,7 +74,8 @@ export function DepartmentLeader({ duties }: { duties: DepartmentDutyRow[] }) {
       {d.person_name}
     </Link>
   )
-  if (!presiding && !head) return <span className="text-fg-muted">空缺</span>
+  // 没有登记部长职务 ≠ 院方确认没有负责人
+  if (!presiding && !head) return <span className="text-fg-muted">未登记负责人</span>
   return (
     <span className="flex flex-wrap items-center gap-1.5">
       {presiding ? (

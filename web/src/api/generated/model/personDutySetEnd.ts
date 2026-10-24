@@ -7,6 +7,8 @@
 
 /**
  * 结束职务、调整尚未到达的结束日（空 = 清除），或撤销尚未开始的职务（开始日前一日）。
+ *
+ * 依据：结束、提前、补填结束日、撤销计划时选填；推后或清空已有的结束日（延长任期）时必填。
  */
 export interface PersonDutySetEnd {
   kind: 'person.duty_set_end';

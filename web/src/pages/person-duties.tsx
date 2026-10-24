@@ -1,5 +1,5 @@
 // 部门任职台账（A1，docs/人员域边界复审与实施计划.md 第 4 节）：全院部门负责人、副部长、主持工作、代管。
-// 上半部分按部门看当天的负责人（与部门详情同一规则、同一组件），一眼看出空缺；
+// 上半部分按部门看当天的负责人（与部门详情同一规则、同一组件），一眼看出哪些部门未登记负责人；
 // 下半部分一行一条职务，附此人当天的主部门（代管时两者不同）。导出与台账同日期、同筛选。
 // 登记的是已确定的任命结果；不办理任命决策，职务不等于系统权限。
 import {
@@ -113,7 +113,7 @@ export function PersonDutiesPage() {
       />
 
       <div className="grid gap-10">
-        <Leaders rows={data?.leaders ?? []} />
+        <Leaders rows={data?.leaders ?? []} department={f.dept ? departments.find((d) => String(d.id) === f.dept)?.version.name : undefined} />
 
         <Section title="任职台账">
           <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="姓名、拼音码、代码、工号或部门名称" />}>
@@ -244,8 +244,9 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
   )
 }
 
-/** 负责人一览：有负责人的部门一张小卡；空缺的部门收成一组虚线小标签，一眼能看出来 */
-function Leaders({ rows }: { rows: DepartmentLeaderRow[] }) {
+/** 负责人一览：有负责人的部门一张小卡；未登记负责人的部门收成一组虚线小标签。
+ *  只受“任职部门”筛选影响（职务、方式、检索词、含计划只作用于下方台账） */
+function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department?: string }) {
   const { asOf } = useApp()
   const filled = rows.filter((r) => r.heads.length > 0)
   const vacant = rows.filter((r) => r.heads.length === 0)
@@ -254,10 +255,13 @@ function Leaders({ rows }: { rows: DepartmentLeaderRow[] }) {
     { label: '部门', value: rows.length },
     { label: '有负责人', value: filled.length },
     { label: '由他人主持 / 代管', value: presiding.length },
-    { label: '空缺', value: vacant.length, warn: vacant.length > 0 },
+    { label: '未登记负责人', value: vacant.length, warn: vacant.length > 0 },
   ]
   return (
-    <Section title={`部门负责人（${asOf}）`}>
+    <Section
+      title={`部门负责人（${asOf}）`}
+      action={<span className="text-fg-muted text-caption">{department ? `范围：${department}` : '范围：全院'} · 只看当天，不受职务、方式、检索与“含计划”影响</span>}
+    >
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="border-line-subtle rounded-md border px-3 py-2">
@@ -282,7 +286,7 @@ function Leaders({ rows }: { rows: DepartmentLeaderRow[] }) {
       )}
       {vacant.length > 0 && (
         <div className="grid gap-1.5">
-          <div className="text-fg-muted text-caption">空缺（{vacant.length}）</div>
+          <div className="text-fg-muted text-caption">未登记负责人（{vacant.length}）</div>
           <div className="flex flex-wrap gap-1.5">
             {vacant.map((r) => (
               <Link
@@ -298,7 +302,7 @@ function Leaders({ rows }: { rows: DepartmentLeaderRow[] }) {
       )}
       {rows.length === 0 && <p className="text-fg-muted text-xs">当天没有正式履职的部门。</p>}
       <p className="text-fg-muted text-caption">
-        列出当天正式履职的部门（及当天有部长职务的部门）。有主持工作或代管者时显示主持者并注明部长，与部门详情的“当前负责人”同一规则。空缺 = 没有登记部长职务，不等于院方确认不设。
+        列出当天正式履职的部门（及当天有部长职务的部门）。有主持工作或代管者时显示主持者并注明部长，与部门详情的“当前负责人”同一规则。未登记负责人 = 平台里没有登记当天的部长职务，不等于院方确认不设。
       </p>
     </Section>
   )

@@ -87,6 +87,7 @@ from hdip_api.schemas.read import (
 from hdip_api.services import workflow
 from hdip_api.services.apply import dry_run, is_void
 from hdip_api.services.describe import describe_items, item_views
+from hdip_api.services.masking import hidden_fields, mask, sensitive_values, stored_values
 
 
 def covers(valid_from: date, valid_to: date | None, day: date) -> bool:
@@ -1223,11 +1224,20 @@ def list_changes(s: Session, status: str | None, user: AppUser) -> list[ChangeRe
     q = select(ChangeRequest).order_by(ChangeRequest.id.desc())
     if status:
         q = q.where(ChangeRequest.status == status)
+    # 列表里的说明（及悬停提示）与详情同一规则隐去敏感值；草稿里尚未确认的值也算
+    hidden = hidden_fields(user)
+    stored = stored_values(s, hidden) if hidden else set()
+
+    def note(cr: ChangeRequest) -> str | None:
+        if not hidden or not cr.note:
+            return cr.note
+        return mask(cr.note, hidden, stored | sensitive_values([cr.items, cr.results], hidden))
+
     return [
         ChangeRequestSummary(
             id=cr.id,
             status=cr.status,
-            note=cr.note,
+            note=note(cr),
             item_labels=_labels(cr),
             created_by=users[cr.created_by],
             created_at=cr.created_at,

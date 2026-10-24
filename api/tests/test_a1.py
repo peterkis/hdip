@@ -9,7 +9,15 @@
 import csv
 import io
 
-from factories import dept_create, duty_assign, duty_handover, engagement_end, register, world
+from factories import (
+    dept_create,
+    duty_assign,
+    duty_end,
+    duty_handover,
+    engagement_end,
+    register,
+    world,
+)
 from person_helpers import days, dept_id, engagement_id, notices, person, roster
 from sqlalchemy import text
 
@@ -66,7 +74,7 @@ def test_a1_01_caretaker_and_primary_department(api):
     dept_rows = api.get(f"/api/departments/{dept_id(api, 'YGB')}/duties").json()
     assert [d["duty_id"] for d in dept_rows] == [row["duty_id"]]
     assert _leader(reg, "YGB") == [("代管", "乙")]
-    # 负责人一览列出全部正式履职的部门：没有部长职务的显示空缺
+    # 负责人一览列出全部正式履职的部门：没有部长职务的为“未登记负责人”
     assert _leader(reg, "XNK") == [] and _leader(reg, "YWB") == []
 
 
@@ -208,3 +216,44 @@ def test_a1_07_server_side_permissions(api, monkeypatch):
     monkeypatch.setitem(permissions.ROLE_PERMISSIONS, "viewer", set())
     assert viewer.get("/api/person-duties").status_code == 403
     assert viewer.get("/api/export/person-duties.csv").status_code == 403
+
+
+def test_a1_export_rejects_any_unsupported_query_key(api):
+    """按请求实际带的参数名检查：未声明的（scope、institution_id）和拼错的都拒绝，不悄悄导出全量。"""
+    _setup(api)
+    for dataset, params in (
+        ("persons", {"scope": "all"}),
+        ("persons", {"institution_id": 1}),
+        ("persons", {"deparment_id": 1}),  # 拼错
+        ("person-duties", {"status": "ENGAGED"}),
+        ("departments", {"include_future": "false"}),
+    ):
+        r = api.get(f"/api/export/{dataset}.csv", params=params)
+        assert r.status_code == 422, (dataset, params, r.status_code)
+        assert next(iter(params)) in r.json()["message"]
+    # 合法筛选照常
+    assert (
+        api.get("/api/export/persons.csv", params={"as_of": "2026-01-01", "q": "甲"}).status_code
+        == 200
+    )
+
+
+def test_a1_extending_duty_term_requires_basis(api):
+    """结束、提前、补填结束日依据选填；推后或清空已有的结束日（延长任期）依据必填。"""
+    e = _setup(api)
+    api.apply(duty_assign(e["P000001"], "YWB", valid_from="2024-01-01"))
+    head = _register(api)["rows"][0]
+    # 补填结束日：选填
+    api.apply(duty_end(head["duty_id"], days(30), basis_note=None))
+    for new in (days(60), None):  # 推后、清空
+        cr = api.draft(duty_end(head["duty_id"], new, expected=days(30), basis_note=None))
+        r = api.submit(cr["id"])
+        assert r.status_code == 422 and r.json()["problems"][0]["field"] == "basis_note"
+        api.cancel(cr["id"])
+    # 提前：选填
+    api.apply(duty_end(head["duty_id"], days(20), expected=days(30), basis_note=None))
+    # 带依据的推后成立
+    api.apply(
+        duty_end(head["duty_id"], days(90), expected=days(20), basis_note="院发〔2026〕9 号 续任")
+    )
+    assert _register(api)["rows"][0]["valid_to"] == days(90)

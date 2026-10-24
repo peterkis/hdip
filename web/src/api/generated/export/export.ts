@@ -66,6 +66,7 @@ export const getExportCsvUrl = (dataset: 'service-units' | 'departments' | 'camp
  * 导出查看日期当天有效的一类数据。服务单元含暂停的、不含计划和已退出的。
  *
  * 人员数据集带上页面的筛选，导出的行与页面一致；某数据集不支持的筛选直接拒绝，不悄悄导出全量。
+ * 按请求实际带的参数名检查（含未声明、拼错的参数，如 scope=all），不只看已声明的几个。
  * @summary Export Csv
  */
 export const exportCsv = async (dataset: 'service-units' | 'departments' | 'campuses' | 'institutions' | 'operator-relations' | 'service-unit-lineage' | 'department-hierarchy' | 'department-relations' | 'external-codes' | 'classifications' | 'department-lineage' | 'persons' | 'person-relations' | 'person-duties',

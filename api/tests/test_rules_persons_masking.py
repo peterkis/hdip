@@ -109,3 +109,17 @@ def test_rejection_messages_are_masked(api, monkeypatch):
     )
     raw = json.dumps(maint.submit(cr["id"]).json(), ensure_ascii=False)
     assert OLD in raw
+
+
+def test_list_note_is_masked_including_drafts(api, monkeypatch):
+    """申请列表的说明（页面悬停提示用的同一字段）与详情同一规则；草稿里尚未确认的值也隐去；存库原文不变。"""
+    _setup(api, monkeypatch)
+    eid = engagement_id(api, "P000001")
+    cr = api.draft(change_work_no(eid, OLD, NEW, days(1)), note=f"工号 {OLD} 换为 {NEW}")
+    viewer = api.as_("viewer")
+    row = next(c for c in viewer.get("/api/change-requests").json() if c["id"] == cr["id"])
+    assert OLD not in row["note"] and NEW not in row["note"] and "（已隐去）" in row["note"]
+    body, _ = _text(viewer, cr["id"])
+    assert body["note"] == row["note"]  # 列表与详情一致
+    row = next(c for c in api.get("/api/change-requests").json() if c["id"] == cr["id"])
+    assert row["note"] == f"工号 {OLD} 换为 {NEW}"  # 有权限的人看到原文；存库未改

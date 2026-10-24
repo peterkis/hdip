@@ -349,13 +349,16 @@ def duty_assign(
     return item
 
 
-def duty_end(duty_id, valid_to, expected=None):
-    return {
+def duty_end(duty_id, valid_to, expected=None, basis_note=None):
+    item = {
         "kind": "person.duty_set_end",
         "duty_id": duty_id,
         "expected_valid_to": expected,
         "valid_to": valid_to,
     }
+    if basis_note:
+        item["basis_note"] = basis_note
+    return item
 
 
 def duty_handover(duty_id, to_engagement_id, day, expected=None, basis_note="院发〔2026〕2 号"):
