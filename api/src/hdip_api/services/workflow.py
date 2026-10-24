@@ -18,6 +18,7 @@ from hdip_api.core.permissions import (
 from hdip_api.models import ApprovalRule, AppUser, ChangeRequest
 from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
+from hdip_api.services.masking import hidden_fields, sensitive_values
 
 ROLE_LABELS = {"maintainer": "维护人", "confirmer": "确认人", "viewer": "只读"}
 STATUS_LABELS = {
@@ -159,6 +160,11 @@ def update_draft(
         raise BusinessError(
             "这张草稿是一次部门组织变更，不能去掉组织变更事件而保留其他变更项。"
             "请回到组织变更向导调整；不再需要时，撤销整张草稿。"
+        )
+    # 草稿里有当前用户看不到的敏感值时不能编辑：页面拿到的是隐去后的内容，回传会把它们清空
+    if sensitive_values(cr.items, hidden_fields(user), min_len=1):
+        raise Forbidden(
+            "这张草稿含你无权查看的敏感信息，不能编辑；请由有权限的人调整，或撤销后重新发起"
         )
     dumped = dump_items(items)
     _require_item_permissions(user, dumped)

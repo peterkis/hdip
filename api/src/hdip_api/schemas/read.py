@@ -506,6 +506,8 @@ class ChangeRequestOut(BaseModel):
     cancelled_by: UserRef | None
     cancelled_at: datetime | None
     permissions: Permissions
+    masked_fields: list[str] = []
+    """当前用户无权查看、已在本申请里隐去的敏感字段（值置空，文字里替换为“（已隐去）”）。"""
 
 
 class ClassificationSchemeCreate(BaseModel):

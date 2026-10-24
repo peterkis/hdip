@@ -47,6 +47,7 @@ from hdip_api.schemas.read import (
     PersonWorkNoOut,
 )
 from hdip_api.services.apply import is_void
+from hdip_api.services.masking import mask, stored_values
 from hdip_api.services.persons import duty_label
 from hdip_api.services.queries import _pick, _versions_by, covers
 
@@ -261,11 +262,16 @@ def list_persons(
     return rows
 
 
-def _end_changes(s: Session, engagement_ids: set[int]) -> dict[int, list[EngagementEndChange]]:
-    """从已确认申请的前后结果里还原每项任用结束日的登记与逐次调整（不另建日志表）。"""
+def _end_changes(
+    s: Session, engagement_ids: set[int], hidden: set[str]
+) -> dict[int, list[EngagementEndChange]]:
+    """从已确认申请的前后结果里还原每项任用结束日的登记与逐次调整（不另建日志表）。
+
+    “随之处理”的文字可能含工号等字段的值，按当前用户的权限隐去（services/masking.py）。"""
     out: dict[int, list[EngagementEndChange]] = defaultdict(list)
     if not engagement_ids:
         return out
+    values = stored_values(s, hidden)
     rows = s.scalars(
         select(ChangeRequest)
         .where(
@@ -312,7 +318,7 @@ def _end_changes(s: Session, engagement_ids: set[int]) -> dict[int, list[Engagem
                     action=action,
                     from_valid_to=old,
                     to_valid_to=new,
-                    handled=after.get("handled", []),
+                    handled=mask(after.get("handled", []), hidden, values),
                 )
             )
     return out
@@ -342,7 +348,7 @@ def get_person(s: Session, user: AppUser, person_id: int, day: date) -> PersonDe
         )
 
     engagements = []
-    end_changes = _end_changes(s, {e.id for e in w.engagements[person_id]})
+    end_changes = _end_changes(s, {e.id for e in w.engagements[person_id]}, hidden)
     for e in sorted(w.engagements[person_id], key=lambda x: (x.valid_from, x.id), reverse=True):
         engagements.append(
             PersonEngagementOut(

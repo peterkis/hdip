@@ -43,6 +43,10 @@ import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 
 // ------------------------------------------------------------------ 列表
+
+/** 敏感字段的中文名（后端 PERSON_FIELD_PERMISSIONS 登记的字段） */
+const SENSITIVE_FIELD: Record<string, string> = { work_no: '工号', id_number: '身份证号', phone: '联系电话' }
+
 export function ChangesPage() {
   const [status, setStatus] = useState<string>('all')
   const { data: rows = [] } = useListChangeRequests(
@@ -259,6 +263,11 @@ export function ChangeDetailPage() {
         {action.error && (
           <Callout tone="danger" title="操作未成功">
             {action.error.message}
+          </Callout>
+        )}
+        {(cr.masked_fields ?? []).length > 0 && (
+          <Callout tone="neutral" title="部分敏感信息已隐去">
+            你没有“查看人员敏感信息”的权限，本申请里的{(cr.masked_fields ?? []).map((f) => SENSITIVE_FIELD[f] ?? f).join('、')}显示为“（已隐去）”；这张申请也不能由你编辑。
           </Callout>
         )}
         <div className="grid items-start gap-10 lg:grid-cols-4">

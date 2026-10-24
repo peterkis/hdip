@@ -5624,6 +5624,14 @@
           },
           "permissions": {
             "$ref": "#/components/schemas/Permissions"
+          },
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "default": []
           }
         },
         "type": "object",

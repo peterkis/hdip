@@ -81,7 +81,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
   - 同一人员 + 同一主体任用期间不重叠（P1 限制，可撤掉的约束）；同一任用同一时点最多一条主归属；同一主体内一个工号永远只属于一个人（本人返聘可沿用）。
   - 归属完整期间落在任用期间内；部门已设立且无撤销 / 被替代段；筹备、暂停履职可以。部门撤销 / 被替代时，与退出日及以后相交的人员归属（含预约调入）阻止确认并列出，在同一申请里调科或结束归属；不随服务单元或名称自动迁人。
   - 变更项：`person.create`、`.engage`（新建任用 + 工号 + 主归属；暂未分配须写原因）、`.transfer`（调科：旧止于 D−1、新自 D 起）、`.assignment_set_end`、`.revise`（`RENAME` 更名 / `CORRECTION` 更正误录，都不改写已生效历史）、`.change_work_no`（`CHANGE` / `CORRECTION`，带 `expected_work_no`）、`.assign`（补主部门）、`.engagement_set_end`（结束 / 提前 / 推后 / 清空结束日 / 撤销计划，下属归属与工号随之处理）；处理结果可带 `notices`（不阻止的提示：同名、部门筹备 / 暂停、暂未分配）；处理在 `services/persons.py`，最终检查 `check_persons`。确认在咨询锁下串行执行。
-  - 权限键 `person.view / .view_sensitive / .export / .change`（`core/permissions.py`，P1 与组织模块等价）；无 `person.view` 时含人员项的申请整张隐藏；敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（工号不敏感；身份证号、电话将来登记），后端统一置空。人员 ≠ `app_user`。
+  - 权限键 `person.view / .view_sensitive / .export / .change`（`core/permissions.py`，P1 与组织模块等价）；无 `person.view` 时含人员项的申请整张隐藏；敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（工号不敏感；身份证号、电话（11 位）将来登记），读接口与导出统一置空；申请页（变更项、前后内容、说明、片段、提示、被拒的问题）与结束日调整记录由 `services/masking.py` 隐去（按键置空 + 按值替换“（已隐去）”，响应带 `masked_fields`），含看不到的值的草稿不能由该用户编辑。人员 ≠ `app_user`。
   - P3（迁移 0019）：附加归属 = `person.assign` 带 `assignment_kind=ADDITIONAL`（兼任，可多个，不能与同时期主部门相同，调科不带走）；部门职务 `person_duty` 挂在**任用 × 部门**上、不挂归属（代管的部门不是归属部门）：部长 / 副部长 × 正式 / 主持工作（代理）/ 代管；同一部门同一天正式部长、主持工作者各最多一位且可并存（部长外出学习时他人主持工作）；“副部长（主持工作）”= 副部长 + 主持工作两条。变更项 `person.duty_assign/.duty_set_end/.duty_handover`；部门退出自动结束职务，任用结束随之截断。负责人按日期从职务派生（`GET /api/departments/{id}/duties`），不写在部门版本上，不是系统权限。
   - 共享口径（每个接口 / 导出一行是什么、日期、未知值）写在 `docs/人员共享数据契约.md`；新增共享输出时同步更新。导航分组“人员与任职”：人员名册、部门任职（`/person-duties`）；不再为岗位、资质、授权占位。
   - A1（迁移 0021）：部门任职台账 `GET /api/person-duties`（一行一条职务，附此人当天的主部门；`leaders` 负责人一览，规则与部门详情同一组件 `DepartmentLeader`）与 `person-duties.csv`。任职依据 `person_duty.basis_note`：任命、交接必填（模型里可空，好让旧申请 JSON 照常解析；必填在处理函数里检查并指向字段），结束选填、只留在申请里；旧记录显示“历史记录未提供依据”。任用推后 / 清空结束日时**职务不随之延长**（续任另行登记）。人员导出带上页面筛选（`PERSON_DATASETS` 登记每个数据集支持的筛选，不支持的返回 422）；名册“全部人员”查重视图不能导出。
@@ -169,6 +169,5 @@ make check     # ruff + 前端类型检查
 
 ## 待确认
 
-- 人员敏感字段在申请页（`item_summaries`、`item_views`、`outcomes`）尚未按 `PERSON_FIELD_PERMISSIONS` 脱敏：**登记任何敏感字段前必须完成**（人员设计第 10.3 节）。
 - 认证与用户来源：目前是**开发期身份**——前端在请求头 `X-HDIP-User` 带用户名，后端只认 `app_user` 里启用的用户（种子：solo（显示名“张三”）维护+确认、maintainer、confirmer、viewer）。这不是安全措施。正式方案（本地账号或内网门户登录）确定后只替换 `api/src/hdip_api/core/auth.py` 与 `web/src/lib/session.ts`。
 - 主体性质目前是自由文本（旧仓库为“按登记证照确认”），是否改为选项待定。

@@ -81,4 +81,5 @@ export interface ChangeRequestOut {
   cancelled_by: UserRef | null;
   cancelled_at: string | null;
   permissions: Permissions;
+  masked_fields?: string[];
 }
