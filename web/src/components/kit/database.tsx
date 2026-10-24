@@ -1,13 +1,21 @@
 // Notion 数据库视图的基本件：工具栏、筛选胶囊、搜索、表格、底部计数。各列表页共用。
 import { Icon, type AppIcon } from '@/components/kit/icon'
 import { ArrowDown01Icon, ArrowUp01Icon, ArrowUpDownIcon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
+import { useFrame } from '@/components/layout'
 import { cn } from '@/lib/utils'
 
 // ------------------------------------------------------------------ 工具栏
+// 统一规范 v1.0（U2）：声明了外框的页面（usePageFrame）用规范样式——工具栏不画底线、表头浅底 36、
+// 只用横线、行 ≥44、单元格左右 12；比较表（variant="compare"）才画竖线。未迁移的页面保持旧样式。
+function useSpec() {
+  return useFrame() !== 'legacy'
+}
+
 export function DbToolbar({ children, right }: { children?: ReactNode; right?: ReactNode }) {
+  const spec = useSpec()
   return (
-    <div className="border-line-subtle flex min-h-10 flex-wrap items-center gap-1.5 border-b pb-2">
+    <div className={cn('flex min-h-10 flex-wrap items-center gap-1.5', spec ? 'pb-3' : 'border-line-subtle border-b pb-2')}>
       <div className="flex flex-wrap items-center gap-1.5">{children}</div>
       {/* 窄屏时搜索框独占一行，不被挤出屏幕 */}
       {right && <div className="flex w-full items-center gap-1.5 sm:ml-auto sm:w-auto">{right}</div>}
@@ -120,28 +128,37 @@ export function nextSort(current: DbSort | null, key: string): DbSort | null {
   return current.dir === 'asc' ? { key, dir: 'desc' } : null
 }
 
+const TableCtx = createContext<{ spec: boolean; lines: boolean }>({ spec: false, lines: true })
+
 export function DbTable({
   columns,
   children,
   sort,
   onSort,
+  variant,
 }: {
   columns: DbColumn[]
   children: ReactNode
   sort?: DbSort | null
   onSort?: (key: string) => void
+  /** compare：逐列对照的比较表，规范样式下也画竖线（R-ROW 4.4） */
+  variant?: 'compare'
 }) {
+  const spec = useSpec()
+  const lines = !spec || variant === 'compare'
   return (
+    <TableCtx.Provider value={{ spec, lines }}>
     <div className="overflow-x-auto">
       <table className="w-full border-collapse text-xs">
         <thead>
-          <tr className="border-line-subtle text-fg-muted border-b text-left">
+          <tr className={cn('text-fg-muted text-left', spec ? 'bg-surface-subtle' : 'border-line-subtle border-b')}>
             {columns.map((c, i) => (
               <th
-                key={c.label}
+                key={c.label || `c${i}`}
                 className={cn(
-                  'h-9 px-2 font-normal whitespace-nowrap',
-                  i > 0 && 'border-line-subtle border-l',
+                  'font-normal whitespace-nowrap',
+                  spec ? 'h-(--hd-row-header-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
+                  i > 0 && lines && 'border-line-subtle border-l',
                   c.className,
                 )}
               >
@@ -174,6 +191,7 @@ export function DbTable({
         <tbody>{children}</tbody>
       </table>
     </div>
+    </TableCtx.Provider>
   )
 }
 
@@ -191,15 +209,28 @@ export function DbRow({ children, className }: { children: ReactNode; className?
 }
 
 export function DbCell({ children, className }: { children?: ReactNode; className?: string }) {
+  const { spec, lines } = useContext(TableCtx)
   return (
-    <td className={cn('border-line-subtle h-9 px-2 align-middle [&:not(:first-child)]:border-l', className)}>
+    <td
+      className={cn(
+        'border-line-subtle align-middle',
+        spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
+        lines && '[&:not(:first-child)]:border-l',
+        className,
+      )}
+    >
       {children}
     </td>
   )
 }
 
 export function DbFooter({ children }: { children: ReactNode }) {
-  return <div className="text-fg-muted flex flex-wrap items-center gap-3 px-2 pt-2 text-caption">{children}</div>
+  const spec = useSpec()
+  return (
+    <div className={cn('text-fg-muted flex flex-wrap items-center gap-3 text-caption', spec ? 'px-(--hd-cell-padding-x) pt-3' : 'px-2 pt-2')}>
+      {children}
+    </div>
+  )
 }
 
 /** 列表为空时：一句话说明 + 可选操作，不画大插图 */

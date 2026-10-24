@@ -50,6 +50,12 @@ function useNarrow() {
 export type PageFrame = 'legacy' | 'work' | 'document' | 'canvas'
 
 const FrameContext = createContext<(frame: PageFrame) => void>(() => {})
+const FrameValueContext = createContext<PageFrame>('legacy')
+
+/** 当前页面的外框：公共件（表格、工具栏、计数）据此在规范样式与旧样式之间切换，未迁移的页面不受影响（U2） */
+export function useFrame(): PageFrame {
+  return useContext(FrameValueContext)
+}
 
 export function usePageFrame(frame: PageFrame) {
   const set = useContext(FrameContext)
@@ -101,6 +107,7 @@ export function Layout() {
           <Topbar collapsed={collapsed || narrow} onExpand={() => setCollapsed(false)} frame={frame} />
           <main className="flex-1 overflow-y-auto">
             <FrameContext.Provider value={setFrame}>
+              <FrameValueContext.Provider value={frame}>
               {frame === 'legacy' ? (
                 <div className="mx-auto w-full max-w-(--hd-page-wide-max-width) px-(--hd-page-padding-x-narrow) pt-8 pb-24 lg:px-(--hd-space-64)">
                   <Outlet />
@@ -117,6 +124,7 @@ export function Layout() {
                   </div>
                 </div>
               )}
+              </FrameValueContext.Provider>
             </FrameContext.Provider>
           </main>
         </div>

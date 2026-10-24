@@ -9,7 +9,6 @@ import {
   Calendar03Icon,
   Certificate01Icon,
   Download01Icon,
-  HashtagIcon,
   Hospital01Icon,
   Layers01Icon,
   ListViewIcon,
@@ -49,7 +48,8 @@ import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
 import { Missing } from '@/components/kit/missing'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
+import { Segmented } from '@/components/kit/segmented'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -83,19 +83,21 @@ function MainClassTag({ code, name }: { code: string; name: string }) {
 const counted = (d: DepartmentRow) => !d.not_yet_effective && d.version.lifecycle === 'ACTIVE'
 
 // ================================================================== 列表
+// 统一规范 v1.0 SC-04：名称（管理编码在辅助行）/ 组织生命周期 / 部门管理主分类 / 行政上级（层级在辅助行）/
+// 主体归属 / 服务单元数；设立形式等放“完整字段”（只记在本浏览器）
 const COLUMNS: DbColumn[] = [
   { label: '名称', icon: TextFontIcon, className: 'min-w-48' },
-  { label: '代码', icon: HashtagIcon },
-  { label: '部门管理主分类', icon: Tag01Icon },
   { label: '组织生命周期', icon: Loading03Icon },
-  { label: '层级', icon: HierarchyIcon },
+  { label: '部门管理主分类', icon: Tag01Icon },
   { label: '行政上级', icon: Layers01Icon },
-  { label: '设立形式', icon: ListViewIcon },
   { label: '主体归属', icon: Hospital01Icon },
   { label: '服务单元', icon: Building03Icon },
 ]
+const FULL_COLUMNS: DbColumn[] = [...COLUMNS, { label: '设立形式', icon: ListViewIcon }]
+const FULL_KEY = 'hdip.departments.full-fields'
 
 export function DepartmentsPage() {
+  usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const [params, setParams] = useSearchParams()
@@ -117,6 +119,22 @@ export function DepartmentsPage() {
   const [query, setQuery] = useState('')
   const q = useDeferredValue(query.trim())
   const [creating, setCreating] = useState(false)
+  const [full, setFull] = useState(() => {
+    try {
+      return localStorage.getItem(FULL_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleFull = (v: boolean) => {
+    setFull(v)
+    try {
+      localStorage.setItem(FULL_KEY, v ? '1' : '')
+    } catch {
+      /* 只在本次有效 */
+    }
+  }
+  const columns = full ? FULL_COLUMNS : COLUMNS
   // 批量操作：勾选的部门 id；切换筛选不清空，便于分几次挑选
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [batch, setBatch] = useState<'classify' | 'parent' | null>(null)
@@ -155,6 +173,10 @@ export function DepartmentsPage() {
       return next
     })
 
+  // 选择跨筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
+  const visibleIds = useMemo(() => new Set(ordered.map((d) => d.id)), [ordered])
+  const hiddenChecked = [...checked].filter((id) => !visibleIds.has(id)).length
+
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
     onSuccess: () => notify.success(`已导出 ${asOf} 的部门`),
@@ -164,19 +186,24 @@ export function DepartmentsPage() {
   return (
     <>
       <PageHeader
-        icon={UserGroupIcon}
+        work
         title="部门"
         description="谁在医院组织体系内承担这组职责。部门身份不因院区、地点、负责人、服务形态或核算口径变化而改变。"
         actions={
           <>
-            <Button variant="ghost" disabled={exporting.isPending} onClick={() => exporting.mutate()}>
+            <Button
+              variant="ghost"
+              disabled={exporting.isPending}
+              onClick={() => exporting.mutate()}
+              title="导出查看日期当天的全部部门，不按页面上的筛选"
+            >
               <Icon icon={Download01Icon} inline="start" />
-              导出 CSV
+              导出查看日期的部门
             </Button>
             {isMaintainer && (
               <Button onClick={() => setCreating(true)}>
                 <Icon icon={Add01Icon} inline="start" />
-                新建
+                新建部门
               </Button>
             )}
           </>
@@ -186,6 +213,16 @@ export function DepartmentsPage() {
       {!q && <DeptStats rows={all} codes={mainCodes} onPick={(c) => set('class', c)} active={cls} />}
 
       <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="名称、拼音码、别名或代码" />}>
+        <Segmented
+          label="视图"
+          value={mode}
+          onChange={(v) => set('view', v === 'tree' ? 'tree' : '')}
+          options={[
+            { value: 'table', label: '表格' },
+            { value: 'tree', label: '层级树' },
+          ]}
+        />
+        <span aria-hidden className="bg-line mx-1 h-4 w-px" />
         <FilterPill
           label="主分类"
           icon={Tag01Icon}
@@ -208,7 +245,7 @@ export function DepartmentsPage() {
           options={[1, 2, 3].map((n) => ({ value: String(n), label: levelName(n) }))}
         />
         <ToggleChip label="含计划中" checked={future} onChange={(v) => set('future', v ? '' : '0')} />
-        <ToggleChip label="层级树" checked={mode === 'tree'} onChange={(v) => set('view', v ? 'tree' : '')} />
+        <ToggleChip label="完整字段" checked={full} onChange={toggleFull} />
       </DbToolbar>
 
       {!isPending && rows.length === 0 ? (
@@ -217,10 +254,10 @@ export function DepartmentsPage() {
           hint={all.length === 0 && !q ? '新建部门后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
         />
       ) : (
-        <DbTable columns={isMaintainer ? [{ label: '', className: 'w-8' }, ...COLUMNS] : COLUMNS}>
+        <DbTable columns={isMaintainer ? [{ label: '', className: 'w-8' }, ...columns] : columns}>
           {isMaintainer && (
             <tr className="border-line-subtle border-b">
-              <td className="px-2 py-1.5" colSpan={COLUMNS.length + 1}>
+              <td className="px-(--hd-cell-padding-x) py-1.5" colSpan={columns.length + 1}>
                 <label className="text-fg-muted flex items-center gap-2 text-caption">
                   <input
                     type="checkbox"
@@ -265,60 +302,73 @@ export function DepartmentsPage() {
                     ) : (
                       <span className="size-3" />
                     ))}
-                  <Link
-                    to={`/departments/${d.id}`}
-                    className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
-                  >
-                    {d.version.name}
-                  </Link>
-                  {d.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
-                  {d.tree?.closed && <span className="text-fg-muted text-caption">+{d.tree.descendants}</span>}
+                  {/* 名称为主、管理编码为辅；层级树里编码跟在名称后（同一行，连线才对得上） */}
+                  <span className={cn('min-w-0', d.tree ? 'flex items-center gap-2' : 'grid gap-0.5')}>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Link
+                        to={`/departments/${d.id}`}
+                        className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
+                      >
+                        {d.version.name}
+                      </Link>
+                      {d.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
+                      {d.tree?.closed && <span className="text-fg-muted text-caption">+{d.tree.descendants}</span>}
+                    </span>
+                    <span className="text-fg-muted font-mono text-caption whitespace-nowrap select-all">{d.code}</span>
+                  </span>
                 </span>
-              </DbCell>
-              <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{d.code}</DbCell>
-              <DbCell>
-                {d.main_class ? (
-                  <MainClassTag code={d.main_class.code} name={d.main_class.name} />
-                ) : (
-                  <span className="text-fg-disabled">未分类</span>
-                )}
               </DbCell>
               <DbCell>
                 <LifecycleTag value={d.version.lifecycle} />
               </DbCell>
               <DbCell>
-                <Tag tone={levelTone(d.level)}>{levelName(d.level)}</Tag>
-              </DbCell>
-              <DbCell className="whitespace-nowrap">
-                {d.parent ? (
-                  <Link to={`/departments/${d.parent.id}`} className="hover:underline">
-                    {d.parent.name}
-                  </Link>
+                {d.main_class ? (
+                  <MainClassTag code={d.main_class.code} name={d.main_class.name} />
                 ) : (
-                  <span className="text-fg-disabled">—</span>
+                  <span className="text-fg-muted">未分类</span>
                 )}
               </DbCell>
               <DbCell className="whitespace-nowrap">
-                {ESTABLISHMENT_FORM[d.version.establishment_form]}
-                {d.version.temporary_until && <span className="text-fg-muted text-caption"> · 至 {d.version.temporary_until}</span>}
+                <span className="grid gap-0.5">
+                  {d.parent ? (
+                    <Link to={`/departments/${d.parent.id}`} className="hover:underline">
+                      {d.parent.name}
+                    </Link>
+                  ) : (
+                    <span className="text-fg-muted">无上级</span>
+                  )}
+                  <span className="text-fg-muted text-caption">{levelName(d.level)}</span>
+                </span>
               </DbCell>
-              <DbCell className="whitespace-nowrap">{d.institution_name ?? <span className="text-fg-disabled">未填</span>}</DbCell>
-              <DbCell className="text-fg-secondary tabular-nums">{d.unit_count || '—'}</DbCell>
+              <DbCell className="whitespace-nowrap">{d.institution_name ?? <span className="text-fg-muted">未登记</span>}</DbCell>
+              <DbCell className="text-fg-secondary text-right tabular-nums">{d.unit_count || '—'}</DbCell>
+              {full && (
+                <DbCell className="whitespace-nowrap">
+                  {ESTABLISHMENT_FORM[d.version.establishment_form]}
+                  {d.version.temporary_until && <span className="text-fg-muted text-caption"> · 至 {d.version.temporary_until}</span>}
+                </DbCell>
+              )}
             </DbRow>
           ))}
         </DbTable>
       )}
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 个部门
+          列出 <span className="text-fg-secondary">{rows.length}</span> 个部门（当前筛选）
         </span>
-        <span>部门数只计查看日期当天“正式履职”的部门；筹备、暂停履职、撤销不计入</span>
+        <span>上方统计只计查看日期当天“正式履职”的部门；筹备、暂停履职、撤销与计划中不计入</span>
       </DbFooter>
       {checked.size > 0 && (
         <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 shadow-md">
           <span className="text-fg-secondary text-xs">
             已选 <span className="text-fg-strong font-medium">{checked.size}</span> 个部门
+            {hiddenChecked > 0 && <>，其中当前列出 {checked.size - hiddenChecked} 个</>}
           </span>
+          {hiddenChecked > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set([...checked].filter((id) => visibleIds.has(id))))}>
+              清除没列出的 {hiddenChecked} 个
+            </Button>
+          )}
           <span className="ml-auto flex flex-wrap gap-2">
             <Button size="sm" variant="ghost" onClick={() => setChecked(new Set())}>
               清除选择
@@ -386,8 +436,8 @@ function treeOrder(rows: DepartmentRow[], collapsed: Set<number>): (DepartmentRo
  */
 function TreeGuides({ meta }: { meta: TreeMeta }) {
   if (meta.depth === 0) return null
-  // 第 k 层竖线的横坐标：单元格左内边距 + k 个缩进 + 展开按钮半宽
-  const x = (k: number) => `calc(var(--hd-space-8) + var(--hd-space-20) * ${k} + var(--hd-space-6))`
+  // 第 k 层竖线的横坐标：单元格左内边距（规范样式 12）+ k 个缩进 + 展开按钮半宽
+  const x = (k: number) => `calc(var(--hd-cell-padding-x) + var(--hd-space-20) * ${k} + var(--hd-space-6))`
   const self = meta.depth - 1
   return (
     <span aria-hidden className="pointer-events-none absolute inset-0">
