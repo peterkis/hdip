@@ -47,7 +47,8 @@ import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
+import { Segmented } from '@/components/kit/segmented'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { Timeline, type TimelineEvent } from '@/components/version-timeline'
@@ -92,6 +93,7 @@ function useRosterFilters() {
 }
 
 export function PersonsPage() {
+  usePageFrame('work')
   const { asOf, optionLabels } = useApp()
   const { can } = useMe()
   const f = useRosterFilters()
@@ -119,7 +121,7 @@ export function PersonsPage() {
   return (
     <>
       <PageHeader
-        icon={IdentityCardIcon}
+        work
         title="人员名册"
         description={`人员 × 任用 × 部门归属。按 ${asOf} 当天的任用显示，一人一行；不含账号、资质与执业信息。`}
         actions={
@@ -133,7 +135,7 @@ export function PersonsPage() {
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出，与页面同一批人，一人一行'}
                 >
                   <Icon icon={Download01Icon} inline="start" />
-                  导出名册
+                  导出名册（一人一行）
                 </Button>
                 <Button
                   variant="ghost"
@@ -142,7 +144,7 @@ export function PersonsPage() {
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出页面上的任用与主部门，一行一项任用'}
                 >
                   <Icon icon={Download01Icon} inline="start" />
-                  导出任用与归属
+                  导出任用与归属（一项任用一行）
                 </Button>
               </>
             )}
@@ -157,6 +159,17 @@ export function PersonsPage() {
       />
 
       <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="姓名、曾用名、拼音码、代码或工号" />}>
+        {/* SC-13：按日期的名册与不看日期的查重是两种互斥视角 */}
+        <Segmented
+          label="视角"
+          value={f.all ? 'all' : 'roster'}
+          onChange={(v) => f.set('scope', v === 'all' ? 'all' : '')}
+          options={[
+            { value: 'roster', label: `按日期名册（${asOf}）` },
+            { value: 'all', label: '全部人员（查重，不看日期）' },
+          ]}
+        />
+        <span aria-hidden className="bg-line mx-1 h-4 w-px" />
         <FilterPill
           label="主部门"
           icon={UserGroupIcon}
@@ -174,7 +187,6 @@ export function PersonsPage() {
           />
         )}
         {!f.all && <ToggleChip label="含计划中" checked={f.future} onChange={(v) => f.set('future', v ? '1' : '')} />}
-        <ToggleChip label="全部人员（含已离开、未来）" checked={f.all} onChange={(v) => f.set('scope', v ? 'all' : '')} />
         {f.active && (
           <Button variant="ghost" size="sm" className="text-fg-muted" onClick={f.clear}>
             清除筛选
@@ -198,11 +210,11 @@ export function PersonsPage() {
       ) : (
         <DbTable
           columns={[
+            // SC-13：姓名（人员代码在辅助行）/ 任用 / 主部门 / 业务工号 / 任用期间；多项任用在各列逐项对齐
             { label: '姓名', icon: TextFontIcon, className: 'min-w-36', sortKey: 'name' },
-            { label: '人员代码', icon: HashtagIcon, sortKey: 'code' },
             { label: '任用', icon: Briefcase01Icon, sortKey: 'type' },
             { label: '主部门', icon: UserGroupIcon, sortKey: 'dept' },
-            { label: '工号', icon: HashtagIcon, sortKey: 'work_no' },
+            { label: '业务工号', icon: HashtagIcon, sortKey: 'work_no' },
             { label: '任用期间', icon: Calendar03Icon, sortKey: 'from' },
           ]}
           sort={sort}
@@ -211,15 +223,19 @@ export function PersonsPage() {
           {sorted.map((r) => (
             <DbRow key={r.id}>
               <DbCell>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
-                    {r.name}
-                  </Link>
-                  {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
-                  {r.matched && <span className="text-fg-muted text-caption">命中 {r.matched}</span>}
+                <span className="grid gap-0.5">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
+                      {r.name}
+                    </Link>
+                    {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
+                  </span>
+                  <span className="text-fg-muted text-caption">
+                    <span className="font-mono select-all">{r.code}</span>
+                    {r.matched && <> · 命中 {r.matched}</>}
+                  </span>
                 </span>
               </DbCell>
-              <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{r.code}</DbCell>
               <Stacked rows={r} render={(e) => <EngagementTypeTag code={e.engagement_type} />} />
               <Stacked
                 rows={r}
@@ -233,7 +249,7 @@ export function PersonsPage() {
                   )
                 }
               />
-              <Stacked rows={r} mono render={(e) => e.work_no ?? <span className="text-fg-disabled">—</span>} />
+              <Stacked rows={r} mono render={(e) => e.work_no ?? <span className="text-fg-muted font-sans">未登记</span>} />
               <Stacked rows={r} render={(e) => period(e.valid_from, e.valid_to)} />
             </DbRow>
           ))}

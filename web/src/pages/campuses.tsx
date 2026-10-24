@@ -25,6 +25,7 @@ import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
 import { PageHeader, usePageFrame } from '@/components/layout'
+import { ExpandableText } from '@/components/kit/expandable-text'
 import { RelationsTable } from '@/components/relations-table'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
@@ -33,7 +34,6 @@ import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period, type OperatingStatus } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
-import { cn } from '@/lib/utils'
 import { PLANNED_TONE } from '@/lib/tones'
 
 export function CampusesPage() {
@@ -116,22 +116,6 @@ export function CampusesPage() {
       </DbFooter>
       {creating && <CampusCreateDialog open onOpenChange={setCreating} />}
     </>
-  )
-}
-
-/** 长文本默认一行截断，点一下展开全文（键盘、触屏都可用，不只靠悬停；R-TYP 3.4） */
-function ExpandableText({ text }: { text: string }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <button
-      type="button"
-      aria-expanded={open}
-      onClick={() => setOpen(!open)}
-      className={cn('block w-full text-left', open ? 'whitespace-normal' : 'truncate')}
-      title={open ? '收起' : '展开全文'}
-    >
-      {text}
-    </button>
   )
 }
 

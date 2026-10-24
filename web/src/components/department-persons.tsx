@@ -10,6 +10,7 @@ import { useApp } from '@/lib/app-context'
 import { period, today } from '@/lib/format'
 import { PLANNED_TONE } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+import { ExpandableText } from '@/components/kit/expandable-text'
 
 export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonRow[]; suspended: boolean }) {
   const { asOf } = useApp()
@@ -54,7 +55,8 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
 }
 
 /** 任职依据（A1）：A1 之前登记的职务没有依据，如实说明，不补写 */
-export function DutyBasis({ note, className }: { note?: string | null; className?: string }) {
+export function DutyBasis({ note, className, expandable }: { note?: string | null; className?: string; expandable?: boolean }) {
+  if (note && expandable) return <ExpandableText text={`依据：${note}`} className={cn('text-fg-secondary text-caption', className)} />
   return note ? (
     <span className={cn('text-fg-secondary text-caption', className)} title={note}>
       依据：{note}

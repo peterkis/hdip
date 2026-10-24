@@ -24,7 +24,7 @@ import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, nextS
 import { Icon } from '@/components/kit/icon'
 import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
@@ -64,6 +64,7 @@ function useDutyFilters() {
 type Dialog = { kind: 'assign' } | { kind: 'handover' | 'end'; row: DutyRegisterRow }
 
 export function PersonDutiesPage() {
+  usePageFrame('work')
   const { asOf } = useApp()
   const { can } = useMe()
   const f = useDutyFilters()
@@ -91,7 +92,7 @@ export function PersonDutiesPage() {
   return (
     <>
       <PageHeader
-        icon={Briefcase01Icon}
+        work
         title="部门任职"
         description={`按 ${asOf} 当天登记已确定的任命结果：部长、副部长、主持工作与代管。不办理任命决策；职务不等于系统权限，也不是 HR 岗位或职级。`}
         actions={
@@ -105,25 +106,30 @@ export function PersonDutiesPage() {
             {can('person.change') && (
               <Button onClick={() => setDialog({ kind: 'assign' })}>
                 <Icon icon={Add01Icon} inline="start" />
-                任命职务
+                登记任职
               </Button>
             )}
           </>
         }
       />
 
-      <div className="grid gap-10">
+      {/* SC-15：任职部门同时影响负责人一览与台账，放在两区之前作为共同范围 */}
+      <div className="mb-6 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-fg-secondary">共同范围</span>
+        <FilterPill
+          label="任职部门"
+          icon={UserGroupIcon}
+          value={f.dept}
+          onChange={(v) => f.set('dept', v)}
+          options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+        />
+        <span className="text-fg-muted text-caption">查看日期 {asOf}；任职部门同时作用于负责人一览和台账，不含下级部门</span>
+      </div>
+      <div className="grid gap-8">
         <Leaders rows={data?.leaders ?? []} department={f.dept ? departments.find((d) => String(d.id) === f.dept)?.version.name : undefined} />
 
         <Section title="任职台账">
           <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="姓名、拼音码、代码、工号或部门名称" />}>
-            <FilterPill
-              label="任职部门"
-              icon={UserGroupIcon}
-              value={f.dept}
-              onChange={(v) => f.set('dept', v)}
-              options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
-            />
             <FilterPill
               label="职务"
               icon={Briefcase01Icon}
@@ -148,14 +154,15 @@ export function PersonDutiesPage() {
           ) : (
             <DbTable
               columns={[
+                // SC-15：任职部门 / 职务与方式 / 人员（代码在辅助行）/ 当前主部门 / 任用主体与类型 / 任职期间 / 依据 / 来源申请与行内动作
                 { label: '任职部门', icon: UserGroupIcon, sortKey: 'dept', className: 'min-w-32' },
-                { label: '职务', icon: Briefcase01Icon, sortKey: 'duty' },
-                { label: '姓名', icon: TextFontIcon, sortKey: 'name', className: 'min-w-28' },
-                { label: '主部门', icon: UserGroupIcon, sortKey: 'primary' },
-                { label: '任用', icon: Hospital01Icon },
+                { label: '职务与方式', icon: Briefcase01Icon, sortKey: 'duty' },
+                { label: '人员', icon: TextFontIcon, sortKey: 'name', className: 'min-w-28' },
+                { label: '当前主部门', icon: UserGroupIcon, sortKey: 'primary' },
+                { label: '任用主体与类型', icon: Hospital01Icon },
                 { label: '任职期间', icon: Calendar03Icon, sortKey: 'from' },
-                { label: '依据' },
-                { label: '申请' },
+                { label: '依据', className: 'min-w-40' },
+                { label: '来源申请' },
               ]}
               sort={sort}
               onSort={(key) => setSort(nextSort(sort, key))}
@@ -204,10 +211,12 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
         </span>
       </DbCell>
       <DbCell className="whitespace-nowrap">
-        <Link className="text-fg-strong hover:underline" to={`/persons/${r.person_id}`}>
-          {r.person_name}
-        </Link>
-        <span className="text-fg-muted ml-1.5 font-mono text-caption">{r.person_code}</span>
+        <span className="grid gap-0.5">
+          <Link className="text-fg-strong hover:underline" to={`/persons/${r.person_id}`}>
+            {r.person_name}
+          </Link>
+          <span className="text-fg-muted font-mono text-caption select-all">{r.person_code}</span>
+        </span>
       </DbCell>
       <DbCell className="whitespace-nowrap">
         {r.primary_department ? (
@@ -228,8 +237,8 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
         </span>
       </DbCell>
       <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(r.valid_from, r.valid_to)}</DbCell>
-      <DbCell className="max-w-56 truncate">
-        <DutyBasis note={r.basis_note} />
+      <DbCell className="max-w-56">
+        <DutyBasis note={r.basis_note} expandable />
       </DbCell>
       <DbCell className="whitespace-nowrap">
         <ChangeLink id={r.change_id} />
@@ -246,8 +255,12 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
 
 /** 负责人一览：有负责人的部门一张小卡；未登记负责人的部门收成一组虚线小标签。
  *  只受“任职部门”筛选影响（职务、方式、检索词、含计划只作用于下方台账） */
+const LEADER_FOLD = 9
+
 function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department?: string }) {
   const { asOf } = useApp()
+  // 部门多时负责人卡片默认折叠，不把台账挤出几屏；折叠只影响展示，统计不变（SC-15）
+  const [allShown, setAllShown] = useState(false)
   const filled = rows.filter((r) => r.heads.length > 0)
   const vacant = rows.filter((r) => r.heads.length === 0)
   const presiding = filled.filter((r) => r.heads.some((h) => h.mode !== 'FORMAL'))
@@ -262,9 +275,10 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department
       title={`部门负责人（${asOf}）`}
       action={<span className="text-fg-muted text-caption">{department ? `范围：${department}` : '范围：全院'} · 只看当天，不受职务、方式、检索与“含计划”影响</span>}
     >
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      {/* 一个容器、分隔线隔开的连续统计条（R-VIS 03） */}
+      <div className="border-line-subtle divide-line-subtle grid grid-cols-2 divide-x rounded-lg border sm:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="border-line-subtle rounded-md border px-3 py-2">
+          <div key={s.label} className="px-4 py-3">
             <div className="text-fg-muted text-caption">{s.label}</div>
             <div className={cn('text-lg font-semibold tabular-nums', s.warn ? 'text-warning-text' : 'text-fg-strong')}>{s.value}</div>
           </div>
@@ -272,7 +286,7 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department
       </div>
       {filled.length > 0 && (
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {filled.map((r) => (
+          {(allShown ? filled : filled.slice(0, LEADER_FOLD)).map((r) => (
             <div key={r.department.id} className="border-line-subtle bg-surface-subtle grid gap-1 rounded-md border px-3 py-2">
               <Link className="text-fg-strong truncate text-xs font-medium hover:underline" to={`/departments/${r.department.id}`}>
                 {r.department.name}
@@ -283,6 +297,11 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department
             </div>
           ))}
         </div>
+      )}
+      {filled.length > LEADER_FOLD && (
+        <Button variant="ghost" size="sm" className="text-fg-muted justify-self-start" onClick={() => setAllShown(!allShown)}>
+          {allShown ? '收起' : `展开全部 ${filled.length} 个有负责人的部门`}
+        </Button>
       )}
       {vacant.length > 0 && (
         <div className="grid gap-1.5">

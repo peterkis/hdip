@@ -322,7 +322,7 @@ function Overview() {
               value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法）',
             },
             { label: '组件底层', icon: Layers01Icon, value: 'shadcn/ui Base UI（base-mira）+ hugeicons' },
-            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0 规范接入、U1 变更申请列表；其他页面按 U2 → U3 迁移）' },
+            { label: '更新', icon: Calendar03Icon, value: '2026-10-24（U0 规范接入、U1 变更申请列表、U2 全部列表页；详情与表单待 U3）' },
           ]}
         />
       </div>
@@ -350,13 +350,13 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-LAY 页面外框',
     target: 'work 净宽 ≤1440 / document ≤900 / canvas 不设上限；共享 gutter 24（<768 为 16）',
     stage: 'done',
-    note: 'U1：变更申请列表已接入 work 外框，顶栏、页头、状态导航、列表共用左边线；其他页面待 U2，仍是旧外框（正文 64px、顶栏 12px）',
+    note: 'U1 变更申请列表；U2 部门、服务单元、主体、院区、分类方案、编码映射台账、人员名册、部门任职都已接入 work 外框；详情页待 U3，仍是旧外框',
   },
   {
     rule: 'R-TYP 工作页标题',
     target: '24/32 · 600 · 字距 0',
     stage: 'done',
-    note: 'PageHeader work（U1 起用于变更申请列表）；其他页面待迁移',
+    note: 'PageHeader work：U1、U2 的全部列表页；详情页（文档标题 32/40）待 U3',
     sample: <span className="text-fg-strong text-work-title font-semibold">变更申请</span>,
   },
   {
@@ -375,8 +375,8 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
   {
     rule: 'R-ROW 行高',
     target: '标准行 ≥44 / 显式紧凑 ≥36 / 双行工作列表 ≥64；表头 36；单元格内边距 12',
-    stage: 'ready',
-    note: '现有 DbCell 为 36px 且带竖线；U2 起按用途改为显式模式',
+    stage: 'done',
+    note: 'U2：声明了外框的页面里，DbTable 自动用规范行高（表头 36、行 ≥44、单元格左右 12）；未迁移的详情页仍是 36px 旧样式',
     sample: (
       <span className="grid w-56 gap-1">
         <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-row-height-compact) items-center border px-(--hd-cell-padding-x) text-caption">紧凑 36</span>
@@ -400,8 +400,8 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
   {
     rule: 'R-ROW 表格边线',
     target: '默认只用横线；矩阵、逐列对照显式启用竖线',
-    stage: 'todo',
-    note: 'U2：DbTable 增加用途模式；本页“表格”一节仍是旧样式',
+    stage: 'done',
+    note: 'U2：列表页只用横线，variant="compare" 才画竖线；详情页（U3）与本页“表格”一节仍是旧样式'
   },
   {
     rule: 'R-COL 主按钮状态色',
