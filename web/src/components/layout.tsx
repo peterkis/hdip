@@ -12,7 +12,7 @@ import {
   UnfoldMoreIcon,
 } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation } from 'react-router'
 import { useListChangeRequests } from '@/api/generated/changes/changes'
 import { useListUsers } from '@/api/generated/meta/meta'
@@ -28,15 +28,47 @@ import { setTheme, useTheme } from '@/lib/theme'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
+const NARROW = '(max-width: 767px)'
+
+/** 窄屏（< 768px）：侧栏浮在正文上，不挤压正文 */
+function useNarrow() {
+  return useSyncExternalStore(
+    (l) => {
+      const m = window.matchMedia(NARROW)
+      m.addEventListener('change', l)
+      return () => m.removeEventListener('change', l)
+    },
+    () => window.matchMedia(NARROW).matches,
+  )
+}
+
 export function Layout() {
-  // 窄屏（< 768px）默认收起侧栏
-  const [collapsed, setCollapsed] = useState(() => window.matchMedia('(max-width: 767px)').matches)
+  const narrow = useNarrow()
+  // 窄屏默认收起侧栏
+  const [collapsed, setCollapsed] = useState(() => window.matchMedia(NARROW).matches)
+  const { pathname } = useLocation()
+  // 窄屏点了导航就收起，回到正文
+  useEffect(() => {
+    if (narrow) setCollapsed(true)
+  }, [pathname, narrow])
   return (
     <CrumbProvider>
       <div className="bg-surface-page text-fg flex h-svh">
-        {!collapsed && <Sidebar onCollapse={() => setCollapsed(true)} />}
+        {!collapsed &&
+          (narrow ? (
+            <div className="fixed inset-0 z-40 flex">
+              <Sidebar onCollapse={() => setCollapsed(true)} overlay />
+              <button
+                aria-label="收起侧栏"
+                className="bg-surface-overlay flex-1"
+                onClick={() => setCollapsed(true)}
+              />
+            </div>
+          ) : (
+            <Sidebar onCollapse={() => setCollapsed(true)} />
+          ))}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+          <Topbar collapsed={collapsed || narrow} onExpand={() => setCollapsed(false)} />
           <main className="flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-(--hd-page-wide-max-width) px-(--hd-page-padding-x-narrow) pt-8 pb-24 lg:px-(--hd-space-64)">
               <Outlet />
@@ -49,11 +81,16 @@ export function Layout() {
 }
 
 // ================================================================== 侧栏
-function Sidebar({ onCollapse }: { onCollapse: () => void }) {
+function Sidebar({ onCollapse, overlay }: { onCollapse: () => void; overlay?: boolean }) {
   const { data: submitted = [] } = useListChangeRequests({ status: 'submitted' })
   const counts: Record<string, number> = { '/changes': submitted.length }
   return (
-    <aside className="bg-surface-sidebar border-line-subtle group/sidebar flex w-(--hd-sidebar-width) shrink-0 flex-col border-r">
+    <aside
+      className={cn(
+        'bg-surface-sidebar border-line-subtle group/sidebar flex w-(--hd-sidebar-width) shrink-0 flex-col border-r',
+        overlay && 'shadow-lg',
+      )}
+    >
       <div className="flex h-(--hd-topbar-height) shrink-0 items-center gap-1 px-2">
         <Link
           to="/"
@@ -68,7 +105,11 @@ function Sidebar({ onCollapse }: { onCollapse: () => void }) {
           variant="ghost"
           size="icon-sm"
           aria-label="收起侧栏"
-          className="text-fg-muted opacity-0 group-hover/sidebar:opacity-100 focus-visible:opacity-100"
+          className={cn(
+            'text-fg-muted',
+            // 触屏没有悬停，浮层侧栏的收起按钮常显
+            !overlay && 'opacity-0 group-hover/sidebar:opacity-100 focus-visible:opacity-100',
+          )}
           onClick={onCollapse}
         >
           <Icon icon={SidebarLeftIcon} />
