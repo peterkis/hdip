@@ -237,8 +237,6 @@
   --hd-type-heading-size: var(--hd-size-400);   /* 区块标题 */
   --hd-type-heading-leading: 1.75rem;
   --hd-type-heading-tracking: -0.015625rem;
-  --hd-type-headline-size: var(--hd-size-500);  /* 工作类页面的标题（列表、台账），比文档式页面小一号 */
-  --hd-type-headline-leading: 2.125rem;
   --hd-type-title-size: var(--hd-size-600);     /* 页面标题 */
   --hd-type-title-leading: 2.5rem;
   --hd-type-title-tracking: -0.046875rem;

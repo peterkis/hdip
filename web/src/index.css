@@ -26,8 +26,6 @@
   --text-base--line-height: var(--hd-type-body-leading);
   --text-lg: var(--hd-type-heading-size);
   --text-lg--line-height: var(--hd-type-heading-leading);
-  --text-headline: var(--hd-type-headline-size);
-  --text-headline--line-height: var(--hd-type-headline-leading);
   /* 统一规范 v1.0 新增的文字角色（U0）：字号类只管大小与行高，字重另用 font-semibold */
   --text-work-title: var(--hd-type-work-title-size);
   --text-work-title--line-height: var(--hd-type-work-title-leading);
