@@ -45,7 +45,8 @@ export function FilterPill({
   onChange: (value: string) => void
   icon?: AppIcon
 }) {
-  const selected = options.find((o) => o.value === value)
+  // 值不在选项里（网址里的旧 id、选项还没加载）也要显示出来并可清除：不让看不见的条件悄悄生效（SC-06）
+  const selected = options.find((o) => o.value === value) ?? (value ? { value, label: options.length ? `${value}（不在当前选项中）` : '…' } : undefined)
   return (
     <span className="inline-flex items-center">
       <span className={cn(pill, selected ? pillActive : pillIdle, selected && 'rounded-r-none pr-1.5')}>

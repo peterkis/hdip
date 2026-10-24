@@ -4,10 +4,7 @@ import {
   Add01Icon,
   Building03Icon,
   Calendar03Icon,
-  Clock01Icon,
   Download01Icon,
-  GridViewIcon,
-  HashtagIcon,
   Hospital01Icon,
   ListViewIcon,
   Loading03Icon,
@@ -38,7 +35,7 @@ import {
   type DbColumn,
 } from '@/components/kit/database'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
@@ -48,15 +45,15 @@ import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { indexDepartments, NO_CLASS } from '@/lib/org-overview'
 
+// 统一规范 v1.0 SC-06：名称（代码在辅助行）/ 类型 / 所属部门 / 院区 / 运营主体 / 状态 / 业务期间
 const COLUMNS: DbColumn[] = [
   { label: '名称', icon: TextFontIcon, className: 'min-w-56' },
-  { label: '代码', icon: HashtagIcon },
   { label: '类型', icon: ListViewIcon },
   { label: '所属部门', icon: UserGroupIcon },
   { label: '院区', icon: Building03Icon },
   { label: '运营主体', icon: Hospital01Icon },
   { label: '状态', icon: Loading03Icon },
-  { label: '期间', icon: Calendar03Icon },
+  { label: '业务期间', icon: Calendar03Icon },
 ]
 
 /** 地址栏里的筛选条件；空串 = 不筛 */
@@ -92,11 +89,15 @@ function useFilters() {
 }
 
 export function ServiceUnitsPage() {
+  usePageFrame('work')
   const { asOf, unitTypeOptions, optionLabels } = useApp()
   const { isMaintainer } = useMe()
   const f = useFilters()
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
+  // 运营主体、主分类放“更多筛选”；设了值就一直展开，不让隐藏的条件悄悄生效
+  const [more, setMore] = useState(false)
+  const showMore = more || !!f.inst || !!f.cls
 
   const { data: campuses = [] } = useListCampuses({ as_of: asOf })
   const { data: departments = [] } = useListDepartments({ as_of: asOf })
@@ -141,7 +142,7 @@ export function ServiceUnitsPage() {
   return (
     <>
       <PageHeader
-        icon={GridViewIcon}
+        work
         title="服务单元"
         description={`部门 × 院区 × 运营主体 × 期间。按 ${asOf} 当天有效的版本显示。`}
         actions={
@@ -150,7 +151,7 @@ export function ServiceUnitsPage() {
               variant="ghost"
               disabled={exporting.isPending}
               onClick={() => exporting.mutate()}
-              title="导出当天已生效的全部单元（含暂停，不含计划中与已退出）"
+              title="导出当天已生效的全部单元（含暂停，不含计划中与已退出），不按页面筛选"
             >
               <Icon icon={Download01Icon} inline="start" />
               导出 CSV
@@ -158,7 +159,7 @@ export function ServiceUnitsPage() {
             {isMaintainer && (
               <Button onClick={() => setCreating(true)}>
                 <Icon icon={Add01Icon} inline="start" />
-                新建
+                新建服务单元
               </Button>
             )}
           </>
@@ -182,20 +183,6 @@ export function ServiceUnitsPage() {
         />
         {f.dept && <ToggleChip label="含下级部门" checked={f.sub} onChange={(v) => f.set('sub', v ? '1' : '')} />}
         <FilterPill
-          label="主分类"
-          icon={ListViewIcon}
-          value={f.cls}
-          onChange={(v) => f.set('cls', v)}
-          options={classOptions}
-        />
-        <FilterPill
-          label="运营主体"
-          icon={Hospital01Icon}
-          value={f.inst}
-          onChange={(v) => f.set('inst', v)}
-          options={institutions.map((i) => ({ value: String(i.id), label: i.version.name }))}
-        />
-        <FilterPill
           label="类型"
           icon={ListViewIcon}
           value={f.type}
@@ -209,6 +196,22 @@ export function ServiceUnitsPage() {
           onChange={(v) => f.set('status', v)}
           options={Object.entries(UNIT_STATUS).map(([value, label]) => ({ value, label }))}
         />
+        {showMore ? (
+          <>
+            <FilterPill
+              label="运营主体"
+              icon={Hospital01Icon}
+              value={f.inst}
+              onChange={(v) => f.set('inst', v)}
+              options={institutions.map((i) => ({ value: String(i.id), label: i.version.name }))}
+            />
+            <FilterPill label="主分类" icon={ListViewIcon} value={f.cls} onChange={(v) => f.set('cls', v)} options={classOptions} />
+          </>
+        ) : (
+          <Button variant="ghost" size="sm" className="text-fg-muted" onClick={() => setMore(true)}>
+            更多筛选
+          </Button>
+        )}
         <ToggleChip label="含计划中" checked={f.future} onChange={(v) => f.set('future', v ? '' : '0')} />
         {f.active && (
           <Button variant="ghost" size="sm" className="text-fg-muted" onClick={f.clear}>
@@ -219,8 +222,9 @@ export function ServiceUnitsPage() {
 
       {!isPending && rows.length === 0 ? (
         <DbEmpty
-          title={units.length === 0 ? `${asOf} 没有服务单元` : '没有符合条件的服务单元'}
-          hint={units.length === 0 ? '新建服务单元后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
+          // 院区、部门、主体在服务端筛：有条件时是“筛选无结果”，不能说成当天没有单元（R-STATE）
+          title={f.active || query ? '没有符合条件的服务单元' : `${asOf} 没有服务单元`}
+          hint={f.active || query ? '换个筛选条件或搜索词试试。' : '新建服务单元后经提交、确认才会出现在这里。'}
           action={
             (f.active || query) && (
               <Button
@@ -250,6 +254,7 @@ export function ServiceUnitsPage() {
           {rows.length !== units.length && `（筛选自 ${units.length} 个）`}
         </span>
         <span>“在运营”= 当天有有效版本，含暂停；已退出的不显示</span>
+        <span>导出 CSV 是查看日期当天已生效的全部单元（含暂停，不含计划中与已退出），不按页面筛选</span>
       </DbFooter>
 
       {creating && <UnitCreateDialog open onOpenChange={setCreating} />}
@@ -262,28 +267,33 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
   return (
     <DbRow>
       <DbCell>
-        <span className="flex items-center gap-2">
-          <Link
-            to={`/service-units/${u.id}`}
-            className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
-          >
-            {v.name}
-          </Link>
-          {u.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
-          {u.has_later_versions && (
-            <span title="之后还有已确认的版本" className="text-fg-muted inline-flex">
-              <Icon icon={Clock01Icon} className="size-3.5" strokeWidth={1.75} />
-            </span>
-          )}
+        <span className="grid gap-0.5">
+          <span className="flex items-center gap-2">
+            <Link
+              to={`/service-units/${u.id}`}
+              className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
+            >
+              {v.name}
+            </Link>
+            {u.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
+          </span>
+          <span className="text-fg-muted text-caption whitespace-nowrap">
+            <span className="font-mono select-all">{u.code}</span>
+            {/* 后续版本用文字说明，不只放一个时钟图标（SC-06） */}
+            {u.has_later_versions && <> · 之后有已确认的新版本</>}
+          </span>
         </span>
       </DbCell>
-      <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{u.code}</DbCell>
       <DbCell className="whitespace-nowrap">{typeName}</DbCell>
       <DbCell className="whitespace-nowrap">
         <Link to={`/departments/${v.department_id}`} className="hover:underline">
           {v.department_name}
         </Link>
-        {v.department_lifecycle !== 'ACTIVE' && <span className="text-danger-text ml-1.5 text-caption">部门非正式履职</span>}
+        {v.department_lifecycle !== 'ACTIVE' && (
+          <Tag tone="orange" className="ml-1.5">
+            部门非正式履职
+          </Tag>
+        )}
       </DbCell>
       <DbCell className="whitespace-nowrap">
         <Link to={`/campuses/${v.campus_id}`} className="hover:underline">
@@ -294,8 +304,8 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
       <DbCell>
         <Tag tone={UNIT_STATUS_TONE[v.status]}>{UNIT_STATUS[v.status as UnitStatus] ?? v.status}</Tag>
       </DbCell>
-      <DbCell className="text-fg-secondary whitespace-nowrap">
-        {v.valid_from} → {v.valid_to ?? '长期'}
+      <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">
+        {v.valid_from} 至 {v.valid_to ?? '长期'}
       </DbCell>
     </DbRow>
   )
