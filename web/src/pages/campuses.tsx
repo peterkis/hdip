@@ -24,7 +24,7 @@ import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { RelationsTable } from '@/components/relations-table'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
@@ -33,25 +33,27 @@ import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period, type OperatingStatus } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
+import { cn } from '@/lib/utils'
 import { PLANNED_TONE } from '@/lib/tones'
 
 export function CampusesPage() {
+  usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListCampuses({ as_of: asOf })
   const [creating, setCreating] = useState(false)
 
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={Building03Icon}
+        work
         title="院区"
         description="院区不等于法人；由哪个主体运营，看运营关系。筹建中的院区也在这里，标出开始日。"
         actions={
           isMaintainer && (
             <Button onClick={() => setCreating(true)}>
               <Icon icon={Add01Icon} inline="start" />
-              新建
+              新建院区
             </Button>
           )
         }
@@ -59,10 +61,10 @@ export function CampusesPage() {
       {!isPending && rows.length === 0 ? (
         <DbEmpty title={`${asOf} 没有院区`} hint="新建院区后经提交、确认才会出现在这里。" />
       ) : (
+        // 统一规范 v1.0 SC-09：院区名称（代码 / 对外称谓在辅助行）/ 运营状态 / 主要运营方 / 地址 / 版本期间
         <DbTable
           columns={[
             { label: '名称', icon: TextFontIcon, className: 'min-w-44' },
-            { label: '代码', icon: HashtagIcon },
             { label: '运营状态', icon: Loading03Icon },
             { label: '主要运营方', icon: Hospital01Icon },
             { label: '地址', icon: Location01Icon },
@@ -72,16 +74,20 @@ export function CampusesPage() {
           {rows.map((r) => (
             <DbRow key={r.id}>
               <DbCell>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/campuses/${r.id}`}>
-                    {r.version.name}
-                  </Link>
-                  {r.version.public_name && <span className="text-fg-muted text-caption">对外称 {r.version.public_name}</span>}
-                  {r.not_yet_effective && <Tag tone={PLANNED_TONE}>{r.version.valid_from} 起</Tag>}
-                  {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
+                <span className="grid gap-0.5">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/campuses/${r.id}`}>
+                      {r.version.name}
+                    </Link>
+                    {r.not_yet_effective && <Tag tone={PLANNED_TONE}>{r.version.valid_from} 起</Tag>}
+                    {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
+                  </span>
+                  <span className="text-fg-muted text-caption">
+                    <span className="font-mono select-all">{r.code}</span>
+                    {r.version.public_name && <> · 对外称 {r.version.public_name}</>}
+                  </span>
                 </span>
               </DbCell>
-              <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{r.code}</DbCell>
               <DbCell>
                 <OperatingStatusBadge status={r.version.operating_status} />
               </DbCell>
@@ -91,11 +97,13 @@ export function CampusesPage() {
                     {r.primary_operator.name}
                   </Link>
                 ) : (
-                  <span className="text-fg-disabled">—</span>
+                  <span className="text-fg-muted">未登记</span>
                 )}
               </DbCell>
-              <DbCell className="text-fg-secondary max-w-56 truncate">{r.version.address ?? <span className="text-fg-disabled">—</span>}</DbCell>
-              <DbCell className="text-fg-secondary whitespace-nowrap">{period(r.version.valid_from, r.version.valid_to)}</DbCell>
+              <DbCell className="text-fg-secondary max-w-64">
+                {r.version.address ? <ExpandableText text={r.version.address} /> : <span className="text-fg-muted">未登记</span>}
+              </DbCell>
+              <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(r.version.valid_from, r.version.valid_to)}</DbCell>
             </DbRow>
           ))}
         </DbTable>
@@ -107,7 +115,23 @@ export function CampusesPage() {
         <span>显示 {asOf} 当天有效的版本；尚未开始的院区显示最早的计划版本</span>
       </DbFooter>
       {creating && <CampusCreateDialog open onOpenChange={setCreating} />}
-    </div>
+    </>
+  )
+}
+
+/** 长文本默认一行截断，点一下展开全文（键盘、触屏都可用，不只靠悬停；R-TYP 3.4） */
+function ExpandableText({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={() => setOpen(!open)}
+      className={cn('block w-full text-left', open ? 'whitespace-normal' : 'truncate')}
+      title={open ? '收起' : '展开全文'}
+    >
+      {text}
+    </button>
   )
 }
 

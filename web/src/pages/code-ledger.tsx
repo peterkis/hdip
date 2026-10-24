@@ -428,7 +428,7 @@ function SourceSystemsDialog({ systems, onClose }: { systems: SourceSystemOut[];
               关闭
             </Button>
             <Button type="submit" disabled={createSystem.isPending || createNs.isPending}>
-              保存
+              保存配置
             </Button>
           </DialogFooter>
         </form>

@@ -1,6 +1,6 @@
 // 分类方案（配置字典）：维护人可直接修改，不经变更申请、不需确认；记录维护人与时间。
 // 代码值不可改，不删除只停用。部门上的分类“赋值”仍在部门页经变更申请。
-import { Add01Icon, Tag01Icon } from '@hugeicons/core-free-icons'
+import { Add01Icon } from '@hugeicons/core-free-icons'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, type FormEvent } from 'react'
 import {
@@ -16,7 +16,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { stamp } from '@/lib/format'
@@ -29,14 +29,16 @@ import { cn } from '@/lib/utils'
 const FOLD = 12
 
 export function DictionaryPage() {
+  usePageFrame('work')
   const { data: schemes = [] } = useListClassificationSchemes()
   const { me } = useMe()
   const canEdit = me?.permissions.includes('dictionary.maintain') ?? false
   const [creating, setCreating] = useState(false)
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       {creating && <SchemeDialog scheme={null} onClose={() => setCreating(false)} />}
       <PageHeader
+        work
         actions={
           canEdit && (
             <Button onClick={() => setCreating(true)}>
@@ -45,16 +47,17 @@ export function DictionaryPage() {
             </Button>
           )
         }
-        icon={Tag01Icon} title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
-      <Callout className="mb-6" title="这是配置字典，保存即生效">
-        有“维护分类字典”权限（维护人）即可直接修改，不需确认；每次修改记下维护人与时间。代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请；部门分类不会自动下发给服务单元。
+        title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
+      {/* SC-12：轻量说明配置的保存语义；对象的分类赋值仍在对象页经变更申请 */}
+      <Callout className="mb-6" title="配置字典：保存即生效，不经变更申请">
+        维护人直接修改并记下维护人与时间；代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请。
       </Callout>
-      <div className="grid gap-10">
+      <div className="grid gap-8">
         {schemes.map((s) => (
           <SchemeSection key={s.id} scheme={s} canEdit={canEdit} />
         ))}
       </div>
-    </div>
+    </>
   )
 }
 
@@ -67,14 +70,15 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
   return (
     <section className="grid gap-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-fg-strong text-lg font-semibold">
+        {/* SC-12：方案名称 + 版本 + 单 / 多选 → 用于部门 / 服务单元的含义 → 用途边界 */}
+        <div className="grid gap-1">
+          <h2 className="text-fg-strong text-section font-semibold">
             {scheme.name} <span className="text-fg-muted text-xs font-normal">{scheme.version} · {scheme.is_exclusive ? '单选' : '可多选'}</span>
           </h2>
-          {scheme.purpose && <p className="text-fg-secondary text-xs">{scheme.purpose}</p>}
-          <p className="text-fg-muted text-caption">
+          <p className="text-fg-secondary text-xs">
             用于部门：{scheme.meaning_for_department ?? '不适用'} · 用于服务单元：{scheme.meaning_for_unit ?? '不适用'}
           </p>
+          {scheme.purpose && <p className="text-fg-muted text-caption">{scheme.purpose}</p>}
         </div>
         {canEdit && (
           <span className="flex gap-2">
@@ -90,8 +94,7 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
       </div>
       <DbTable
         columns={[
-          { label: '名称', className: 'min-w-32' },
-          { label: '代码' },
+          { label: '名称 / 代码', className: 'min-w-32' },
           { label: '按什么判断', className: 'min-w-56' },
           { label: '需要防止的误判', className: 'min-w-56' },
           { label: '最近维护' },
@@ -101,10 +104,14 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
         {shown.map((c) => (
           <DbRow key={c.id} className={cn(!c.is_active && 'text-fg-muted')}>
             <DbCell className="whitespace-nowrap">
-              <Tag tone={c.is_active ? (MAIN_CLASS_TONE[c.code] ?? 'gray') : 'gray'}>{c.name}</Tag>
-              {!c.is_active && <span className="text-fg-muted ml-2 text-caption">已停用</span>}
+              <span className="grid justify-items-start gap-0.5">
+                <span>
+                  <Tag tone={c.is_active ? (MAIN_CLASS_TONE[c.code] ?? 'gray') : 'gray'}>{c.name}</Tag>
+                  {!c.is_active && <span className="text-fg-muted ml-2 text-caption">已停用（历史引用仍可读）</span>}
+                </span>
+                <span className="text-fg-muted font-mono text-caption select-all">{c.code}</span>
+              </span>
             </DbCell>
-            <DbCell className="text-fg-secondary font-mono text-caption">{c.code}</DbCell>
             <DbCell className="py-2 whitespace-normal">{c.criterion ?? '—'}</DbCell>
             <DbCell className="text-fg-secondary py-2 whitespace-normal">{c.caution ?? '—'}</DbCell>
             <DbCell className="text-fg-muted text-caption whitespace-nowrap">
@@ -228,7 +235,7 @@ function CodeDialog({ scheme, code, onClose }: { scheme: ClassificationSchemeOut
               取消
             </Button>
             <Button type="submit" disabled={update.isPending || create.isPending}>
-              保存
+              保存配置
             </Button>
           </DialogFooter>
         </form>
@@ -335,7 +342,7 @@ function SchemeDialog({ scheme, onClose }: { scheme: ClassificationSchemeOut | n
               取消
             </Button>
             <Button type="submit" disabled={create.isPending || update.isPending}>
-              保存
+              保存配置
             </Button>
           </DialogFooter>
         </form>

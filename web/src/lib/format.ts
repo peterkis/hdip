@@ -183,7 +183,8 @@ export function today(): string {
 export function period(from: string, to: string | null | undefined): string {
   // 结束日早于开始日 = 生效前已被更正的版本，从未生效
   if (to && to < from) return `${from} 起（生效前已更正，未生效）`
-  return `${from} ~ ${to ?? '长期'}`
+  // 统一规范 R-DAT 8.1：“YYYY-MM-DD 至 YYYY-MM-DD”，空结束日为长期有效
+  return `${from} 至 ${to ?? '长期'}`
 }
 
 /** 不带时区的时间戳，原样显示到分钟。 */

@@ -10,7 +10,7 @@ import { Missing } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { OperatorFlow } from '@/components/operator-flow'
 import { RelationsTable } from '@/components/relations-table'
 import { useCrumb } from '@/components/shell/crumbs'
@@ -22,22 +22,23 @@ import { useMe } from '@/lib/use-me'
 import { PLANNED_TONE } from '@/lib/tones'
 
 export function InstitutionsPage() {
+  usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
   const { data: rows = [], isPending } = useListInstitutions({ as_of: asOf })
   const [creating, setCreating] = useState(false)
 
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={Hospital01Icon}
+        work
         title="主体"
         description="法人或登记主体。主体不设业务状态，终止关系通过关闭运营关系表达。"
         actions={
           isMaintainer && (
             <Button onClick={() => setCreating(true)}>
               <Icon icon={Add01Icon} inline="start" />
-              新建
+              新建主体
             </Button>
           )
         }
@@ -45,10 +46,10 @@ export function InstitutionsPage() {
       {!isPending && rows.length === 0 ? (
         <DbEmpty title={`${asOf} 没有主体`} hint="初始导入也作为一张变更申请，提交并确认一次。" />
       ) : (
+        // 统一规范 v1.0 SC-08：名称（管理代码在辅助行）/ 主体性质 / 统一社会信用代码 / 版本期间
         <DbTable
           columns={[
             { label: '名称', icon: TextFontIcon, className: 'min-w-48' },
-            { label: '代码', icon: HashtagIcon },
             { label: '主体性质', icon: LicenseIcon },
             { label: '统一社会信用代码', icon: HashtagIcon },
             { label: '版本期间', icon: Calendar03Icon },
@@ -57,21 +58,25 @@ export function InstitutionsPage() {
           {rows.map((r) => (
             <DbRow key={r.id}>
               <DbCell>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <Link
-                    className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline"
-                    to={`/institutions/${r.id}`}
-                  >
-                    {r.version.name}
-                  </Link>
-                  {r.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
-                  {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
+                <span className="grid gap-0.5">
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Link
+                      className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline"
+                      to={`/institutions/${r.id}`}
+                    >
+                      {r.version.name}
+                    </Link>
+                    {r.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
+                    {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
+                  </span>
+                  <span className="text-fg-muted font-mono text-caption select-all">{r.code}</span>
                 </span>
               </DbCell>
-              <DbCell className="text-fg-secondary font-mono text-caption whitespace-nowrap">{r.code}</DbCell>
               <DbCell className="whitespace-nowrap">{formatValue('nature', r.version.nature)}</DbCell>
-              <DbCell className="font-mono text-caption whitespace-nowrap">{formatValue('unified_credit_code', r.version.unified_credit_code)}</DbCell>
-              <DbCell className="text-fg-secondary whitespace-nowrap">{period(r.version.valid_from, r.version.valid_to)}</DbCell>
+              <DbCell className="font-mono text-caption whitespace-nowrap select-all">
+                {r.version.unified_credit_code ?? <span className="text-fg-muted font-sans">未登记</span>}
+              </DbCell>
+              <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(r.version.valid_from, r.version.valid_to)}</DbCell>
             </DbRow>
           ))}
         </DbTable>
@@ -84,7 +89,7 @@ export function InstitutionsPage() {
       </DbFooter>
 
       {creating && <InstitutionCreateDialog open onOpenChange={setCreating} />}
-    </div>
+    </>
   )
 }
 
