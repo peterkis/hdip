@@ -341,9 +341,11 @@
   --hd-chart-red: var(--hd-red-500);
   --hd-chart-neutral: var(--hd-gray-600);
 
-  --hd-accent: var(--hd-blue-500);
-  --hd-accent-hover: var(--hd-blue-400);
-  --hd-accent-pressed: var(--hd-blue-300);
+  /* 深色主按钮用浅色阶 + 深色文字（统一规范 R-COL 4.3：blue-300 / 200 / 400，前景 gray-900，均 ≥4.5:1） */
+  --hd-accent: var(--hd-blue-300);
+  --hd-accent-hover: var(--hd-blue-200);
+  --hd-accent-pressed: var(--hd-blue-400);
+  --hd-text-on-accent: var(--hd-gray-900);
   --hd-accent-soft: #0b3a63;
   --hd-accent-muted: #10263b;
   --hd-accent-text: var(--hd-blue-400);
@@ -375,11 +377,13 @@
   --hd-elevation-dialog: 0 0 0 1px var(--hd-alpha-white-100), 0 16px 48px #00000080;
 }
 
-/* ============================================================ 强调色替换示例 */
+/* ============================================================ 强调色替换示例
+ * 主按钮三态按统一规范 R-COL 4.3：浅色 600 / 700 / 800 + 白字；深色 300 / 200 / 400 + gray-900 字。
+ * 深色与强调色的组合单独声明（.dark[data-accent=…]），否则后写的浅色强调会盖住深色主题。 */
 [data-accent="purple"] {
-  --hd-accent: var(--hd-purple-500);
-  --hd-accent-hover: var(--hd-purple-600);
-  --hd-accent-pressed: var(--hd-purple-700);
+  --hd-accent: var(--hd-purple-600);
+  --hd-accent-hover: var(--hd-purple-700);
+  --hd-accent-pressed: var(--hd-purple-800);
   --hd-accent-soft: var(--hd-purple-200);
   --hd-accent-muted: var(--hd-purple-100);
   --hd-accent-text: var(--hd-purple-600);
@@ -393,4 +397,22 @@
   --hd-accent-muted: var(--hd-teal-100);
   --hd-accent-text: var(--hd-teal-600);
   --hd-focus-ring: var(--hd-teal-600);
+}
+.dark[data-accent="purple"] {
+  --hd-accent: var(--hd-purple-300);
+  --hd-accent-hover: var(--hd-purple-200);
+  --hd-accent-pressed: var(--hd-purple-400);
+  --hd-accent-soft: #3c2d49;
+  --hd-accent-muted: #2a2133;
+  --hd-accent-text: var(--hd-purple-300);
+  --hd-focus-ring: var(--hd-purple-300);
+}
+.dark[data-accent="teal"] {
+  --hd-accent: var(--hd-teal-300);
+  --hd-accent-hover: var(--hd-teal-200);
+  --hd-accent-pressed: var(--hd-teal-400);
+  --hd-accent-soft: #173f3d;
+  --hd-accent-muted: #12302e;
+  --hd-accent-text: var(--hd-teal-300);
+  --hd-focus-ring: var(--hd-teal-300);
 }

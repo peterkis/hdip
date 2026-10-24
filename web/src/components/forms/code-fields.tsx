@@ -14,7 +14,7 @@ export function AutoCodeField({ type, code, label = '代码' }: { type: CodeObje
   return (
     <Field>
       <FieldLabel>{label}</FieldLabel>
-      <div className="border-line bg-surface-subtle flex h-7 items-center rounded-md border px-2 text-xs">
+      <div className="border-line bg-surface-subtle flex h-(--hd-control-height) items-center rounded-md border px-2 text-xs">
         {assigned ? (
           <span className="text-fg-strong font-mono tracking-wide">{assigned}</span>
         ) : (

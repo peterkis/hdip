@@ -36,7 +36,7 @@ export function Segmented<T extends string>({
               aria-checked={on}
               onClick={() => onChange(o.value)}
               className={cn(
-                'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hd-focus-ring)',
+                'inline-flex h-(--hd-control-height) items-center gap-1.5 rounded-md border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--hd-focus-ring)',
                 on ? 'border-line bg-surface-page text-fg-strong font-medium' : 'text-fg-secondary hover:bg-surface-hover border-transparent',
               )}
             >

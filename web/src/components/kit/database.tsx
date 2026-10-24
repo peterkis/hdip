@@ -24,7 +24,7 @@ export function DbToolbar({ children, right }: { children?: ReactNode; right?: R
 }
 
 const pill =
-  'relative inline-flex h-7 items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast)'
+  'relative inline-flex h-(--hd-control-height) items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast)'
 const pillIdle = 'border-line text-fg-secondary hover:bg-surface-hover'
 const pillActive = 'border-transparent bg-brand-muted text-brand-text hover:bg-brand-soft'
 
@@ -96,7 +96,7 @@ export function ToggleChip({ label, checked, onChange }: { label: string; checke
 
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
+    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-(--hd-control-height) min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
       <Icon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
       <input
         type="search"

@@ -186,7 +186,7 @@ function Sidebar({ onCollapse, overlay }: { onCollapse: () => void; overlay?: bo
 }
 
 const sideItem =
-  'flex h-7 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-(--hd-duration-fast)'
+  'flex h-8 items-center gap-2 rounded-md px-2 text-xs transition-colors duration-(--hd-duration-fast)'
 
 /** 一个主题域分组：标题可折叠（Notion 侧栏分区）；没有条目的分组显示“规划中” */
 function SideGroup({ group, counts }: { group: NavGroup; counts: Record<string, number> }) {
@@ -393,7 +393,7 @@ function AsOfPicker() {
       )}
       <label
         className={cn(
-          'hover:bg-surface-hover flex h-7 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
+          'hover:bg-surface-hover flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
           // 不是今天时用黄色高亮（Notion 的标注色），提醒正在看另一天的数据
           !isToday && 'bg-tag-yellow-bg text-tag-yellow-text hover:bg-tag-yellow-bg',
         )}

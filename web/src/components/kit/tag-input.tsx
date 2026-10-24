@@ -42,7 +42,7 @@ export function TagInput({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <div className="border-input bg-input/20 focus-within:border-ring focus-within:ring-ring/30 flex min-h-7 flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 focus-within:ring-2">
+      <div className="border-input bg-input/20 focus-within:border-ring focus-within:ring-ring/30 flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 focus-within:ring-2">
         {value.map((t) => (
           <Tag key={t} tone="gray" className="gap-1 pr-0.5">
             {t}

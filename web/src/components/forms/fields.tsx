@@ -1,6 +1,7 @@
 // 表单小件：带标签的输入、日期、下拉。值统一用字符串，空串表示未填。
 // 校验：表单 build() 返回 FieldErrors 时，对应字段（按 name 对应）同时标红、说明写在字段下方，
-// 焦点落到第一个出错字段；用户一改动，该字段的标记即消除（见 item-dialog.tsx）。
+// 焦点落到第一个出错字段；改动后由 item-dialog.tsx 重新检查，通过了才消除该字段的标记。
+// 生效日期（name="effective_date"）未给提示时说明它的含义：从这天起，原来的到前一天为止（修订在 D 生效）。
 import { DateInput } from '@/components/kit/date-input'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
@@ -117,10 +118,12 @@ export function TextField({
           }}
         />
       )}
-      <Help error={f.error} hint={hint} />
+      <Help error={f.error} hint={hint ?? (type === 'date' && name === 'effective_date' ? EFFECTIVE_DATE_HINT : undefined)} />
     </Field>
   )
 }
+
+const EFFECTIVE_DATE_HINT = '自这一天起生效（含当天）；原来的状态到前一天为止。'
 
 export interface Option {
   value: string
