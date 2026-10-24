@@ -127,9 +127,9 @@ export function Layout() {
 
 // ================================================================== 侧栏
 function Sidebar({ onCollapse, overlay }: { onCollapse: () => void; overlay?: boolean }) {
-  // 角标 = 等你确认的申请（按确认规则，U1）；不是全部已提交的数量
+  // 角标 = 已提交的申请数（现有查询口径；统一规范 R-LAY 2.3：没有待办权限口径时不改称“我的待办”）
   const { data: submitted = [] } = useListChangeRequests({ status: 'submitted' })
-  const counts: Record<string, number> = { '/changes': submitted.filter((r) => r.waiting_for_me).length }
+  const counts: Record<string, number> = { '/changes': submitted.length }
   return (
     <aside
       className={cn(
@@ -412,28 +412,28 @@ export function PageHeader({
   description,
   actions,
   icon,
-  compact,
+  work,
 }: {
   title: ReactNode
   description?: ReactNode
   actions?: ReactNode
   icon?: AppIcon
-  /** 工作类页面（列表、台账）：标题小一号、不放大图标，标题与说明、工具栏、列表左边对齐（U1 试点） */
-  compact?: boolean
+  /** 工作页（统一规范 v1.0 C-02 / R-TYP）：标题 24/32·600、字距 0、不放大图标；与 usePageFrame('work') 一起用 */
+  work?: boolean
 }) {
   return (
-    <div className={cn('flex flex-wrap items-start justify-between gap-3', compact ? 'mb-5' : 'mb-6')}>
+    <div className={cn('flex flex-wrap items-start justify-between gap-3', work ? 'mb-4' : 'mb-6')}>
       <div className="min-w-0">
         <h1
           className={cn(
-            'text-fg-strong flex items-center gap-3 font-bold',
-            compact ? 'text-headline tracking-(--hd-type-heading-tracking)' : 'text-xl tracking-(--hd-type-title-tracking)',
+            'text-fg-strong flex items-center gap-3',
+            work ? 'text-work-title font-semibold tracking-(--hd-type-cjk-tracking)' : 'text-xl font-bold tracking-(--hd-type-title-tracking)',
           )}
         >
-          {icon && !compact && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
+          {icon && !work && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
           {title}
         </h1>
-        {description && <p className={cn('text-fg-secondary text-xs', compact ? 'mt-1.5' : 'mt-1')}>{description}</p>}
+        {description && <p className="text-fg-secondary mt-1 text-xs">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 pt-1.5">{actions}</div>}
     </div>

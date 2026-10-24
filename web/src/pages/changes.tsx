@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   cancelChangeRequest,
@@ -11,32 +11,21 @@ import {
   useGetChangeRequest,
   useListChangeRequests,
 } from '@/api/generated/changes/changes'
-import type { ChangeHeadline, ChangeRequestOut, ChangeRequestSummary, ItemOutcome } from '@/api/generated/model'
+import type { ChangeRequestOut, ChangeRequestSummary, ItemOutcome } from '@/api/generated/model'
 import { ChangeStatusBadge } from '@/components/badges'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { DepartmentReorgWizard, REORG_TITLE } from '@/components/forms/reorg-wizard'
 import { useListDepartments } from '@/api/generated/master/master'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, SearchBox } from '@/components/kit/database'
-import { Icon, type AppIcon } from '@/components/kit/icon'
 import { Segmented } from '@/components/kit/segmented'
 import { Missing } from '@/components/kit/missing'
 import { ProblemCard } from '@/components/problem-card'
 import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks } from '@/components/change-review'
 import { Section } from '@/components/kit/section'
 import { Steps, type StepItem } from '@/components/kit/steps'
-import {
-  Building03Icon,
-  FileEditIcon,
-  GridViewIcon,
-  Hospital01Icon,
-  IdentityCardIcon,
-  Layers01Icon,
-  Link04Icon,
-  QuoteDownIcon,
-  UserGroupIcon,
-} from '@hugeicons/core-free-icons'
-import { PageHeader } from '@/components/layout'
+import { FileEditIcon, QuoteDownIcon } from '@hugeicons/core-free-icons'
+import { PageHeader, usePageFrame } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,9 +36,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
-import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, stamp } from '@/lib/format'
+import { CHANGE_STATUS, FIELD_LABELS, formatValue, stamp } from '@/lib/format'
 import { useScrollMemory } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
@@ -59,168 +49,225 @@ import { notify } from '@/lib/notify'
 /** 敏感字段的中文名（后端 PERSON_FIELD_PERMISSIONS 登记的字段） */
 const SENSITIVE_FIELD: Record<string, string> = { work_no: '工号', id_number: '身份证号', phone: '联系电话' }
 
-type View = 'all' | 'waiting' | 'mine' | 'submitted' | 'confirmed' | 'returned' | 'cancelled'
+// U1（统一规范 v1.0，ui-scenarios.md SC-02）：只用列表接口在规范基线上已有的字段——编号、状态、说明、变更类型、
+// 创建人与各步时间；不用对象摘要、业务日期、待我确认等（属于 U4，见 ui-migration-matrix.md 第 11 节）。
+type View = 'all' | 'draft' | 'submitted' | 'confirmed' | 'returned' | 'cancelled'
+const VIEWS: View[] = ['all', 'draft', 'submitted', 'confirmed', 'returned', 'cancelled']
+const VIEW_LABEL: Record<View, string> = { all: '全部', ...CHANGE_STATUS }
 
-/** 列表的范围：前三段按“我”看（需要我处理的、我的草稿），后几段按状态看；写在网址里，返回列表时还在 */
-const VIEWS: { value: View; label: string; test: (r: ChangeRequestSummary) => boolean; accent?: boolean; divider?: boolean }[] = [
-  { value: 'all', label: '全部', test: () => true },
-  { value: 'waiting', label: '待我确认', test: (r) => r.waiting_for_me, accent: true },
-  { value: 'mine', label: '我的草稿', test: (r) => r.is_mine && r.status === 'draft' },
-  ...(['submitted', 'confirmed', 'returned', 'cancelled'] as const).map((k, i) => ({
-    value: k,
-    label: CHANGE_STATUS[k],
-    test: (r: ChangeRequestSummary) => r.status === k,
-    divider: i === 0,
-  })),
-]
+const MASKED = '（已隐去）'
+const LAST_OPENED = 'hdip.changes.last-opened'
 
-const OBJECT_ICON: Record<ChangeHeadline['object_kind'], AppIcon> = {
-  person: IdentityCardIcon,
-  persons: IdentityCardIcon,
-  department: UserGroupIcon,
-  unit: GridViewIcon,
-  campus: Building03Icon,
-  institution: Hospital01Icon,
-  code: Link04Icon,
-  mixed: Layers01Icon,
-  other: FileEditIcon,
+/** 说明可以当摘要用吗：空的、只剩遮蔽提示的都不行（R-ROW 5.2） */
+function usableNote(note: string | null | undefined): string | null {
+  const t = note?.trim()
+  if (!t) return null
+  return t.replaceAll(MASKED, '').replace(/[\s，。、；：,.;:]/g, '') ? t : null
 }
 
-const ACTION: Record<ChangeRequestSummary['last_step']['action'], string> = {
-  create: '创建',
-  submit: '提交',
-  confirm: '确认',
-  return: '退回',
-  cancel: '撤销',
+/** 按变更类型生成中性、确定的摘要：最多三类，其余写“另 N 类”；不从说明里猜对象或日期 */
+function typeSummary(labels: string[]): string {
+  if (labels.length === 0) return '没有变更项'
+  const groups = [...labels.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1])
+  const shown = groups.slice(0, 3).map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
+  return shown.join('、') + (groups.length > 3 ? `，另 ${groups.length - 3} 类` : '')
 }
 
-/** 列表（U1）：每行先写“对象 · 变化”，编号、项数、说明放第二行；业务日期、状态、最近一步各占固定一列 */
+/** 最近处理：只用已有的各步时间（列表不含确认人、退回人，申请人在第二行） */
+function lastStep(r: ChangeRequestSummary): [string, string] {
+  if (r.confirmed_at) return ['确认', r.confirmed_at]
+  if (r.returned_at) return ['退回', r.returned_at]
+  if (r.cancelled_at) return ['撤销', r.cancelled_at]
+  if (r.submitted_at) return ['提交', r.submitted_at]
+  return ['创建', r.created_at]
+}
+
 export function ChangesPage() {
+  usePageFrame('work')
+  const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const view = (VIEWS.some((v) => v.value === params.get('view')) ? params.get('view') : 'all') as View
+  const view: View = VIEWS.includes(params.get('status') as View) ? (params.get('status') as View) : 'all'
   const query = params.get('q') ?? ''
   const setParam = (k: string, v: string) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        if (v && !(k === 'view' && v === 'all')) next.set(k, v)
+        if (v && !(k === 'status' && v === 'all')) next.set(k, v)
         else next.delete(k)
         return next
       },
       { replace: true },
     )
-  // 一次取全部，计数与筛选在页面里做（申请量小；以后多了再分页）
-  const { data: rows = [], isPending } = useListChangeRequests()
-  const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.value, rows.filter(v.test).length])), [rows])
+  // 一次取全部：各状态的计数是完整口径；筛选在页面里做，不逐行取详情
+  const { data: rows = [], isPending, isError, refetch, isFetching } = useListChangeRequests()
+  const counts = useMemo(
+    () => Object.fromEntries(VIEWS.map((v) => [v, v === 'all' ? rows.length : rows.filter((r) => r.status === v).length])),
+    [rows],
+  )
   const shown = useMemo(() => {
-    const test = VIEWS.find((v) => v.value === view)!.test
     const q = query.trim().toLowerCase().replace(/^#/, '')
-    return rows.filter(test).filter((r) => {
-      if (!q) return true
-      const h = r.headline
-      return [String(r.id), h.subject ?? '', h.change, r.note ?? '', r.return_reason ?? ''].some((t) => t.toLowerCase().includes(q))
-    })
+    return rows
+      .filter((r) => view === 'all' || r.status === view)
+      .filter((r) => !q || [String(r.id), r.note ?? '', r.created_by.display_name, ...r.item_labels].some((t) => t.toLowerCase().includes(q)))
   }, [rows, view, query])
   useScrollMemory(`changes?${params.toString()}`, !isPending)
 
+  // 从详情返回：焦点回到刚才打开的那一行（它已不在当前范围时不抢焦点）
+  useEffect(() => {
+    if (isPending) return
+    let id: string | null = null
+    try {
+      id = sessionStorage.getItem(LAST_OPENED)
+    } catch {
+      /* 忽略 */
+    }
+    if (!id) return
+    // 用过才清除：开发模式下 effect 会先跑一遍再清理，提前清除会让第二遍找不到
+    const frame = requestAnimationFrame(() => {
+      document.querySelector<HTMLAnchorElement>(`a[data-change-id="${id}"]`)?.focus({ preventScroll: true })
+      try {
+        sessionStorage.removeItem(LAST_OPENED)
+      } catch {
+        /* 忽略 */
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [isPending])
+  const remember = (id: number) => {
+    try {
+      sessionStorage.setItem(LAST_OPENED, String(id))
+    } catch {
+      /* 忽略 */
+    }
+  }
+
   return (
     <>
-      <PageHeader compact title="变更申请" description="所有写入都经变更申请：草稿 → 提交 → 确认后生效。每行先写对象与变化，编号和时间在后。" />
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <PageHeader work title="变更申请" description="登记与核对主数据变化。本页列出全部申请，不按查看日期筛选。" />
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <Segmented
-          label="申请范围"
+          label="按状态查看"
           value={view}
-          onChange={(v) => setParam('view', v)}
-          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: counts[v.value], accent: v.accent, divider: v.divider }))}
+          onChange={(v) => setParam('status', v)}
+          options={VIEWS.map((v) => ({ value: v, label: VIEW_LABEL[v], count: isPending ? undefined : counts[v] }))}
         />
         <span className="flex-1" />
-        <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="对象名称、编号或说明" />
+        <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="编号、说明、申请人或变更类型" />
       </div>
-      {!isPending && shown.length === 0 ? (
-        <DbEmpty
-          title={query ? '没有符合检索的申请' : view === 'waiting' ? '没有等你确认的申请' : view === 'mine' ? '你没有草稿' : '没有变更申请'}
-          hint="在各对象页面上发起变更，保存后会出现在这里。"
-        />
+
+      {isError ? (
+        <Callout tone="danger" title="没有取到变更申请">
+          <span className="flex flex-wrap items-center gap-3">
+            筛选条件已保留，可以重试。
+            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              重试
+            </Button>
+          </span>
+        </Callout>
       ) : (
-        <div className="overflow-x-auto">
-          <div className="min-w-3xl">
-            <div className="border-line text-fg-muted -mx-2 grid grid-cols-(--hd-change-row-columns) items-center gap-3 border-b px-2 pb-2 text-caption">
-              <span />
-              <span>申请</span>
-              <span>业务日期</span>
+        <div className="overflow-x-auto" aria-busy={isPending || undefined}>
+          <div className="min-w-2xl">
+            <div className="bg-surface-subtle text-fg-muted grid h-(--hd-row-header-height) grid-cols-(--hd-work-list-columns) items-center gap-3 px-(--hd-cell-padding-x) text-xs">
+              <span>变更概要</span>
               <span>状态</span>
-              <span>最近一步</span>
+              <span>最近处理</span>
             </div>
-            {shown.map((r) => (
-              <ChangeRow key={r.id} r={r} />
-            ))}
+            {isPending ? (
+              <ListSkeleton />
+            ) : shown.length === 0 ? (
+              rows.length === 0 ? (
+                <DbEmpty title="还没有变更申请" hint="在各对象页面发起变更，保存后会出现在这里。" />
+              ) : (
+                <DbEmpty
+                  title={query ? `没有符合“${query}”的申请` : `没有${VIEW_LABEL[view]}的申请`}
+                  hint={`全部共 ${rows.length} 份申请。`}
+                  action={
+                    <Button size="sm" variant="outline" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
+                      清除筛选，查看全部
+                    </Button>
+                  }
+                />
+              )
+            ) : (
+              shown.map((r) => (
+                <WorkRow key={r.id} r={r} onOpen={() => remember(r.id)} onRowClick={() => (remember(r.id), navigate(`/changes/${r.id}`))} />
+              ))
+            )}
           </div>
         </div>
       )}
-      <DbFooter>
-        <span>
-          共 <span className="text-fg-secondary">{shown.length}</span> 张
-          {shown.length !== rows.length && <>（全部 {rows.length} 张）</>}
-        </span>
-        <span>范围与检索词写在网址里，从详情返回时保留，并回到原来的位置</span>
-      </DbFooter>
+      {!isPending && !isError && (
+        <DbFooter>
+          <span>
+            {shown.length} 份申请 · 当前状态：{VIEW_LABEL[view]}
+            {query && <> · 检索“{query}”</>}
+          </span>
+          <span>状态与检索写在网址里；从详情返回时保留范围、位置与焦点</span>
+        </DbFooter>
+      )}
     </>
   )
 }
 
-function ChangeRow({ r }: { r: ChangeRequestSummary }) {
-  const h = r.headline
-  const quiet = r.status === 'cancelled'
-  const kinds =
-    r.item_count > 1
-      ? `（${h.kind_counts
-          .slice(0, 3)
-          .map((k) => `${k.label} ${k.count}`)
-          .join('、')}${h.kind_counts.length > 3 ? ' 等' : ''}）`
-      : ''
-  const title = [h.subject, h.change].filter(Boolean).join(' · ')
-  const date = h.business_date
+/** 双行工作列表的一行（R-ROW 5.1：≥64 = 12 + 20 + 4 + 16 + 12；标题两行时自然增高） */
+function WorkRow({ r, onOpen, onRowClick }: { r: ChangeRequestSummary; onOpen: () => void; onRowClick: () => void }) {
+  const note = usableNote(r.note)
+  const types = typeSummary(r.item_labels)
+  const [action, at] = lastStep(r)
   return (
-    <Link
-      to={`/changes/${r.id}`}
-      title={title}
-      className="group/row border-line-subtle hover:bg-surface-hover -mx-2 grid grid-cols-(--hd-change-row-columns) items-center gap-3 rounded-md border-b px-2 py-2.5 transition-colors duration-(--hd-duration-fast) focus-visible:outline-2 focus-visible:outline-(--hd-focus-ring)"
+    <div
+      // 整行可点是额外入口；摘要链接才是主入口（键盘、新标签页、复制链接都靠它）。选中文字或点到链接时不跳转
+      onClick={(e) => {
+        if (window.getSelection()?.toString() || (e.target as HTMLElement).closest('a, button')) return
+        onRowClick()
+      }}
+      className="border-line-subtle hover:bg-surface-hover grid min-h-(--hd-work-row-min-height) cursor-pointer grid-cols-(--hd-work-list-columns) items-start gap-3 border-b px-(--hd-cell-padding-x) py-(--hd-work-row-padding-y) transition-colors duration-(--hd-duration-fast)"
     >
-      <span className={cn('bg-surface-subtle grid size-7 place-items-center rounded-md', quiet ? 'text-fg-muted' : 'text-fg-secondary')}>
-        <Icon icon={OBJECT_ICON[h.object_kind]} className="size-4" strokeWidth={1.75} />
-      </span>
-      <span className="grid min-w-0 gap-0.5">
-        <span className={cn('truncate group-hover/row:underline underline-offset-4', quiet ? 'text-fg-secondary font-medium' : 'text-fg-strong font-semibold')}>
-          {h.subject && (
-            <>
-              {h.subject}
-              <span className="text-fg-muted font-normal"> · </span>
-            </>
-          )}
-          <span className={cn('font-medium', !quiet && 'text-fg')}>{h.change}</span>
-        </span>
+      <div className="grid min-w-0 gap-1">
+        <Link
+          to={`/changes/${r.id}`}
+          data-change-id={r.id}
+          onClick={onOpen}
+          className="text-fg-strong line-clamp-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)"
+        >
+          {note ?? types}
+        </Link>
         <span className="text-fg-muted truncate text-caption">
-          #{r.id} · {r.item_count} 项{kinds}
-          {r.status === 'returned' && r.return_reason && <span className="text-tag-orange-text"> · 退回原因：{r.return_reason}</span>}
-          {r.note && <> · 说明：{r.note}</>}
+          #{r.id} · {r.created_by.display_name} · {r.item_labels.length} 项变更
+          {note && <> · {types}</>}
         </span>
-      </span>
-      <span className={cn('whitespace-nowrap tabular-nums', !date || date.mode === 'multiple' || quiet ? 'text-fg-muted' : 'text-fg-secondary')}>
-        {!date ? '—' : date.mode === 'multiple' ? '多个日期' : date.mode === 'from' ? `${date.date} 起` : `至 ${date.date}`}
-      </span>
-      <span>
+      </div>
+      <span className="pt-0.5">
         <ChangeStatusBadge status={r.status} />
       </span>
-      <span className="grid gap-0.5">
-        <span className="text-fg-secondary truncate">
-          {r.last_step.by.display_name} {ACTION[r.last_step.action]}
-        </span>
-        <span className="text-fg-muted text-caption whitespace-nowrap">
-          {relStamp(r.last_step.at)}
-          {r.waiting_for_me && <span className="text-brand-text font-semibold"> · 待你确认</span>}
-        </span>
+      <span className="grid gap-1">
+        <span className="text-fg-secondary">{action}</span>
+        <span className="text-fg-muted text-caption tabular-nums whitespace-nowrap">{stamp(at)}</span>
       </span>
-    </Link>
+    </div>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div role="status" aria-label="正在加载变更申请">
+      {[0, 1, 2, 3].map((i) => (
+        <div
+          key={i}
+          className="border-line-subtle grid min-h-(--hd-work-row-min-height) grid-cols-(--hd-work-list-columns) items-start gap-3 border-b px-(--hd-cell-padding-x) py-(--hd-work-row-padding-y)"
+        >
+          <span className="grid gap-1">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-4 w-1/3" />
+          </span>
+          <Skeleton className="h-5 w-12" />
+          <span className="grid gap-1">
+            <Skeleton className="h-5 w-10" />
+            <Skeleton className="h-4 w-24" />
+          </span>
+        </div>
+      ))}
+    </div>
   )
 }
 

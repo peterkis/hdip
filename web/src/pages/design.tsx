@@ -349,14 +349,14 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
   {
     rule: 'R-LAY 页面外框',
     target: 'work 净宽 ≤1440 / document ≤900 / canvas 不设上限；共享 gutter 24（<768 为 16）',
-    stage: 'ready',
-    note: '令牌与 usePageFrame 已就绪；尚无页面接入，未接入的页面保持旧外框（正文 64px、顶栏 12px）',
+    stage: 'done',
+    note: 'U1：变更申请列表已接入 work 外框，顶栏、页头、状态导航、列表共用左边线；其他页面待 U2，仍是旧外框（正文 64px、顶栏 12px）',
   },
   {
     rule: 'R-TYP 工作页标题',
     target: '24/32 · 600 · 字距 0',
-    stage: 'ready',
-    note: 'text-work-title；页面迁移时由 PageHeader 使用',
+    stage: 'done',
+    note: 'PageHeader work（U1 起用于变更申请列表）；其他页面待迁移',
     sample: <span className="text-fg-strong text-work-title font-semibold">变更申请</span>,
   },
   {
@@ -384,6 +384,18 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
         <span className="border-line-subtle bg-surface-subtle flex min-h-(--hd-work-row-min-height) items-center border px-(--hd-cell-padding-x) text-caption">双行工作列表 64</span>
       </span>
     ),
+  },
+  {
+    rule: 'R-ROW 双行工作列表',
+    target: '三列：变更概要（≥一半宽）/ 状态 / 最近处理；行 ≥64；只用横线',
+    stage: 'done',
+    note: 'U1：变更申请列表。概要优先用说明，空或只剩遮蔽提示时用变更类型摘要；编号、申请人进第二行',
+  },
+  {
+    rule: 'C-03 单选状态导航',
+    target: '互斥状态用单选；保留真实状态名；可从网址恢复',
+    stage: 'done',
+    note: 'kit/segmented（radiogroup）；U1 起用于变更申请列表',
   },
   {
     rule: 'R-ROW 表格边线',

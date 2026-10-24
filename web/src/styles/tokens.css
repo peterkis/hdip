@@ -293,8 +293,8 @@
   --hd-work-row-padding-y: var(--hd-space-12);
   --hd-cell-padding-x: var(--hd-space-12);
   --hd-control-height-touch: 2.75rem; /* 44：触控主要控件 */
-  /* 变更申请列表一行（U1）：对象图标 | 标题与辅助信息 | 业务日期 | 状态 | 最近一步 */
-  --hd-change-row-columns: 1.75rem minmax(0, 1fr) 8rem 4.5rem 8.5rem;
+  /* 申请工作列表（统一规范 v1.0 R-ROW 5.2，U1）：变更概要（弹性，至少占一半）| 状态 | 最近处理 */
+  --hd-work-list-columns: minmax(0, 1fr) 5.5rem 9.5rem;
 
   /* 层级 */
   --hd-z-sticky: 90;
