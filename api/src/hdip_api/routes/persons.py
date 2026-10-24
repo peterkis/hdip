@@ -79,7 +79,9 @@ def list_department_persons(
     as_of: AsOf = None,
     include_future: bool = False,
 ):
-    """查看日期归属该部门的人员（主归属，不含下级部门）。"""
+    """查看日期归属该部门的人员：一行一条部门归属，含主归属与附加归属（看 kind），不含下级部门。
+
+    人数请按 person_id 去重（docs/人员共享数据契约.md）。"""
     require_permission(user, PERSON_VIEW)
     return person_queries.department_persons(
         session, department_id, _day(session, as_of), include_future=include_future

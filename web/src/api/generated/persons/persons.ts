@@ -293,7 +293,9 @@ export const getListDepartmentPersonsUrl = (departmentId: number,
 }
 
 /**
- * 查看日期归属该部门的人员（主归属，不含下级部门）。
+ * 查看日期归属该部门的人员：一行一条部门归属，含主归属与附加归属（看 kind），不含下级部门。
+ *
+ * 人数请按 person_id 去重（docs/人员共享数据契约.md）。
  * @summary List Department Persons
  */
 export const listDepartmentPersons = async (departmentId: number,

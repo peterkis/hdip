@@ -3,7 +3,6 @@
 import {
   Briefcase01Icon,
   Building03Icon,
-  Certificate01Icon,
   DashboardSquare02Icon,
   Database01Icon,
   FileEditIcon,
@@ -13,7 +12,6 @@ import {
   IdentityCardIcon,
   Link04Icon,
   Location01Icon,
-  Stethoscope02Icon,
   Tag01Icon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
@@ -29,6 +27,8 @@ export interface NavItem {
   planned?: string
   /** 需要的权限键（/api/me 的 permissions）；没有时侧栏不显示这一项 */
   permission?: string
+  /** 规划中条目在“规划中”页面上的范围说明（做什么、不做什么、何时交付） */
+  note?: string
 }
 
 export interface NavGroup {
@@ -59,14 +59,22 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: 'people',
-    label: '人员、资质与任职',
+    // 人员与任职（2026-10-24 边界复审，docs/人员域边界复审与实施计划.md）：本平台共享人员身份、任用、
+    // 部门归属与部门任职；HR 岗位 / 编制、执业资质办理、临床授权、账号权限由各自的业务系统负责，不在此占位
+    label: '人员与任职',
     icon: IdentityCardIcon,
     items: [
-      // 人员、任用、部门归属（人员模块 P1，docs/HDIP 轻量人员模块设计…）
       { label: '人员名册', icon: IdentityCardIcon, to: '/persons', permission: 'person.view' },
-      { label: '岗位与任职', icon: Briefcase01Icon, planned: 'position-appointment' },
-      { label: '执业资质', icon: Certificate01Icon, planned: 'practice-qualification' },
-      { label: '临床授权', icon: Stethoscope02Icon, planned: 'clinical-privilege' },
+      {
+        label: '部门任职',
+        icon: Briefcase01Icon,
+        planned: 'department-duty',
+        permission: 'person.view',
+        note:
+          '全院部门负责人、副部长、主持工作、代管的任职台账（查看日期、按部门与职务筛选、导出），在实施计划的 A1 交付。' +
+          '任职事实已在人员详情与部门详情“人员”标签维护；这里只是统一查询。' +
+          '不办理任命决策、干部考核，也不管理 HR 岗位、编制与职级。',
+      },
     ],
   },
   {
