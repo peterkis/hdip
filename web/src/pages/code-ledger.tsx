@@ -1,7 +1,7 @@
 // 编码映射台账（标准与数据集）：外部系统代码 → 部门 / 服务单元 / 对象未建模。
 // 同一事实只有一个编辑入口：登记、解释、结束解释都在这里发起，经变更申请确认后生效。
 // 状态按查看日期计算：当天没有任何解释的代码即“待裁决”，不单独存状态。
-import { Add01Icon, Download01Icon, Link04Icon, ServerStack01Icon } from '@hugeicons/core-free-icons'
+import { Add01Icon, Download01Icon, ServerStack01Icon } from '@hugeicons/core-free-icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useDeferredValue, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router'
@@ -15,7 +15,8 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
-import { PageHeader } from '@/components/layout'
+import { PageHeader, usePageFrame } from '@/components/layout'
+import { Segmented } from '@/components/kit/segmented'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useApp } from '@/lib/app-context'
@@ -29,6 +30,7 @@ import { cn } from '@/lib/utils'
 const PAGE = 100
 
 export function CodeLedgerPage() {
+  usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer, me } = useMe()
   const canConfig = me?.permissions.includes('dictionary.maintain') ?? false
@@ -70,7 +72,7 @@ export function CodeLedgerPage() {
   return (
     <>
       <PageHeader
-        icon={Link04Icon}
+        work
         title="编码映射台账"
         description={`外部系统代码各自标识哪个对象：部门、服务单元，或尚未建模的对象。按 ${asOf} 当天的解释显示。`}
         actions={
@@ -108,20 +110,40 @@ export function CodeLedgerPage() {
         </Callout>
       )}
 
+      {/* SC-11：批量裁决是单独的模式（有模式标题和退出入口），不和状态筛选混在一排 */}
+      {batch && (
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <Tag tone="blue">批量裁决模式</Tag>
+          <span className="text-fg-secondary text-xs">只列待裁决代码；说明见下方</span>
+          <Button size="sm" variant="outline" onClick={() => set('batch', '')}>
+            退出批量裁决
+          </Button>
+        </div>
+      )}
       <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="搜索代码或源名称" />}>
         <FilterPill
-          label="字典"
+          label="来源字典"
           icon={ServerStack01Icon}
           value={ns}
           onChange={(v) => set('ns', v)}
           options={systems.flatMap((s) => s.namespaces.map((n) => ({ value: String(n.id), label: `${s.name} · ${n.name}` })))}
         />
-        <ToggleChip label={`全部 ${all}`} checked={!status} onChange={() => set('status', '')} />
-        {!batch &&
-          (Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => (
-            <ToggleChip key={k} label={`${CODE_STATUS[k]} ${counts[k]}`} checked={status === k} onChange={(on) => set('status', on ? k : '')} />
-          ))}
-        {isMaintainer && <ToggleChip label="批量裁决待裁决代码" checked={batch} onChange={(on) => set('batch', on ? '1' : '')} />}
+        {!batch && (
+          <Segmented
+            label="解释状态"
+            value={status || 'all'}
+            onChange={(v) => set('status', v === 'all' ? '' : v)}
+            options={[
+              { value: 'all', label: '全部', count: all },
+              ...(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => ({ value: k, label: CODE_STATUS[k], count: counts[k] })),
+            ]}
+          />
+        )}
+        {isMaintainer && !batch && (
+          <Button variant="ghost" size="sm" onClick={() => set('batch', '1')}>
+            批量裁决…
+          </Button>
+        )}
       </DbToolbar>
 
       {batch ? (
@@ -133,11 +155,11 @@ export function CodeLedgerPage() {
         />
       ) : (
         <DbTable
+          // SC-11：源代码 + 源名称 / 来源系统与字典 / 解释状态 / 当前解释（多条按院区条件的解释逐条列出）
           columns={[
-            { label: '代码' },
-            { label: '源名称', className: 'min-w-40' },
-            { label: '来源字典' },
-            { label: '状态' },
+            { label: '源代码 · 源名称', className: 'min-w-48' },
+            { label: '来源系统与字典' },
+            { label: '解释状态' },
             { label: `当前解释（${asOf}）`, className: 'min-w-56' },
           ]}
         >
@@ -158,6 +180,7 @@ export function CodeLedgerPage() {
             </Button>
           )}
           <span>同一字典同一代码、同一院区条件、同一时点只有一个解释；要汇总到部门，沿服务单元的所属部门往上走</span>
+          <span>导出 CSV 只含当天指向部门或服务单元的解释，不含待裁决与对象未建模</span>
         </DbFooter>
       )}
 
@@ -204,12 +227,13 @@ function TargetCell({ a }: { a: AssignmentOut }) {
 function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void }) {
   return (
     <DbRow>
-      <DbCell className="whitespace-nowrap">
-        <button type="button" onClick={onOpen} className="text-fg-strong decoration-line-strong font-mono font-medium underline-offset-4 hover:underline">
-          {r.code}
+      <DbCell>
+        {/* 源代码是本场景的主识别值，与源名称一起作为详情入口 */}
+        <button type="button" onClick={onOpen} className="group/code flex items-baseline gap-2 text-left">
+          <span className="text-fg-strong decoration-line-strong font-mono font-medium underline-offset-4 group-hover/code:underline">{r.code}</span>
+          <span className="text-fg">{r.source_name ?? <span className="text-fg-muted">无源名称</span>}</span>
         </button>
       </DbCell>
-      <DbCell>{r.source_name ?? <span className="text-fg-disabled">—</span>}</DbCell>
       <DbCell className="text-fg-secondary whitespace-nowrap">
         {r.system_name} · {r.namespace_name}
       </DbCell>
@@ -224,7 +248,7 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
             ))}
           </span>
         ) : (
-          <span className="text-fg-disabled">未解释</span>
+          <span className="text-fg-muted">未解释</span>
         )}
       </DbCell>
     </DbRow>
