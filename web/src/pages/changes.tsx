@@ -39,7 +39,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
-import { CHANGE_STATUS, FIELD_LABELS, formatValue, stamp } from '@/lib/format'
+import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, stamp } from '@/lib/format'
 import { useScrollMemory } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
@@ -49,50 +49,52 @@ import { notify } from '@/lib/notify'
 /** 敏感字段的中文名（后端 PERSON_FIELD_PERMISSIONS 登记的字段） */
 const SENSITIVE_FIELD: Record<string, string> = { work_no: '工号', id_number: '身份证号', phone: '联系电话' }
 
-// U1（统一规范 v1.0，ui-scenarios.md SC-02）：只用列表接口在规范基线上已有的字段——编号、状态、说明、变更类型、
-// 创建人与各步时间；不用对象摘要、业务日期、待我确认等（属于 U4，见 ui-migration-matrix.md 第 11 节）。
-type View = 'all' | 'draft' | 'submitted' | 'confirmed' | 'returned' | 'cancelled'
-const VIEWS: View[] = ['all', 'draft', 'submitted', 'confirmed', 'returned', 'cancelled']
-const VIEW_LABEL: Record<View, string> = { all: '全部', ...CHANGE_STATUS }
+// 变更申请列表（统一规范 v1.0 SC-02 的版式 + 2026-10-24 Peter 选定的组合）：
+// 规范版的 work 外框、24px 标题、单选导航、三列双行工作列表；第一行用服务端的“对象 · 变化”摘要（headline，
+// 与详情的一句话说明同源、同规则脱敏）；导航加“待我确认”（按 approval_rule）、“我的草稿”；处理时间写相对说法，
+// 精确时间在详情页。
+type View = 'all' | 'waiting' | 'mine' | 'draft' | 'submitted' | 'confirmed' | 'returned' | 'cancelled'
+const VIEWS: { value: View; label: string; test: (r: ChangeRequestSummary) => boolean; accent?: boolean; divider?: boolean }[] = [
+  { value: 'all', label: '全部', test: () => true },
+  { value: 'waiting', label: '待我确认', test: (r) => r.waiting_for_me, accent: true },
+  { value: 'mine', label: '我的草稿', test: (r) => r.is_mine && r.status === 'draft' },
+  ...(['draft', 'submitted', 'confirmed', 'returned', 'cancelled'] as const).map((k, i) => ({
+    value: k,
+    label: CHANGE_STATUS[k],
+    test: (r: ChangeRequestSummary) => r.status === k,
+    divider: i === 0,
+  })),
+]
 
 const MASKED = '（已隐去）'
 const LAST_OPENED = 'hdip.changes.last-opened'
 
-/** 说明可以当摘要用吗：空的、只剩遮蔽提示的都不行（R-ROW 5.2） */
+/** 说明能不能显示：空的、只剩遮蔽提示的不显示 */
 function usableNote(note: string | null | undefined): string | null {
   const t = note?.trim()
   if (!t) return null
   return t.replaceAll(MASKED, '').replace(/[\s，。、；：,.;:]/g, '') ? t : null
 }
 
-/** 按变更类型生成中性、确定的摘要：最多三类，其余写“另 N 类”；不从说明里猜对象或日期 */
-function typeSummary(labels: string[]): string {
-  if (labels.length === 0) return '没有变更项'
-  const groups = [...labels.reduce((m, l) => m.set(l, (m.get(l) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1])
-  const shown = groups.slice(0, 3).map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
-  return shown.join('、') + (groups.length > 3 ? `，另 ${groups.length - 3} 类` : '')
-}
-
-/** 最近处理：只用已有的各步时间（列表不含确认人、退回人，申请人在第二行） */
-function lastStep(r: ChangeRequestSummary): [string, string] {
-  if (r.confirmed_at) return ['确认', r.confirmed_at]
-  if (r.returned_at) return ['退回', r.returned_at]
-  if (r.cancelled_at) return ['撤销', r.cancelled_at]
-  if (r.submitted_at) return ['提交', r.submitted_at]
-  return ['创建', r.created_at]
+const ACTION: Record<ChangeRequestSummary['last_step']['action'], string> = {
+  create: '创建',
+  submit: '提交',
+  confirm: '确认',
+  return: '退回',
+  cancel: '撤销',
 }
 
 export function ChangesPage() {
   usePageFrame('work')
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const view: View = VIEWS.includes(params.get('status') as View) ? (params.get('status') as View) : 'all'
+  const view: View = VIEWS.some((v) => v.value === params.get('view')) ? (params.get('view') as View) : 'all'
   const query = params.get('q') ?? ''
   const setParam = (k: string, v: string) =>
     setParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        if (v && !(k === 'status' && v === 'all')) next.set(k, v)
+        if (v && !(k === 'view' && v === 'all')) next.set(k, v)
         else next.delete(k)
         return next
       },
@@ -100,16 +102,20 @@ export function ChangesPage() {
     )
   // 一次取全部：各状态的计数是完整口径；筛选在页面里做，不逐行取详情
   const { data: rows = [], isPending, isError, refetch, isFetching } = useListChangeRequests()
-  const counts = useMemo(
-    () => Object.fromEntries(VIEWS.map((v) => [v, v === 'all' ? rows.length : rows.filter((r) => r.status === v).length])),
-    [rows],
-  )
+  const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.value, rows.filter(v.test).length])), [rows])
+  const current = VIEWS.find((v) => v.value === view)!
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase().replace(/^#/, '')
     return rows
-      .filter((r) => view === 'all' || r.status === view)
-      .filter((r) => !q || [String(r.id), r.note ?? '', r.created_by.display_name, ...r.item_labels].some((t) => t.toLowerCase().includes(q)))
-  }, [rows, view, query])
+      .filter(current.test)
+      .filter(
+        (r) =>
+          !q ||
+          [String(r.id), r.headline.subject ?? '', r.headline.change, r.note ?? '', r.created_by.display_name, ...r.item_labels].some((t) =>
+            t.toLowerCase().includes(q),
+          ),
+      )
+  }, [rows, current, query])
   useScrollMemory(`changes?${params.toString()}`, !isPending)
 
   // 从详情返回：焦点回到刚才打开的那一行（它已不在当前范围时不抢焦点）
@@ -146,13 +152,13 @@ export function ChangesPage() {
       <PageHeader work title="变更申请" description="登记与核对主数据变化。本页列出全部申请，不按查看日期筛选。" />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Segmented
-          label="按状态查看"
+          label="申请范围"
           value={view}
-          onChange={(v) => setParam('status', v)}
-          options={VIEWS.map((v) => ({ value: v, label: VIEW_LABEL[v], count: isPending ? undefined : counts[v] }))}
+          onChange={(v) => setParam('view', v)}
+          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: isPending ? undefined : counts[v.value], accent: v.accent, divider: v.divider }))}
         />
         <span className="flex-1" />
-        <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="编号、说明、申请人或变更类型" />
+        <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="对象名称、编号、说明或申请人" />
       </div>
 
       {isError ? (
@@ -179,7 +185,15 @@ export function ChangesPage() {
                 <DbEmpty title="还没有变更申请" hint="在各对象页面发起变更，保存后会出现在这里。" />
               ) : (
                 <DbEmpty
-                  title={query ? `没有符合“${query}”的申请` : `没有${VIEW_LABEL[view]}的申请`}
+                  title={
+                    query
+                      ? `没有符合“${query}”的申请`
+                      : view === 'waiting'
+                        ? '没有等你确认的申请'
+                        : view === 'mine'
+                          ? '你没有草稿'
+                          : `没有${current.label}的申请`
+                  }
                   hint={`全部共 ${rows.length} 份申请。`}
                   action={
                     <Button size="sm" variant="outline" onClick={() => setParams(new URLSearchParams(), { replace: true })}>
@@ -199,7 +213,7 @@ export function ChangesPage() {
       {!isPending && !isError && (
         <DbFooter>
           <span>
-            {shown.length} 份申请 · 当前状态：{VIEW_LABEL[view]}
+            {shown.length} 份申请 · 当前范围：{current.label}
             {query && <> · 检索“{query}”</>}
           </span>
           <span>状态与检索写在网址里；从详情返回时保留范围、位置与焦点</span>
@@ -211,9 +225,17 @@ export function ChangesPage() {
 
 /** 双行工作列表的一行（R-ROW 5.1：≥64 = 12 + 20 + 4 + 16 + 12；标题两行时自然增高） */
 function WorkRow({ r, onOpen, onRowClick }: { r: ChangeRequestSummary; onOpen: () => void; onRowClick: () => void }) {
+  const h = r.headline
   const note = usableNote(r.note)
-  const types = typeSummary(r.item_labels)
-  const [action, at] = lastStep(r)
+  const quiet = r.status === 'cancelled'
+  const kinds =
+    r.item_count > 1
+      ? `（${h.kind_counts
+          .slice(0, 3)
+          .map((k) => `${k.label} ${k.count}`)
+          .join('、')}${h.kind_counts.length > 3 ? ' 等' : ''}）`
+      : ''
+  const at = r.last_step.at
   return (
     <div
       // 整行可点是额外入口；摘要链接才是主入口（键盘、新标签页、复制链接都靠它）。选中文字或点到链接时不跳转
@@ -228,21 +250,39 @@ function WorkRow({ r, onOpen, onRowClick }: { r: ChangeRequestSummary; onOpen: (
           to={`/changes/${r.id}`}
           data-change-id={r.id}
           onClick={onOpen}
-          className="text-fg-strong line-clamp-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)"
+          className={cn(
+            'line-clamp-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)',
+            quiet ? 'text-fg-secondary font-medium' : 'text-fg-strong font-semibold',
+          )}
         >
-          {note ?? types}
+          {h.subject && (
+            <>
+              {h.subject}
+              <span className="text-fg-muted font-normal"> · </span>
+            </>
+          )}
+          <span className={cn('font-medium', !quiet && 'text-fg')}>{h.change}</span>
         </Link>
         <span className="text-fg-muted truncate text-caption">
-          #{r.id} · {r.created_by.display_name} · {r.item_labels.length} 项变更
-          {note && <> · {types}</>}
+          #{r.id} · {r.created_by.display_name} · {r.item_count} 项变更{kinds}
+          {r.status === 'returned' && r.return_reason && <span className="text-tag-orange-text"> · 退回原因：{r.return_reason}</span>}
+          {note && <> · 说明：{note}</>}
         </span>
       </div>
       <span className="pt-0.5">
         <ChangeStatusBadge status={r.status} />
       </span>
       <span className="grid gap-1">
-        <span className="text-fg-secondary">{action}</span>
-        <span className="text-fg-muted text-caption tabular-nums whitespace-nowrap">{stamp(at)}</span>
+        <span className="text-fg-secondary truncate">
+          {r.last_step.by.display_name} {ACTION[r.last_step.action]}
+        </span>
+        <span className="text-fg-muted text-caption whitespace-nowrap">
+          {/* 相对说法一眼看远近；精确时间悬停可见，详情页的处理步骤里也有 */}
+          <time dateTime={at} title={stamp(at)}>
+            {relStamp(at)}
+          </time>
+          {r.waiting_for_me && <span className="text-brand-text font-semibold"> · 待你确认</span>}
+        </span>
       </span>
     </div>
   )

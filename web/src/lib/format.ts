@@ -191,15 +191,19 @@ export function stamp(value: string | null | undefined): string {
   return value ? value.slice(0, 16).replace('T', ' ') : '—'
 }
 
-/** 处理时间的近似说法：今天 / 昨天 / 今年的月-日 / 完整日期，后接时:分（列表里用，详情仍用 stamp） */
+/**
+ * 列表里的处理时间（2026-10-24 Peter）：一眼能看出远近——今天 / 昨天 带时:分，更早的写“N天前 / N周前 / N个月前 / N年前”。
+ * 精确时间在详情页的处理步骤里（stamp），列表上悬停也能看到。按本地日历日计算，不做时区转换。
+ */
 export function relStamp(value: string): string {
-  const day = value.slice(0, 10)
   const time = value.slice(11, 16)
-  const now = today()
-  const yesterday = new Date(Date.now() - 86_400_000).toLocaleDateString('sv-SE')
-  if (day === now) return `今天 ${time}`
-  if (day === yesterday) return `昨天 ${time}`
-  return `${day.slice(0, 4) === now.slice(0, 4) ? day.slice(5) : day} ${time}`
+  const days = Math.round((Date.parse(today()) - Date.parse(value.slice(0, 10))) / 86_400_000)
+  if (days <= 0) return days === 0 ? `今天 ${time}` : stamp(value)
+  if (days === 1) return `昨天 ${time}`
+  if (days < 7) return `${days}天前`
+  if (days < 30) return `${Math.floor(days / 7)}周前`
+  if (days < 365) return `${Math.floor(days / 30)}个月前`
+  return `${Math.floor(days / 365)}年前`
 }
 
 export function formatValue(field: string, value: unknown, labels: OptionLabels = {}): string {

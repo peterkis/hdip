@@ -127,9 +127,9 @@ export function Layout() {
 
 // ================================================================== 侧栏
 function Sidebar({ onCollapse, overlay }: { onCollapse: () => void; overlay?: boolean }) {
-  // 角标 = 已提交的申请数（现有查询口径；统一规范 R-LAY 2.3：没有待办权限口径时不改称“我的待办”）
+  // 角标 = 等你确认的申请（按 approval_rule 判断，有权限依据，符合 R-LAY 2.3）；不是全部已提交的数量
   const { data: submitted = [] } = useListChangeRequests({ status: 'submitted' })
-  const counts: Record<string, number> = { '/changes': submitted.length }
+  const counts: Record<string, number> = { '/changes': submitted.filter((r) => r.waiting_for_me).length }
   return (
     <aside
       className={cn(

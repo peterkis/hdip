@@ -389,13 +389,13 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-ROW 双行工作列表',
     target: '三列：变更概要（≥一半宽）/ 状态 / 最近处理；行 ≥64；只用横线',
     stage: 'done',
-    note: 'U1：变更申请列表。概要优先用说明，空或只剩遮蔽提示时用变更类型摘要；编号、申请人进第二行',
+    note: 'U1：变更申请列表。第一行是服务端“对象 · 变化”摘要（项目决定）；第二行编号、申请人、项数、说明；处理时间写相对说法，精确时间在详情',
   },
   {
     rule: 'C-03 单选状态导航',
     target: '互斥状态用单选；保留真实状态名；可从网址恢复',
     stage: 'done',
-    note: 'kit/segmented（radiogroup）；U1 起用于变更申请列表',
+    note: 'kit/segmented（radiogroup）；变更申请列表：全部 / 待我确认 / 我的草稿 | 各状态',
   },
   {
     rule: 'R-ROW 表格边线',
