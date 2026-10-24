@@ -188,6 +188,22 @@ export function period(from: string, to: string | null | undefined): string {
 }
 
 /** 不带时区的时间戳，原样显示到分钟。 */
+type VersionSpan = { version_no: number; valid_from: string; valid_to?: string | null }
+
+/**
+ * 详情页页头的版本说明（统一规范 SC-08 / SC-09：当天版本、尚未开始、已有后续版本、已结束分别说明）。
+ * versions 新的在前；生效前已更正的空期间版本（结束日早于开始日）不算。
+ */
+export function versionNote(versions: VersionSpan[], asOf: string): string {
+  const real = versions.filter((v) => !(v.valid_to && v.valid_to < v.valid_from))
+  if (real.length === 0) return '没有生效过的版本'
+  const onDay = real.find((v) => v.valid_from <= asOf && (!v.valid_to || v.valid_to >= asOf))
+  const next = real.filter((v) => v.valid_from > asOf).at(-1)
+  if (onDay) return `查看日期 ${asOf} 有效的是第 ${onDay.version_no} 版${next ? `；第 ${next.version_no} 版自 ${next.valid_from} 起` : ''}`
+  if (next) return `查看日期 ${asOf} 尚未开始，自 ${real.at(-1)!.valid_from} 起`
+  return `最后有效日 ${real[0].valid_to}（当天仍有效），下面显示最后一版`
+}
+
 export function stamp(value: string | null | undefined): string {
   return value ? value.slice(0, 16).replace('T', ' ') : '—'
 }

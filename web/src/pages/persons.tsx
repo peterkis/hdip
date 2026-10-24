@@ -121,7 +121,6 @@ export function PersonsPage() {
   return (
     <>
       <PageHeader
-        work
         title="人员名册"
         description={`人员 × 任用 × 部门归属。按 ${asOf} 当天的任用显示，一人一行；不含账号、资质与执业信息。`}
         actions={

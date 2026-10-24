@@ -142,7 +142,6 @@ export function ServiceUnitsPage() {
   return (
     <>
       <PageHeader
-        work
         title="服务单元"
         description={`部门 × 院区 × 运营主体 × 期间。按 ${asOf} 当天有效的版本显示。`}
         actions={

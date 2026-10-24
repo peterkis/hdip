@@ -1,6 +1,5 @@
 import {
   Add01Icon,
-  Building03Icon,
   Calendar03Icon,
   CallIcon,
   HashtagIcon,
@@ -20,7 +19,7 @@ import { UnitCreateDialog } from '@/components/forms/unit-forms'
 import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
-import { Missing } from '@/components/kit/missing'
+import { DetailFallback } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -32,7 +31,7 @@ import { Button } from '@/components/ui/button'
 import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
-import { formatValue, period, type OperatingStatus } from '@/lib/format'
+import { formatValue, period, versionNote, type OperatingStatus } from '@/lib/format'
 import { useMe } from '@/lib/use-me'
 import { PLANNED_TONE } from '@/lib/tones'
 
@@ -46,7 +45,6 @@ export function CampusesPage() {
   return (
     <>
       <PageHeader
-        work
         title="院区"
         description="院区不等于法人；由哪个主体运营，看运营关系。筹建中的院区也在这里，标出开始日。"
         actions={
@@ -130,15 +128,17 @@ const CAMPUS_FIELDS: (keyof CampusVersionOut)[] = [
 ]
 
 export function CampusDetailPage() {
+  usePageFrame('document')
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data, isError } = useGetCampus(id, { as_of: asOf })
+  const query = useGetCampus(id, { as_of: asOf })
+  const { data } = query
   const { data: units = [] } = useListServiceUnits({ as_of: asOf, campus_id: id })
   const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | 'unit' | null>(null)
   const [showAllDepts, setShowAllDepts] = useState(false)
   useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return isError || !Number.isInteger(id) ? <Missing what="院区" back={{ to: '/campuses', label: '返回院区列表' }} /> : null
+  if (!data) return <DetailFallback what="院区" back={{ to: '/campuses', label: '返回院区列表' }} query={query} invalid={!Number.isInteger(id)} />
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
@@ -147,30 +147,27 @@ export function CampusDetailPage() {
   const close = (o: boolean) => !o && setDialog(null)
   const departments = [...new Set(units.filter((u) => !u.not_yet_effective).map((u) => u.version.department_name))]
   const operators = data.relations.filter((r) => r.effective_on_as_of && r.relation_type === 'OPERATE')
+  // 查看日期当天还没有运营方时，写出已登记的计划运营方，不写成“未登记”
+  const plannedOperators = data.relations.filter((r) => r.relation_type === 'OPERATE' && r.valid_from > asOf)
 
+  // 统一规范 SC-09：名称 / 版本 → 状态与运营主体 → 地点和联系 → 服务单元 → 运营关系 → 版本与事件。
+  // 院区不是法人：运营主体与地点分开写；“建立运营关系”“新建服务单元”放在各自一节的标题右侧
   return (
-    <div className="max-w-(--hd-page-max-width)">
+    <>
       <PageHeader
-        icon={Building03Icon}
         title={shown.name}
         description={
-          onDay
-            ? `院区代码 ${data.code} · ${asOf} 有效的是第 ${onDay.version_no} 版`
-            : `院区代码 ${data.code} · ${asOf} 尚未开始，自 ${data.versions.at(-1)!.valid_from} 起`
+          <>
+            {shown.public_name && <>对外称“{shown.public_name}” · </>}
+            院区代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
+          </>
         }
         actions={
           <>
-            <Button variant="ghost" nativeButton={false} render={<Link to={`/organization-overview?campus=${data.id}&planned=1`} />}>
+            <Button variant="outline" nativeButton={false} render={<Link to={`/organization-overview?campus=${data.id}&planned=1`} />}>
               查看本院区服务布局
             </Button>
-            {isMaintainer && (
-              <>
-                <Button variant="outline" disabled={suspended} onClick={() => setDialog('relation')}>
-                  建立运营关系
-                </Button>
-                <Button onClick={() => setDialog('revise')}>修订资料</Button>
-              </>
-            )}
+            {isMaintainer && <Button onClick={() => setDialog('revise')}>修订资料</Button>}
           </>
         }
       />
@@ -187,27 +184,40 @@ export function CampusDetailPage() {
               </>
             ),
           },
-          { label: '对外名称', icon: TextFontIcon, value: shown.public_name },
-          { label: '拼音码', icon: TextFontIcon, value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
           {
             label: '运营主体',
             icon: Hospital01Icon,
             value: operators.length ? (
-              <span className="flex flex-wrap gap-x-3">
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
                 {operators.map((r) => (
-                  <Link key={r.id} className="hover:underline" to={`/institutions/${r.institution_id}`}>
-                    {r.institution_name}
-                    {r.is_primary && <span className="text-fg-muted text-caption">（主要）</span>}
-                  </Link>
+                  <span key={r.id} className="inline-flex items-center gap-1.5">
+                    <Link className="hover:underline" to={`/institutions/${r.institution_id}`}>
+                      {r.institution_name}
+                    </Link>
+                    {r.is_primary && <Tag tone="blue">主要运营方</Tag>}
+                  </span>
+                ))}
+              </span>
+            ) : plannedOperators.length ? (
+              <span className="flex flex-wrap gap-x-3 gap-y-1">
+                {plannedOperators.map((r) => (
+                  <span key={r.id} className="inline-flex items-center gap-1.5">
+                    <Link className="hover:underline" to={`/institutions/${r.institution_id}`}>
+                      {r.institution_name}
+                    </Link>
+                    <Tag tone="yellow">计划</Tag>
+                    <span className="text-fg-secondary text-caption">自 {r.valid_from} 起</span>
+                  </span>
                 ))}
               </span>
             ) : null,
           },
-          { label: '地址', icon: Location01Icon, value: shown.address },
-          { label: '行政区划代码', icon: HashtagIcon, value: shown.admin_division_code },
-          { label: '电话', icon: CallIcon, value: shown.phone },
           { label: '实际启用日期', icon: Calendar03Icon, value: shown.actual_open_date },
-          { label: '版本期间', icon: Calendar03Icon, value: `${shown.valid_from} → ${shown.valid_to ?? '长期'}` },
+          { label: '地址', icon: Location01Icon, value: shown.address },
+          { label: '行政区划代码', icon: HashtagIcon, value: shown.admin_division_code && <span className="font-mono">{shown.admin_division_code}</span> },
+          { label: '电话', icon: CallIcon, value: shown.phone },
+          { label: '拼音码', icon: TextFontIcon, value: shown.pinyin && <span className="font-mono">{shown.pinyin}</span> },
+          { label: '版本期间', icon: Calendar03Icon, value: period(shown.valid_from, shown.valid_to) },
         ]}
       />
 
@@ -221,10 +231,14 @@ export function CampusDetailPage() {
           title={`服务单元（${units.length}）`}
           action={isMaintainer && !suspended ? <InlineAction onClick={() => setDialog('unit')}>新建服务单元</InlineAction> : null}
         >
-          <p className="text-fg-muted text-caption">
+          <p className="text-fg-secondary text-caption">
             <Icon icon={UserGroupIcon} className="mr-1 inline size-3.5 align-text-bottom" />
-            该院区有哪些部门 = 这些单元按所属部门去重，共 {departments.length} 个：
-            {(showAllDepts ? departments : departments.slice(0, 12)).join('、') || '无'}
+            {departments.length === 0 ? (
+              units.length ? '查看日期当天本院区还没有生效的服务单元，下面都是计划中的单元。' : '本院区还没有登记服务单元。'
+            ) : (
+              <>在本院区设有服务单元的部门（按单元的所属部门去重，不是行政隶属）共 {departments.length} 个：</>
+            )}
+            {(showAllDepts ? departments : departments.slice(0, 12)).join('、')}
             {departments.length > 12 && (
               <button type="button" className="text-fg-secondary hover:text-fg ml-1 hover:underline" onClick={() => setShowAllDepts(!showAllDepts)}>
                 {showAllDepts ? '收起' : `…展开其余 ${departments.length - 12} 个`}
@@ -234,8 +248,11 @@ export function CampusDetailPage() {
           <UnitsTable rows={units} hide={['campus']} />
         </Section>
 
-        <Section title="运营关系">
-          <RelationsTable relations={data.relations} canEdit={isMaintainer} />
+        <Section
+          title="运营关系"
+          action={isMaintainer && !suspended ? <InlineAction onClick={() => setDialog('relation')}>建立运营关系</InlineAction> : null}
+        >
+          <RelationsTable relations={data.relations} canEdit={isMaintainer} hide="campus" />
         </Section>
 
         <Section title="版本与事件">
@@ -257,6 +274,6 @@ export function CampusDetailPage() {
       )}
       {dialog === 'relation' && <RelationCreateDialog open onOpenChange={close} campusCode={data.code} />}
       {dialog === 'unit' && <UnitCreateDialog open onOpenChange={close} campusCode={data.code} />}
-    </div>
+    </>
   )
 }

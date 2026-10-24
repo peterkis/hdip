@@ -186,7 +186,6 @@ export function DepartmentsPage() {
   return (
     <>
       <PageHeader
-        work
         title="部门"
         description="谁在医院组织体系内承担这组职责。部门身份不因院区、地点、负责人、服务形态或核算口径变化而改变。"
         actions={

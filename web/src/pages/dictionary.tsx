@@ -38,7 +38,6 @@ export function DictionaryPage() {
     <>
       {creating && <SchemeDialog scheme={null} onClose={() => setCreating(false)} />}
       <PageHeader
-        work
         actions={
           canEdit && (
             <Button onClick={() => setCreating(true)}>

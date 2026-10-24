@@ -72,7 +72,6 @@ export function CodeLedgerPage() {
   return (
     <>
       <PageHeader
-        work
         title="编码映射台账"
         description={`外部系统代码各自标识哪个对象：部门、服务单元，或尚未建模的对象。按 ${asOf} 当天的解释显示。`}
         actions={

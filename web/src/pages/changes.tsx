@@ -149,7 +149,7 @@ export function ChangesPage() {
 
   return (
     <>
-      <PageHeader work title="变更申请" description="登记与核对主数据变化。本页列出全部申请，不按查看日期筛选。" />
+      <PageHeader title="变更申请" description="登记与核对主数据变化。本页列出全部申请，不按查看日期筛选。" />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <Segmented
           label="申请范围"

@@ -92,7 +92,6 @@ export function PersonDutiesPage() {
   return (
     <>
       <PageHeader
-        work
         title="部门任职"
         description={`按 ${asOf} 当天登记已确定的任命结果：部长、副部长、主持工作与代管。不办理任命决策；职务不等于系统权限，也不是 HR 岗位或职级。`}
         actions={

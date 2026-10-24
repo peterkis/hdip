@@ -420,30 +420,33 @@ export function PageHeader({
   description,
   actions,
   icon,
-  work,
 }: {
   title: ReactNode
   description?: ReactNode
   actions?: ReactNode
   icon?: AppIcon
-  /** 工作页（统一规范 v1.0 C-02 / R-TYP）：标题 24/32·600、字距 0、不放大图标；与 usePageFrame('work') 一起用 */
-  work?: boolean
 }) {
+  // 标题角色跟页面外框走（统一规范 v1.0 C-02 / R-TYP 3.1）：work / canvas 用工作页标题 24/32，
+  // document 用文档标题 32/40；两者字距 0、不放大图标。未声明外框的页面保持旧样式
+  const frame = useFrame()
+  const role = frame === 'legacy' ? 'legacy' : frame === 'document' ? 'document' : 'work'
   return (
-    <div className={cn('flex flex-wrap items-start justify-between gap-3', work ? 'mb-4' : 'mb-6')}>
+    <div className={cn('flex flex-wrap items-start justify-between gap-3', role === 'work' ? 'mb-4' : 'mb-6')}>
       <div className="min-w-0">
         <h1
           className={cn(
             'text-fg-strong flex items-center gap-3',
-            work ? 'text-work-title font-semibold tracking-(--hd-type-cjk-tracking)' : 'text-xl font-bold tracking-(--hd-type-title-tracking)',
+            role === 'work' && 'text-work-title font-semibold tracking-(--hd-type-cjk-tracking)',
+            role === 'document' && 'text-xl font-semibold tracking-(--hd-type-cjk-tracking)',
+            role === 'legacy' && 'text-xl font-bold tracking-(--hd-type-title-tracking)',
           )}
         >
-          {icon && !work && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
+          {icon && role === 'legacy' && <Icon icon={icon} className="text-fg-muted size-8" strokeWidth={1.5} />}
           {title}
         </h1>
-        {description && <p className="text-fg-secondary mt-1 text-xs">{description}</p>}
+        {description && <p className={cn('text-fg-secondary text-xs', role === 'document' ? 'mt-2' : 'mt-1')}>{description}</p>}
       </div>
-      {actions && <div className="flex flex-wrap items-center gap-2 pt-1.5">{actions}</div>}
+      {actions && <div className={cn('flex flex-wrap items-center gap-2', role === 'document' ? 'pt-1' : 'pt-1.5')}>{actions}</div>}
     </div>
   )
 }
