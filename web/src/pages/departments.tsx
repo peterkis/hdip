@@ -421,8 +421,8 @@ export function DepartmentsPage() {
                   <span className="text-fg-strong min-w-0 truncate">{d.version.name}</span>
                   <span className="text-fg-muted font-mono text-caption">{d.code}</span>
                   {!visibleIds.has(d.id) && <span className="text-fg-muted text-caption">当前未列出</span>}
-                  <InlineAction className="ml-auto" onClick={() => updatePick((m) => m.delete(d.id))}>
-                    取消选择<span className="sr-only"> {d.version.name}</span>
+                  <InlineAction className="ml-auto" label={`取消选择 ${d.version.name}`} onClick={() => updatePick((m) => m.delete(d.id))}>
+                    取消选择
                   </InlineAction>
                 </li>
               ))}

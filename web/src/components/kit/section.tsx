@@ -28,17 +28,21 @@ export function InlineAction({
   children,
   danger,
   className,
+  label,
 }: {
   onClick: () => void
   children: ReactNode
   danger?: boolean
   /** 单独成行时用 -ml-2 让文字与所在列对齐 */
   className?: string
+  /** 同名按钮重复出现时（如名单里每行的“取消选择”）给读屏一个完整名称 */
+  label?: string
 }) {
   const spec = useFrame() !== 'legacy'
   return (
     <button
       type="button"
+      aria-label={label}
       className={cn(
         spec
           ? cn(INLINE, danger ? 'text-danger-text' : 'text-fg-secondary hover:text-fg')
