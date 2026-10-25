@@ -2,8 +2,12 @@
 // ① 身份裁决 → ② 参与部门 → ③ 承接清单 → ④ 核对。一次生成一整张申请：新建部门、组织变更事件，
 // 以及逐项处置依赖的变更项（单元改挂 / 退出、人员调科 / 结束归属、下级部门改挂、结束指向原部门的编码解释、新部门的上级与主分类）。
 // 空白不等于“全部跟着走”：退出部门的每个单元、每个下级部门都要明确选择，系统不按名称推断、不默认。
+// 可靠性（U3R-04）：每个参与的原部门按代码对应自己的依赖读取（读取中 / 已读 / 失败 / 找不到），失败不当作“没有”；
+// “下一步”与“保存”用同一个纯校验（各步字段 + 读取范围 + 承接选择仍有效），未通过才跳到出错步骤并聚焦；
+// 选择按单元代码、下级代码、归属 id 记住，重试、回退都不丢，指向已删除新部门的选择标为失效要求重选；
+// 编辑保护、保存中锁定、失败保留请求键与公共表单（ItemDialog）一致。
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { createChangeRequest, updateChangeRequest } from '@/api/generated/changes/changes'
 import { getGetDepartmentDependenciesQueryOptions, useListClassificationSchemes, useListDepartments } from '@/api/generated/master/master'
@@ -15,6 +19,8 @@ import { FormErrorsContext, requireFields, SelectField, TextField, type Option }
 import type { ChangeItemInput } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
 import { Callout } from '@/components/kit/callout'
+import { FormEditContext } from '@/components/kit/form-edit'
+import { ReadError, readStatus } from '@/components/kit/read-state'
 import { Steps, type StepItem } from '@/components/kit/steps'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -22,6 +28,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { today } from '@/lib/format'
 import { notify } from '@/lib/notify'
+import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
 type ReorgType = 'SPLIT' | 'SPLIT_OFF' | 'ABSORB' | 'MERGE'
@@ -144,7 +151,15 @@ export function DepartmentReorgWizard({
   const qc = useQueryClient()
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
+  // 字段错误（就地标红）、读取范围问题、保存失败分开表达，互不覆盖
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [scopeTried, setScopeTried] = useState(false)
+  // 编辑保护：本次打开期间改过即算（从草稿回填不算）；纯浏览步骤、重试读取不算
+  const [dirty, setDirty] = useState(false)
+  const markDirty = useCallback(() => setDirty(true), [])
+  const editCtx = useMemo(() => ({ markDirty }), [markDirty])
+  const [confirmClose, setConfirmClose] = useState(false)
+  const saving = useRef(false)
   const [type, setType] = useState<ReorgType | ''>(init?.type ?? '')
   const [day, setDay] = useState(() => init?.day ?? today())
   const [basis, setBasis] = useState(init?.basis ?? '')
@@ -162,7 +177,9 @@ export function DepartmentReorgWizard({
   const [personTo, setPersonTo] = useState<Record<string, string>>(init?.personTo ?? {})
   const [otherMatters, setOtherMatters] = useState(init?.otherMatters ?? '')
 
-  const { data: depts = [] } = useListDepartments({ as_of: asOf })
+  const { can, permsKnown } = useMe()
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const depts = useMemo(() => deptQuery.data ?? [], [deptQuery.data])
   const { data: schemes = [] } = useListClassificationSchemes()
   const mainCodes = (schemes.find((s) => s.code === MAIN_SCHEME)?.codes ?? []).filter((c) => c.is_active)
   const deptName = (code: string) => depts.find((d) => d.code === code)?.version.name ?? code
@@ -171,22 +188,50 @@ export function DepartmentReorgWizard({
   const hasNew = type !== '' && type !== 'ABSORB'
   const newList = type === 'MERGE' ? news.slice(0, 1) : news
   const sourceCodes = [source.code, ...(type === 'MERGE' ? others.filter(Boolean) : [])]
-  const sourceIds = sourceCodes.map((c) => (c === source.code ? source.id : depts.find((d) => d.code === c)?.id)).filter((x): x is number => !!x)
 
-  // 承接清单：每个原部门在生效日及以后仍有效的依赖
-  const deps = useQueries({
-    queries: sourceIds.map((id) =>
-      getGetDepartmentDependenciesQueryOptions(id, { day }, { query: { enabled: open && step >= 2 && !!day } }),
-    ),
+  // 当前读取范围 = 参与的原部门（按代码）+ 生效日。每个原部门按代码对应自己的查询，不按下标拼接；
+  // 找不到 id 的原部门不从范围里悄悄去掉（部门列表还在读 / 读取失败 / 已不可选，各自说明）。
+  // 查询键带 id 与生效日：换日期、换部门后旧请求晚到也不会被当成新范围的结果。
+  const deptsStatus = readStatus(deptQuery)
+  const entries = sourceCodes.map((code) => ({ code, id: code === source.code ? source.id : depts.find((d) => d.code === code)?.id }))
+  const withId = entries.filter((e): e is { code: string; id: number } => e.id !== undefined)
+  const depQueries = useQueries({
+    queries: withId.map((e) => getGetDepartmentDependenciesQueryOptions(e.id, { day }, { query: { enabled: open && step >= 2 && !!day } })),
   })
-  const depsBySource = sourceCodes.map((code, i) => ({ code, data: deps[i]?.data as DepartmentDependencies | undefined }))
-  const allUnits = depsBySource.flatMap((d) => (d.data?.units ?? []).map((u) => ({ ...u, from: d.code })))
-  const allChildren = depsBySource.flatMap((d) => (d.data?.children ?? []).map((c) => ({ ...c, from: d.code })))
-  const allCodes = depsBySource.flatMap((d) => (d.data?.code_links ?? []).map((c) => ({ ...c, from: d.code })))
-  const allClasses = depsBySource.flatMap((d) => (d.data?.classifications ?? []).map((c) => ({ ...c, from: d.code })))
-  const allRelations = depsBySource.flatMap((d) => (d.data?.relations ?? []).map((r) => ({ ...r, from: d.code })))
-  // 人员归属（有“查看人员”权限时才列出）：生效日及以后归属原部门的，含预约调入的
-  const allPersons = depsBySource.flatMap((d) => (d.data?.persons ?? []).map((p) => ({ ...p, from: d.code })))
+  const sources: SourceState[] = entries.map((e) => {
+    if (e.id === undefined)
+      return { code: e.code, status: deptsStatus === 'ready' ? 'missing' : deptsStatus, query: deptsStatus === 'error' ? deptQuery : undefined }
+    const q = depQueries[withId.findIndex((w) => w.code === e.code)]
+    const st = readStatus(q)
+    return { code: e.code, status: st, query: q, data: st === 'ready' ? (q.data as DepartmentDependencies) : undefined, stale: st === 'ready' && q.isError }
+  })
+  const readySources = sources.filter((x) => x.status === 'ready')
+  // 汇总只用读取成功的原部门；其余在承接清单顶部逐个说明
+  const allUnits = readySources.flatMap((d) => (d.data?.units ?? []).map((u) => ({ ...u, from: d.code })))
+  const allChildren = readySources.flatMap((d) => (d.data?.children ?? []).map((c) => ({ ...c, from: d.code })))
+  const allCodes = readySources.flatMap((d) => (d.data?.code_links ?? []).map((c) => ({ ...c, from: d.code })))
+  const allClasses = readySources.flatMap((d) => (d.data?.classifications ?? []).map((c) => ({ ...c, from: d.code })))
+  const allRelations = readySources.flatMap((d) => (d.data?.relations ?? []).map((r) => ({ ...r, from: d.code })))
+  // 人员归属：接口在没有“查看人员”权限时返回空列表，所以“没有人员”只在有权限时才能这么说
+  const personsVisible = permsKnown && can('person.view')
+  const allPersons = personsVisible ? readySources.flatMap((d) => (d.data?.persons ?? []).map((p) => ({ ...p, from: d.code }))) : []
+  const scope = { ready: readySources.length, total: sources.length }
+
+  /** 读取范围是否可用于核对与保存（纯函数）：有找不到、失败、未读完或刷新失败的原部门都不行 */
+  function scopeProblem(): string | null {
+    if (!day) return '请先在“参与部门”选择生效日'
+    const name = (xs: SourceState[]) => xs.map((x) => deptName(x.code)).join('、')
+    const missing = sources.filter((x) => x.status === 'missing')
+    if (missing.length) return `找不到原部门 ${name(missing)}（查看日期当天不可选），请回到“参与部门”重选`
+    const failed = sources.filter((x) => x.status === 'error')
+    if (failed.length) return `${name(failed)} 的依赖没有读取成功：重试成功后才能继续（已读取 ${scope.ready}/${scope.total} 个原部门）`
+    const loading = sources.filter((x) => x.status === 'loading')
+    if (loading.length) return `还在读取 ${name(loading)} 的依赖（已读取 ${scope.ready}/${scope.total} 个原部门）`
+    const stale = sources.filter((x) => x.stale)
+    if (stale.length) return `${name(stale)} 的依赖刷新没有成功，可能不是最新：重试后再继续`
+    if (!permsKnown) return '还在确认查看人员的权限'
+    return null
+  }
 
   // 承接方：新设部门，或吸收合并的已有部门；分设时原部门也可“保持”
   const resultOptions: Option[] = hasNew
@@ -231,10 +276,21 @@ export function DepartmentReorgWizard({
   const personChoice = (id: number) => personTo[String(id)] ?? (type === 'SPLIT_OFF' ? KEEP : '')
   const unitChoice = (code: string) => unitTo[code] ?? (type === 'SPLIT_OFF' ? KEEP : '')
   const childChoice = (code: string) => childTo[code] ?? (type === 'SPLIT_OFF' ? KEEP : '')
+  /** 已选的值是否仍是当前选项之一（新部门被删除、类型改变后旧选择会失效，不悄悄改投） */
+  const inOptions = (v: string, opts: Option[]) => opts.some((o) => o.value === v)
+  const choiceCheck = (name: string, v: string, opts: Option[], ask: string): [string, boolean, string] => [
+    name,
+    !!v && inOptions(v, opts),
+    v ? '原来的选择已失效（承接部门已删除或类型已改），请重选' : ask,
+  ]
+  const unitStale = (u: (typeof allUnits)[number]) => !!unitChoice(u.code) && !inOptions(unitChoice(u.code), unitOptions(u))
+  const personStale = (p: (typeof allPersons)[number]) => !!personChoice(p.assignment_id) && !inOptions(personChoice(p.assignment_id), personOptions(p))
+  const childStale = (c: (typeof allChildren)[number]) => !!childChoice(c.code) && !inOptions(childChoice(c.code), childOptions)
 
-  function check(): Record<string, string> | null {
-    if (step === 0) return type ? null : { type: '请选择这次组织变更的类型' }
-    if (step === 1) {
+  /** 某一步的字段检查（纯函数：不切步骤、不改状态、不发请求）；承接清单另看读取范围 scopeProblem() */
+  function checkStep(n: number): Record<string, string> | null {
+    if (n === 0) return type ? null : { type: '请选择这次组织变更的类型' }
+    if (n === 1) {
       const r = requireFields([
         ['day', !!day, '请选择生效日'],
         ['basis', !!basis.trim(), '请填写正式依据（文件号或决定说明）'],
@@ -243,38 +299,69 @@ export function DepartmentReorgWizard({
           ? others.map((o, i): [string, boolean, string] => [`other.${i}`, !!o, '请选择一并合并的原部门'])
           : []),
         ...(hasNew
-          ? newList.flatMap((n, i): [string, boolean, string][] => [
-              [`new.${i}.name`, !!n.name.trim(), '请填写新部门名称'],
-              pinyinCheck(n.pinyin, `new.${i}.pinyin`),
+          ? newList.flatMap((g, i): [string, boolean, string][] => [
+              [`new.${i}.name`, !!g.name.trim(), '请填写新部门名称'],
+              pinyinCheck(g.pinyin, `new.${i}.pinyin`),
             ])
           : []),
       ])
       return r?.fieldErrors ?? null
     }
-    if (step === 2) {
-      if (deps.some((q) => q.isPending)) return { _: '承接清单还在加载' }
+    if (n === 2) {
       const r = requireFields([
-        ...allUnits.map((u): [string, boolean, string] => [`unit.${u.code}`, !!unitChoice(u.code), '请选择这个单元由谁承接']),
-        ...allChildren.map((c): [string, boolean, string] => [`child.${c.code}`, !!childChoice(c.code), '请选择这个下级部门改挂到哪里']),
-        ...allPersons.map((p): [string, boolean, string] => [`person.${p.assignment_id}`, !!personChoice(p.assignment_id), '请选择这个人调到哪里，或结束归属']),
+        ...allUnits.map((u) => choiceCheck(`unit.${u.code}`, unitChoice(u.code), unitOptions(u), '请选择这个单元由谁承接')),
+        ...allChildren.map((c) => choiceCheck(`child.${c.code}`, childChoice(c.code), childOptions, '请选择这个下级部门改挂到哪里')),
+        ...allPersons.map((p) =>
+          choiceCheck(`person.${p.assignment_id}`, personChoice(p.assignment_id), personOptions(p), '请选择这个人调到哪里，或结束归属'),
+        ),
       ])
       return r?.fieldErrors ?? null
     }
     return null
   }
 
+  /** 走到第 upTo 步之前要满足的全部条件：前面各步字段、承接清单的读取范围与选择。返回第一个不满足的步骤 */
+  function validateUpTo(upTo: number): { step: number; errors: Record<string, string> } | { step: number; scope: string } | null {
+    for (let n = 0; n <= Math.min(upTo, 2); n++) {
+      if (n === 2) {
+        const sp = scopeProblem()
+        if (sp) return { step: 2, scope: sp }
+      }
+      const e = checkStep(n)
+      if (e) return { step: n, errors: e }
+    }
+    return null
+  }
+
   // 校验未通过时，标红渲染完成后把焦点放到第一个出错字段
-  const bodyRef = useRef<HTMLDivElement>(null)
+  const bodyRef = useRef<HTMLFieldSetElement>(null)
   const [focusTick, setFocusTick] = useState(0)
   useEffect(() => {
     if (focusTick) bodyRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [focusTick])
-  const next = () => {
-    const e = check()
-    setErrors(e ?? {})
-    if (e) setFocusTick((t) => t + 1)
-    else setStep(step + 1)
+  /** 只在明确点“下一步 / 保存”未通过时：切到出错的步骤、标红并聚焦第一个（被动重验不切步骤、不移焦点） */
+  const reveal = (r: NonNullable<ReturnType<typeof validateUpTo>>) => {
+    setStep(r.step)
+    if ('errors' in r) {
+      setErrors(r.errors)
+      setFocusTick((t) => t + 1)
+    } else setScopeTried(true)
   }
+  const next = () => {
+    const r = validateUpTo(step)
+    if (r) return reveal(r)
+    setErrors({})
+    setScopeTried(false)
+    setStep(step + 1)
+  }
+  // 出过错后每次改动按当前步骤重新检查：只清掉已通过的字段，空格等仍无效的保持标红，不给未标红的字段新加错误
+  useEffect(() => {
+    const flagged = Object.keys(errors)
+    if (flagged.length === 0) return
+    const still = checkStep(step) ?? {}
+    const nextErrors = Object.fromEntries(flagged.filter((k) => k in still).map((k) => [k, still[k]]))
+    if (flagged.length !== Object.keys(nextErrors).length || flagged.some((k) => nextErrors[k] !== errors[k])) setErrors(nextErrors)
+  })
 
   function buildItems(): ChangeItemInput[] {
     const last = dayBefore(day)
@@ -340,6 +427,7 @@ export function DepartmentReorgWizard({
   }
 
   const save = useMutation({
+    // 一张完整草稿：新建时创建，回到向导时整体替换原草稿的变更项；请求键在本次打开期间不变，重试拿回同一批代码
     mutationFn: async () => {
       const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
       const items = await fillNewCodes(buildItems(), requestKey)
@@ -354,33 +442,62 @@ export function DepartmentReorgWizard({
       onOpenChange(false)
       navigate(`/changes/${cr.id}`)
     },
+    onSettled: () => {
+      saving.current = false
+    },
   })
+  const trySave = () => {
+    if (saving.current) return
+    // 已在核对页也要再过一遍：读取刷新失败、范围变了，不能凭旧预览保存（回到承接清单，内容保留）
+    const r = validateUpTo(2)
+    if (r) return reveal(r)
+    saving.current = true
+    save.mutate()
+  }
+  const pending = save.isPending
+  /** 取消、×、Esc、点遮罩：保存中不关闭；改过内容时先确认一次 */
+  const requestClose = (nextOpen: boolean) => {
+    if (nextOpen) return onOpenChange(true)
+    if (pending || confirmClose) return
+    if (dirty) return setConfirmClose(true)
+    onOpenChange(false)
+  }
 
   const steps: StepItem[] = STEP_LABELS.map((label, i) => ({ label, state: i < step ? 'done' : i === step ? 'current' : 'upcoming' }))
   const setNew = (i: number, patch: Partial<NewDept>) => setNews(news.map((n, j) => (j === i ? { ...n, ...patch } : n)))
-  const errorsCtx = {
-    errors,
-    clear: (name: string) =>
-      setErrors((prev) => {
-        const nextErrors = { ...prev }
-        delete nextErrors[name]
-        return nextErrors
-      }),
-  }
+  // 错误只由重验清除（不因键入任意字符就清掉）
+  const errorsCtx = { errors, clear: () => {} }
+  const scopeNow = step >= 2 ? scopeProblem() : null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
             部门组织变更：{source.name}
             {draft && <span className="text-fg-muted ml-2 text-xs font-normal">调整草稿 #{draft.id}</span>}
           </DialogTitle>
-          <DialogDescription>先定身份（谁存续、谁退出、谁新设），再逐项处置受影响的单元、下级部门与编码。生成一张草稿，提交、确认后整体生效。</DialogDescription>
+          <DialogDescription>
+            先定身份（谁存续、谁退出、谁新设），再逐项处置受影响的单元、人员、下级部门与编码。保存后仍是草稿；提交并由确认人确认后，整张正式登记，各项按自己的业务日期生效——确认时间不等于业务生效日期。
+          </DialogDescription>
         </DialogHeader>
         <Steps steps={steps} className="py-1" />
+        {type && step > 0 && (
+          <p className="text-fg-secondary text-caption">
+            {REORG_TITLE[type as ReorgType]} · 原部门 {sourceCodes.map(deptName).join('、')}
+            {day && ` · 本次组织变更生效日 ${day}`}
+          </p>
+        )}
+        <FormEditContext.Provider value={editCtx}>
         <FormErrorsContext.Provider value={errorsCtx}>
-          <div ref={bodyRef} className="grid max-h-[58vh] gap-3 overflow-y-auto px-0.5 pb-0.5">
+          {/* 保存中整组停用；原生输入（如“其他事项”）的改动由这里记为“改过” */}
+          <fieldset
+            ref={bodyRef}
+            disabled={pending}
+            onInput={markDirty}
+            onChange={markDirty}
+            className="grid max-h-[58vh] min-w-0 gap-3 overflow-y-auto px-0.5 pb-0.5"
+          >
             {step === 0 && (
               <>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -389,10 +506,12 @@ export function DepartmentReorgWizard({
                       key={t.value}
                       type="button"
                       onClick={() => {
+                        if (t.value === type) return
+                        markDirty()
                         setType(t.value)
                         setErrors({})
-                        // 整体拆分至少两个新部门；分设、合并新设先给一个
-                        if (t.value !== type) setNews(t.value === 'SPLIT' ? [blank(), blank()] : [blank()])
+                        // 整体拆分至少两个新部门；分设、合并新设先给一个。已做的承接选择不清掉：指向旧新部门的会标为失效、要求重选
+                        setNews(t.value === 'SPLIT' ? [blank(), blank()] : [blank()])
                       }}
                       className={cn(
                         'grid gap-1 rounded-md border p-3 text-left text-xs transition-colors',
@@ -461,7 +580,11 @@ export function DepartmentReorgWizard({
                       <button
                         type="button"
                         className="text-fg-muted hover:text-fg pb-2 text-caption hover:underline"
-                        onClick={() => (others.length > 1 ? setOthers(others.filter((_, j) => j !== i)) : setOthers([...others, '']))}
+                        onClick={() => {
+                          markDirty()
+                          if (others.length > 1) setOthers(others.filter((_, j) => j !== i))
+                          else setOthers([...others, ''])
+                        }}
                       >
                         {others.length > 1 ? '移除' : '再加一个'}
                       </button>
@@ -476,7 +599,10 @@ export function DepartmentReorgWizard({
                           <button
                             type="button"
                             className="text-fg-muted hover:text-fg ml-auto text-caption font-normal hover:underline"
-                            onClick={() => setNews(news.filter((_, j) => j !== i))}
+                            onClick={() => {
+                              markDirty()
+                              setNews(news.filter((_, j) => j !== i))
+                            }}
                           >
                             移除
                           </button>
@@ -510,7 +636,10 @@ export function DepartmentReorgWizard({
                     </fieldset>
                   ))}
                 {(type === 'SPLIT' || type === 'SPLIT_OFF') && (
-                  <button type="button" className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline" onClick={() => setNews([...news, blank()])}>
+                  <button type="button" className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline" onClick={() => {
+                    markDirty()
+                    setNews([...news, blank()])
+                  }}>
                     + 再新设一个部门
                   </button>
                 )}
@@ -519,19 +648,26 @@ export function DepartmentReorgWizard({
 
             {step === 2 && (
               <>
-                {deps.some((q) => q.isPending) && <p className="text-fg-muted text-xs">正在列出 {day} 起受影响的依赖…</p>}
+                <SourceStatus sources={sources} name={deptName} day={day} onBack={() => setStep(1)} />
                 <ChecklistSection
-                  title={`服务单元（${allUnits.length}）`}
+                  title="服务单元"
+                  count={allUnits.length}
+                  scope={scope}
+                  open={allUnits.filter((u) => !unitChoice(u.code) || unitStale(u)).length}
                   hint={exits ? '单元身份不变，只是自生效日起改挂承接部门；每个都要选，不默认' : '默认留在原部门；转给新部门的逐个选择'}
                   empty="没有挂在原部门的服务单元"
                   bulk={exits ? resultOptions : []}
-                  onBulk={(to) => setUnitTo(Object.fromEntries(allUnits.map((u) => [u.code, to])))}
+                  onBulk={(to) => {
+                    markDirty()
+                    setUnitTo({ ...unitTo, ...Object.fromEntries(allUnits.map((u) => [u.code, to])) })
+                  }}
                 >
                   {allUnits.map((u) => (
                     <ChecklistRow
                       key={u.code}
                       label={`${u.version.name}`}
                       sub={`${u.code} · ${u.version.campus_name}${sourceCodes.length > 1 ? ` · 原属 ${deptName(u.from)}` : ''}${movingIn(u) ? ` · 预约 ${u.version.valid_from} 起改挂进来` : planned(u) ? ` · 计划 ${u.version.valid_from} 开始` : ''}`}
+                      stale={unitStale(u) && !errors[`unit.${u.code}`]}
                     >
                       <SelectField
                         label="由谁承接"
@@ -544,19 +680,35 @@ export function DepartmentReorgWizard({
                     </ChecklistRow>
                   ))}
                 </ChecklistSection>
-                {allPersons.length > 0 && (
+                {!personsVisible ? (
+                  <section className="grid gap-1">
+                    <h4 className="text-fg-strong text-xs font-semibold">人员</h4>
+                    <p className="text-fg-muted text-xs">
+                      {permsKnown
+                        ? '你没有“查看人员”的权限，这里不列出人员归属，也不能据此认为没有人员；提交、确认时服务端会检查仍归属原部门的人员。'
+                        : '正在确认查看人员的权限…'}
+                    </p>
+                  </section>
+                ) : (
                   <ChecklistSection
-                    title={`人员（${allPersons.length}）`}
+                    title="人员"
+                    count={allPersons.length}
+                    scope={scope}
+                    open={allPersons.filter((p) => !personChoice(p.assignment_id) || personStale(p)).length}
                     hint="人员身份不变，只换归属部门；不跟着服务单元走，也不按名称推断。每个都要选"
-                    empty=""
+                    empty="没有归属原部门的人员"
                     bulk={exits ? resultOptions : []}
-                    onBulk={(to) => setPersonTo(Object.fromEntries(allPersons.map((p) => [String(p.assignment_id), to])))}
+                    onBulk={(to) => {
+                      markDirty()
+                      setPersonTo({ ...personTo, ...Object.fromEntries(allPersons.map((p) => [String(p.assignment_id), to])) })
+                    }}
                   >
                     {allPersons.map((p) => (
                       <ChecklistRow
                         key={p.assignment_id}
                         label={p.person_name}
                         sub={`${p.person_code}${sourceCodes.length > 1 ? ` · 原属 ${deptName(p.from)}` : ''}${p.not_yet_effective ? ` · 预约 ${p.valid_from} 起调入` : ''}`}
+                        stale={personStale(p) && !errors[`person.${p.assignment_id}`]}
                       >
                         <SelectField
                           label="调到"
@@ -571,13 +723,16 @@ export function DepartmentReorgWizard({
                   </ChecklistSection>
                 )}
                 <ChecklistSection
-                  title={`下级部门（${allChildren.length}）`}
+                  title="下级部门"
+                  count={allChildren.length}
+                  scope={scope}
+                  open={allChildren.filter((c) => !childChoice(c.code) || childStale(c)).length}
                   hint="上级退出不代表下级退出；不会默认挂到第一个新部门"
                   empty="没有下级部门"
                   bulk={[]}
                 >
                   {allChildren.map((c) => (
-                    <ChecklistRow key={c.code} label={c.name} sub={c.code}>
+                    <ChecklistRow key={c.code} label={c.name} sub={c.code} stale={childStale(c) && !errors[`child.${c.code}`]}>
                       <SelectField
                         label="改挂到"
                         name={`child.${c.code}`}
@@ -591,7 +746,7 @@ export function DepartmentReorgWizard({
                 </ChecklistSection>
                 {exits && (
                   <>
-                    <ChecklistSection title={`指向原部门的外部编码（${allCodes.length}）`} empty="没有外部编码指向原部门" bulk={[]}>
+                    <ChecklistSection title="指向原部门的外部编码" count={allCodes.length} scope={scope} empty="没有外部编码指向原部门" bulk={[]}>
                       {allCodes.map((c) => (
                         <ChecklistRow key={c.assignment_id} label={`${c.code} ${c.source_name ?? ''}`} sub={`${c.system_name} · ${c.namespace_name}`}>
                           <span className="text-fg-secondary text-xs">结束解释（最后有效日 {dayBefore(day)}），历史仍指向原部门</span>
@@ -603,7 +758,13 @@ export function DepartmentReorgWizard({
                         </p>
                       )}
                     </ChecklistSection>
-                    <ChecklistSection title="随原部门结束（历史保留）" empty="原部门没有分类与管理关系" bulk={[]}>
+                    <ChecklistSection
+                      title="随原部门结束（历史保留）"
+                      count={allClasses.length + allRelations.length}
+                      scope={scope}
+                      empty="原部门没有分类与管理关系"
+                      bulk={[]}
+                    >
                       {allClasses.map((c) => (
                         <ChecklistRow key={`c${c.id}`} label={`${c.scheme_name}：${c.name}`} sub={deptName(c.from)}>
                           <span className="text-fg-muted text-xs">分类止于 {dayBefore(day)}；新部门的分类在上一步逐个确认</span>
@@ -617,7 +778,6 @@ export function DepartmentReorgWizard({
                     </ChecklistSection>
                   </>
                 )}
-                {errors._ && <p className="text-danger-text text-xs">{errors._}</p>}
               </>
             )}
 
@@ -628,7 +788,7 @@ export function DepartmentReorgWizard({
                 sources={sourceCodes.map((c) => ({ code: c, name: deptName(c) }))}
                 results={
                   hasNew
-                    ? newList.map((n) => ({ code: isNewCode(n.code) ? '待分配' : n.code, name: n.name.trim() }))
+                    ? newList.map((n) => ({ code: isNewCode(n.code) ? '待分配（保存时由系统分配）' : n.code, name: n.name.trim() }))
                     : [{ code: target, name: deptName(target) }]
                 }
                 continuing={type === 'SPLIT_OFF' ? { code: source.code, name: rename.trim() || source.name } : null}
@@ -638,32 +798,127 @@ export function DepartmentReorgWizard({
                 draftId={draft?.id}
               />
             )}
-          </div>
+          </fieldset>
         </FormErrorsContext.Provider>
-        {save.error && <p className="text-danger-text text-xs">{save.error.message}</p>}
-        <DialogFooter>
-          {step > 0 && (
-            <Button type="button" variant="outline" onClick={() => setStep(step - 1)}>
-              上一步
-            </Button>
-          )}
-          {step < 3 ? (
-            <Button type="button" onClick={next}>
-              下一步
-            </Button>
-          ) : (
-            <Button type="button" disabled={save.isPending} onClick={() => save.mutate()}>
-              {save.isPending ? '保存中…' : draft ? `更新草稿 #${draft.id}` : '生成变更申请草稿'}
-            </Button>
-          )}
-        </DialogFooter>
+        </FormEditContext.Provider>
+        {/* 读取范围的问题：点过“下一步 / 保存”后持续显示，读取恢复、重选后自动消失 */}
+        {scopeTried && scopeNow && step === 2 && (
+          <p role="alert" className="text-danger-text text-xs">
+            {scopeNow}
+          </p>
+        )}
+        {save.error && (
+          <p role="alert" className="text-danger-text text-xs">
+            保存未成功：{save.error.message}。已填写的内容与选择都还在，可以再次保存。
+          </p>
+        )}
+        {confirmClose ? (
+          <div role="alertdialog" aria-label="放弃组织变更向导里的内容" className="bg-surface-subtle grid gap-3 rounded-lg px-3 py-3">
+            <p className="text-fg text-xs">关闭会丢弃向导里已填写的内容与承接选择，还没有保存到任何申请。</p>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                autoFocus
+                onClick={() => {
+                  // 先把焦点放回向导，再收起确认条（按钮卸载时若仍有焦点，Dialog 会把焦点收回弹窗本身）
+                  bodyRef.current?.querySelector<HTMLElement>('input, select, textarea, button')?.focus()
+                  setConfirmClose(false)
+                }}
+              >
+                继续填写
+              </Button>
+              <Button type="button" variant="destructive" onClick={() => onOpenChange(false)}>
+                放弃并关闭
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <DialogFooter>
+            {step > 0 && (
+              <Button type="button" variant="outline" disabled={pending} onClick={() => setStep(step - 1)}>
+                上一步
+              </Button>
+            )}
+            {step < 3 ? (
+              <Button type="button" onClick={next}>
+                下一步
+              </Button>
+            ) : (
+              <Button type="button" disabled={pending} onClick={trySave}>
+                {pending ? '保存中…' : draft ? `更新草稿 #${draft.id}` : '生成变更申请草稿'}
+              </Button>
+            )}
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   )
 }
 
+interface SourceState {
+  code: string
+  status: 'loading' | 'error' | 'ready' | 'missing'
+  query?: { data?: unknown; isError: boolean; error: unknown; isFetching: boolean; refetch: () => unknown }
+  data?: DepartmentDependencies
+  /** 有上次成功的结果，但这次刷新失败 */
+  stale?: boolean
+}
+
+/** 承接清单顶部：每个原部门的读取状态；失败的就地重试（只重取这一个），找不到的回到“参与部门” */
+function SourceStatus({ sources, name, day, onBack }: { sources: SourceState[]; name: (code: string) => string; day: string; onBack: () => void }) {
+  const ready = sources.filter((x) => x.status === 'ready').length
+  return (
+    <section aria-label="原部门依赖的读取状态" className="grid gap-1.5">
+      <p className="text-fg-secondary text-xs">
+        {day} 起受影响的依赖：已读取 {ready}/{sources.length} 个原部门
+        {ready < sources.length && '；未读取成功的不计入下面的数量，也不能进入核对'}
+      </p>
+      {sources
+        .filter((x) => x.status !== 'ready' || x.stale)
+        .map((x) =>
+          x.status === 'loading' ? (
+            <p key={x.code} role="status" className="text-fg-muted text-xs">
+              正在读取 {name(x.code)} 的依赖…
+            </p>
+          ) : x.status === 'missing' ? (
+            <div key={x.code} role="alert">
+              <Callout tone="danger" title={`找不到原部门 ${name(x.code)}`}>
+                <span className="flex flex-wrap items-center gap-3">
+                  查看日期当天它不在可选部门里。
+                  <Button size="sm" variant="outline" onClick={onBack}>
+                    回到参与部门
+                  </Button>
+                </span>
+              </Callout>
+            </div>
+          ) : x.query ? (
+            x.stale ? (
+              <div key={x.code} role="alert">
+                <Callout tone="warning" title={`${name(x.code)} 的依赖刷新没有成功，下面是上次读到的，可能不是最新`}>
+                  <Button size="sm" variant="outline" disabled={x.query.isFetching} onClick={() => x.query?.refetch()}>
+                    {x.query.isFetching ? '正在重试…' : '重试'}
+                  </Button>
+                </Callout>
+              </div>
+            ) : (
+              <ReadError key={x.code} what={`${name(x.code)} 的依赖`} query={x.query} compact />
+            )
+          ) : null,
+        )}
+    </section>
+  )
+}
+
+/**
+ * 承接清单的一组：组头写名称、数量（只计读取成功的原部门）、未处理数与批量动作；
+ * 组内一个容器、连续行、细横线分隔（不再每条一个圆角卡片）。
+ */
 function ChecklistSection({
   title,
+  count,
+  scope,
+  open,
   hint,
   empty,
   bulk,
@@ -671,17 +926,26 @@ function ChecklistSection({
   children,
 }: {
   title: string
+  count: number
+  scope: { ready: number; total: number }
+  /** 还没有有效选择的条数（无需选择的组不传） */
+  open?: number
   hint?: string
   empty: string
   bulk: Option[]
   onBulk?: (value: string) => void
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const rows = Array.isArray(children) ? children.flat().filter(Boolean) : children ? [children] : []
+  const complete = scope.ready === scope.total
+  const countText = scope.ready === 0 ? '待读取' : complete ? `${count}` : `已读取部分 ${count}`
   return (
     <section className="grid gap-1.5">
-      <div className="flex flex-wrap items-baseline gap-2">
-        <h4 className="text-fg-strong text-xs font-semibold">{title}</h4>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+        <h4 className="text-fg-strong text-xs font-semibold">
+          {title}（{countText}）
+        </h4>
+        {open !== undefined && open > 0 && <span className="text-warning-text text-caption">未处理 {open}</span>}
         {hint && <span className="text-fg-muted text-caption">{hint}</span>}
         {rows.length > 1 &&
           onBulk &&
@@ -691,17 +955,24 @@ function ChecklistSection({
             </button>
           ))}
       </div>
-      {rows.length === 0 ? <p className="text-fg-disabled text-xs">{empty}</p> : <div className="grid gap-1">{children}</div>}
+      {rows.length === 0 ? (
+        <p className="text-fg-muted text-xs">
+          {scope.ready === 0 ? '原部门的依赖还没有读取成功' : complete ? empty : `已读取的原部门里${empty.replace(/^没有/, '没有')}；其余原部门尚未读取成功`}
+        </p>
+      ) : (
+        <div className="border-line-subtle divide-line-subtle divide-y rounded-md border">{children}</div>
+      )}
     </section>
   )
 }
 
-function ChecklistRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+function ChecklistRow({ label, sub, stale, children }: { label: string; sub?: string; stale?: boolean; children: ReactNode }) {
   return (
-    <div className="border-line-subtle grid grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.2fr)] items-center gap-3 rounded-md border px-3 py-2">
-      <div className="grid min-w-0">
-        <span className="text-fg truncate text-xs">{label}</span>
-        {sub && <span className="text-fg-muted truncate text-caption">{sub}</span>}
+    <div className="grid min-h-(--hd-row-height) grid-cols-[minmax(10rem,1fr)_minmax(12rem,1.2fr)] items-center gap-3 px-3 py-2">
+      <div className="grid min-w-0 gap-0.5">
+        <span className="text-fg text-xs break-words">{label}</span>
+        {sub && <span className="text-fg-muted text-caption break-words">{sub}</span>}
+        {stale && <span className="text-warning-text text-caption">原来的选择已失效，请重选</span>}
       </div>
       <div className="[&_label]:sr-only">{children}</div>
     </div>
@@ -763,8 +1034,13 @@ function Review({
   return (
     <>
       <EvolveFlow kind={sources.length > 1 ? 'merge' : 'split'} day={day} label={REORG_TITLE[type]} before={before} after={after} />
+      <p className="text-fg-strong text-xs font-medium">本次组织变更生效日：{day}</p>
       <p className="text-fg-secondary text-xs">
-        {draftId ? `将整体替换草稿 #${draftId} 的变更项` : '将生成一张草稿'}，共 {items.length} 项：{counts.map(([label, n]) => `${label} ${n}`).join('、')}。提交前系统会再按数据预演一遍；有依赖没处置会被拦下。
+        {draftId ? `将整体替换草稿 #${draftId} 的变更项` : '将生成一张草稿'}，共 {items.length} 项：{counts.map(([label, n]) => `${label} ${n}`).join('、')}。
+        计划中的单元、预约调入的人员按它们自己的开始日处理，不改成 {day}。{type !== 'ABSORB' && '新设部门的代码保存时由系统分配。'}
+      </p>
+      <p className="text-fg-muted text-caption">
+        保存后仍是草稿。提交前系统会再按数据预演一遍，有依赖没处置会被拦下；提交并由确认人确认后，整张正式登记，各项按自己的业务日期生效——确认时间不等于业务生效日期。
       </p>
       <Field label="需其他系统办理的事项（选填）">
         <Textarea
