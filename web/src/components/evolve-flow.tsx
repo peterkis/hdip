@@ -17,6 +17,7 @@ import { Add01Icon, GitForkIcon, GitMergeIcon } from '@hugeicons/core-free-icons
 import { useEffect } from 'react'
 import { Link } from 'react-router'
 import { Icon } from '@/components/kit/icon'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { useFlowHeight } from '@/components/flow-size'
 import { KEEP_CARDS_CLICKABLE } from '@/components/flow-kit'
 import { cn } from '@/lib/utils'
@@ -118,10 +119,15 @@ function Hub({ data }: NodeProps<HubNode>) {
 }
 
 function AddCard({ data }: NodeProps<AddNode>) {
+  // 在表单里增加前身 / 后继是改动，关闭前要确认
+  const markDirty = useMarkDirty()
   return (
     <button
       type="button"
-      onClick={data.onAdd}
+      onClick={() => {
+        markDirty()
+        data.onAdd()
+      }}
       className="border-line text-fg-muted hover:text-fg hover:border-line-strong flex items-center justify-center gap-1 rounded-lg border border-dashed text-xs"
       style={{ width: W, height: 36 }}
     >

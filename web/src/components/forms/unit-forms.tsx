@@ -7,7 +7,7 @@ import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { useEffectiveDate, versionNote, type DialogProps } from '@/components/forms/change-forms'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
 import { newCode } from '@/components/forms/new-code'
-import { diffPatch, FormErrorsContext, orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
+import { diffPatch, EditButton, FormErrorsContext, orNull, requireFields, SelectField, TextField, type FieldErrors } from '@/components/forms/fields'
 import { ItemDialog, useDraftItems } from '@/components/forms/item-dialog'
 import { CampusSelect, DepartmentSelect, InstitutionSelect, UnitSelect, useStartFloor } from '@/components/forms/ref-selects'
 import { useApp } from '@/lib/app-context'
@@ -343,9 +343,9 @@ function SuccessorFields({
       <legend className="text-fg-strong flex w-full items-center px-1 text-xs font-semibold">
         {title}
         {onRemove && (
-          <button type="button" className="text-fg-muted hover:text-fg ml-auto text-caption font-normal hover:underline" onClick={onRemove}>
+          <EditButton className="text-fg-muted hover:text-fg ml-auto text-caption font-normal hover:underline" onClick={onRemove}>
             移除
-          </button>
+          </EditButton>
         )}
       </legend>
       <div className="grid grid-cols-[2fr_1fr] gap-3">
@@ -399,16 +399,18 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
       wide
       title={`拆分服务单元：${current.name}`}
       description="把一个单元拆成至少两个。前身在生效日前一天退出，后继自生效日起；后继是新身份、新代码，不继承前身的历史，引用也不自动迁移。"
-      build={() => {
-        const missing = requireFields([
+      build={() =>
+        requireFields([
           ['effective_date', !!day, '请选择生效日期'],
           ['effective_date', !day || day > current.valid_from, `生效日须晚于当前版本的开始日 ${current.valid_from}`],
           ...succ.flatMap((s, i) => successorChecks(s, `s${i}`, `后继 ${i + 1} 的`)),
-        ])
-        // 出错的后继不在下方时，切到第一个出错的后继，让标红的字段可见
+        ]) ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map((s, i) => successorItem(s, i)) }
+      }
+      // 只在点“保存到申请”未通过时：当前显示的后继没有问题，就切到第一个出错的后继，让标红的字段可见。
+      // 之后改字段时的重新检查不切换（build 是纯函数），用户可以停在任意后继回看
+      reveal={(missing) => {
         const bad = firstInvalid(missing, 's')
-        if (bad !== null && !Object.keys(missing!.fieldErrors).some((k) => k.startsWith(`s${sel}.`))) setSel(bad)
-        return missing ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map((s, i) => successorItem(s, i)) }
+        if (bad !== null && !Object.keys(missing.fieldErrors).some((k) => k.startsWith(`s${sel}.`))) setSel(bad)
       }}
     >
       <TextField
@@ -430,6 +432,7 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
         onAdd={add}
         addLabel="再加一个后继单元"
       />
+      <OtherSuccessorErrors count={succ.length} sel={sel} onPick={setSel} />
       <SuccessorFields
         key={sel}
         value={succ[sel]}
@@ -439,6 +442,28 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
         onRemove={succ.length > 2 ? () => remove(sel) : undefined}
       />
     </ItemDialog>
+  )
+}
+
+/** 未显示的后继里还有标红的字段时，在字段区上方说一句并可切过去（只是切换查看，不算改动） */
+function OtherSuccessorErrors({ count, sel, onPick }: { count: number; sel: number; onPick: (i: number) => void }) {
+  const { errors } = useContext(FormErrorsContext)
+  const others = Array.from({ length: count }, (_, i) => i).filter(
+    (i) => i !== sel && Object.keys(errors).some((k) => k.startsWith(`s${i}.`)),
+  )
+  if (others.length === 0) return null
+  return (
+    <p className="text-danger-text text-xs">
+      还有问题未改：
+      {others.map((i, n) => (
+        <span key={i}>
+          {n > 0 && '、'}
+          <button type="button" className="underline" onClick={() => onPick(i)}>
+            后继单元 {i + 1}
+          </button>
+        </span>
+      ))}
+    </p>
   )
 }
 
@@ -582,13 +607,12 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
             hint={day ? `列出 ${dayBefore(day)}（生效日前一天）仍有效的单元` : '先选生效日期，再选要一并合并的单元'}
           />
           {others.length > 1 && (
-            <button
-              type="button"
+            <EditButton
               className="text-fg-muted hover:text-fg pb-2 text-caption hover:underline"
               onClick={() => setOthers(others.filter((_, j) => j !== i))}
             >
               移除
-            </button>
+            </EditButton>
           )}
         </div>
       ))}

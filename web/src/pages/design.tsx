@@ -431,7 +431,7 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-ACT 表单校验与离开',
     target: '错误一次全部标出、聚焦第一个，改到通过才清除；有输入时关闭先确认一次',
     stage: 'done',
-    note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮',
+    note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮。U3R-01：build() 为纯函数、提交未通过才 reveal 定位；标签 ×、选项胶囊、增删后继也算改动；保存中不关闭、不重复保存，失败保留输入与请求键',
   },
   {
     rule: 'R-STATE 详情三态',

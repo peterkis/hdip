@@ -3,7 +3,7 @@
 // - 拼音码：随名称自动生成（汉字取拼音首字母），可修改；改过后不再跟随，可“按名称重新生成”。
 //   名称里有首字母有歧义的多音字时，在字段下逐个列出供核对（不阻止保存）。
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TextField } from '@/components/forms/fields'
+import { EditButton, TextField } from '@/components/forms/fields'
 import { codeRuleText, isNewCode, type CodeObject } from '@/components/forms/new-code'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { PINYIN_RE, pinyinCode, polyphones, type PinyinMode } from '@/lib/pinyin'
@@ -78,8 +78,7 @@ export function PinyinField({
       <span>
         名称的拼音首字母，用于检索，可修改。
         {auto && auto !== value && (
-          <button
-            type="button"
+          <EditButton
             className="text-fg-secondary hover:text-fg ml-1 underline"
             onClick={() => {
               setEdited(false)
@@ -87,7 +86,7 @@ export function PinyinField({
             }}
           >
             按名称重新生成（{auto}）
-          </button>
+          </EditButton>
         )}
       </span>
     </span>

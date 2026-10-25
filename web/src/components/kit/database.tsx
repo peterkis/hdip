@@ -1,5 +1,6 @@
 // Notion 数据库视图的基本件：工具栏、筛选胶囊、搜索、表格、底部计数。各列表页共用。
 import { Icon, type AppIcon } from '@/components/kit/icon'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { ArrowDown01Icon, ArrowUp01Icon, ArrowUpDownIcon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { createContext, useContext, type ReactNode } from 'react'
 import { useFrame } from '@/components/layout'
@@ -73,6 +74,7 @@ export function FilterPill({
       </span>
       {selected && (
         <button
+          type="button"
           aria-label={`清除${label}筛选`}
           className={cn(pill, pillActive, 'rounded-l-none border-l-0 pl-1 pr-2')}
           onClick={() => onChange('')}
@@ -86,8 +88,18 @@ export function FilterPill({
 
 /** 开关胶囊：如“含计划中”。 */
 export function ToggleChip({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const markDirty = useMarkDirty()
+  // type="button"：放在表单里时只切换选项，不提交表单（U3R-01 S1）
   return (
-    <button aria-pressed={checked} className={cn(pill, checked ? pillActive : pillIdle)} onClick={() => onChange(!checked)}>
+    <button
+      type="button"
+      aria-pressed={checked}
+      className={cn(pill, checked ? pillActive : pillIdle)}
+      onClick={() => {
+        markDirty()
+        onChange(!checked)
+      }}
+    >
       {checked && <Icon icon={Tick02Icon} className="size-3.5" />}
       {label}
     </button>

@@ -1,6 +1,7 @@
 // 自由标签输入（Notion 多选属性的样子）：回车或逗号添加，退格删除最后一个，点 × 移除。
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useId, useState, type KeyboardEvent } from 'react'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
@@ -23,10 +24,16 @@ export function TagInput({
 }) {
   const id = useId()
   const [text, setText] = useState('')
+  // 增删标签不一定产生原生输入事件（点 ×、退格删整个标签），所以显式通知表单“有改动”
+  const markDirty = useMarkDirty()
+  const change = (tags: string[]) => {
+    markDirty()
+    onChange(tags)
+  }
 
   function add(raw: string) {
     const tag = raw.trim()
-    if (tag && !value.includes(tag)) onChange([...value, tag])
+    if (tag && !value.includes(tag)) change([...value, tag])
     setText('')
   }
 
@@ -35,7 +42,7 @@ export function TagInput({
       e.preventDefault()
       add(text)
     } else if (e.key === 'Backspace' && !text && value.length) {
-      onChange(value.slice(0, -1))
+      change(value.slice(0, -1))
     }
   }
 
@@ -50,7 +57,7 @@ export function TagInput({
               type="button"
               aria-label={`移除 ${t}`}
               className="hover:bg-surface-hover ml-0.5 rounded-sm p-0.5"
-              onClick={() => onChange(value.filter((x) => x !== t))}
+              onClick={() => change(value.filter((x) => x !== t))}
             >
               <Icon icon={Cancel01Icon} className="size-3" />
             </button>
