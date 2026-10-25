@@ -1,10 +1,12 @@
 // 变更申请的核对视图（方案 A 为框架，融合方案 B 的逐组核对）：
 // 按业务把变更项分组（版式按原型 A），每组一句规则说明、可逐组“我已核对”；每行是名称标签与状态标签；
 // 右侧电梯导航列出各组、问题标记与核对进度，全部核对后才能提交 / 确认。
+// 问题归属（U3R-02）：每个问题按 item_index 的“显示所有者”（covered_by ?? 自身）归到一行；组头、目录、行内和问题跳转用同一份映射。
+// 组内可见行数由页面持有（大申请分批显示），问题跳转只把目标所在的组展开到目标为止，行挂载后再滚动、聚焦与闪一下。
 // 分组按变更项的类型推出，对任何申请都适用；组织变更另有“随原部门自动结束”“需其他系统办理”两组说明。
 import { ArrowDown01Icon, ArrowRight01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
-import { useState, type ReactNode } from 'react'
-import type { ChangeRequestOut, ItemOutcome } from '@/api/generated/model'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import type { ChangeRequestOut, ItemOutcome, ProblemItem } from '@/api/generated/model'
 import { Icon } from '@/components/kit/icon'
 import { Tag, type Tone } from '@/components/kit/tag'
 import { ProblemCard } from '@/components/problem-card'
@@ -102,9 +104,49 @@ export function groupItems(cr: ChangeRequestOut): ReviewGroup[] {
   return [...groups, other].filter((g) => g.indices.length > 0)
 }
 
+/**
+ * 显示所有者：并进另一行显示的项（新设部门的主分类、隶属，新人的任用）归到那一行，其余是自己。
+ * 只认一层映射；序号越界、或指向另一个并入项时返回 null（无法定位，问题仍留在页头清单里）。
+ */
+export function ownerOf(cr: ChangeRequestOut, index: number): number | null {
+  if (!Number.isInteger(index) || index < 0 || index >= cr.items.length) return null
+  const cov = cr.item_views?.[index]?.covered_by
+  if (cov == null) return index
+  if (cov < 0 || cov >= cr.items.length || cr.item_views?.[cov]?.covered_by != null) return null
+  return cov
+}
+
 /** 某一行连同并进来的项（如新设部门的主分类）的序号 */
 function rowIndices(cr: ChangeRequestOut, index: number): number[] {
-  return [index, ...(cr.item_views ?? []).flatMap((v, i) => (v.covered_by === index ? [i] : []))]
+  return [index, ...(cr.item_views ?? []).flatMap((_, i) => (i !== index && ownerOf(cr, i) === index ? [i] : []))]
+}
+
+/** 每个显示行的问题（含并进来的项的问题）；按条计数，不按项 */
+function problemsOf(cr: ChangeRequestOut, owner: number): ProblemItem[] {
+  return cr.problems.filter((p) => p.item_index != null && ownerOf(cr, p.item_index) === owner)
+}
+
+/** 一组的问题条数（含并入项） */
+export function groupProblemCount(cr: ChangeRequestOut, group: ReviewGroup): number {
+  return group.indices.reduce((n, i) => n + problemsOf(cr, i).length, 0)
+}
+
+/** 问题跳转的目标：显示所有者所在的组与组内位置（不是全申请的原始序号）；找不到返回 null */
+export function locateItem(cr: ChangeRequestOut, groups: ReviewGroup[], index: number): { group: string; owner: number; position: number } | null {
+  const owner = ownerOf(cr, index)
+  if (owner === null) return null
+  for (const g of groups) {
+    const position = g.indices.indexOf(owner)
+    if (position >= 0) return { group: g.key, owner, position }
+  }
+  return null
+}
+
+/** 一次定位请求：seq 每次点击加一（同一问题可重复定位）；key 是申请编号 + 更新时间，内容更新后旧请求作废 */
+export interface FocusRequest {
+  owner: number
+  seq: number
+  key: string
 }
 
 type ReorgAfter = { event_type: string; basis_note: string; other_matters: string | null; ended_links: string | null; ended_items?: string[] }
@@ -159,7 +201,8 @@ export function useReviewChecks(storeKey: string | null, groups: ReviewGroup[]) 
 }
 
 // ------------------------------------------------------------------ 一组（样式按原型 A：黑色序号圆、17px 级标题、一句规则；行内是名称标签与状态标签）
-const PAGE = 50
+/** 每组先显示的行数；页面按组保存可见行数 */
+export const REVIEW_PAGE = 50
 
 const TAG_TONE: Record<string, Tone> = { green: 'green', brown: 'brown', yellow: 'yellow', blue: 'blue', gray: 'gray', red: 'red' }
 
@@ -188,6 +231,10 @@ export function ReviewGroupSection({
   checkable,
   checked,
   onCheck,
+  limit,
+  onShowAll,
+  focus,
+  onFocused,
   renderDiff,
 }: {
   cr: ChangeRequestOut
@@ -196,55 +243,95 @@ export function ReviewGroupSection({
   checkable: boolean
   checked: boolean
   onCheck: () => void
+  /** 这一组当前显示的行数（页面持有，问题跳转可把它展开到目标为止） */
+  limit: number
+  onShowAll: () => void
+  /** 问题跳转的定位请求；目标行挂载后执行，执行完调用 onFocused 清掉 */
+  focus: FocusRequest | null
+  onFocused: () => void
   /** 某一项的前后对照（由页面提供，含拆分合并图、组织变更图、字段对照表） */
   renderDiff: (outcome: ItemOutcome) => ReactNode
 }) {
-  const [limit, setLimit] = useState(PAGE)
-  const problems = group.indices.flatMap((i) => rowIndices(cr, i)).filter((i) => cr.problems.some((p) => p.item_index === i)).length
+  const problems = groupProblemCount(cr, group)
+  const shown = group.indices.slice(0, limit)
   return (
     <section id={`review-${group.key}`} aria-labelledby={`review-${group.key}-h`} className="grid scroll-mt-6 gap-2">
+      {/* 组头只讲状态（问题条数、核对与否）；“我已核对”在本组末尾，读完再勾（统一规范 SC-03） */}
       <GroupHeader number={number} title={group.title} rule={group.rule}>
         {problems > 0 && <Tag tone="red">{problems} 个问题</Tag>}
-        {checkable && (
-          <button
-            type="button"
-            onClick={onCheck}
-            aria-pressed={checked}
-            className={cn(
-              'ml-auto inline-flex h-8 items-center gap-2 rounded-lg border px-3 text-caption transition-colors',
-              checked ? 'border-success-text/30 bg-success-soft text-success-text' : 'border-line text-fg-secondary hover:bg-surface-hover',
-            )}
-          >
-            <span className={cn('flex size-3.5 items-center justify-center rounded-sm border', checked ? 'border-success-text bg-success-text text-surface-raised' : 'border-fg-muted')}>
-              {checked && <Icon icon={Tick02Icon} className="size-2.5" strokeWidth={3} />}
-            </span>
-            我已核对
-          </button>
-        )}
+        {checkable && <Tag tone={checked ? 'green' : 'gray'}>{checked ? '已核对' : '未核对'}</Tag>}
       </GroupHeader>
       <div className="grid">
-        {group.indices.slice(0, limit).map((i) => (
-          <ReviewRow key={i} cr={cr} index={i} renderDiff={renderDiff} />
+        {shown.map((i) => (
+          <ReviewRow key={i} cr={cr} index={i} renderDiff={renderDiff} focus={focus?.owner === i ? focus : null} onFocused={onFocused} />
         ))}
         {group.indices.length > limit && (
-          <button type="button" onClick={() => setLimit(group.indices.length)} className="text-fg-secondary hover:text-fg justify-self-start px-3 py-2 text-xs hover:underline">
-            显示这一组的全部 {group.indices.length} 项
+          <button type="button" onClick={onShowAll} className="text-fg-secondary hover:text-fg justify-self-start px-3 py-2 text-xs hover:underline">
+            显示这一组的全部 {group.indices.length} 项（已显示 {shown.length} 项）
           </button>
         )}
       </div>
+      {checkable && (
+        <button
+          type="button"
+          onClick={onCheck}
+          aria-pressed={checked}
+          className={cn(
+            'inline-flex h-(--hd-control-height) items-center gap-2 justify-self-start rounded-md border px-3 text-caption transition-colors',
+            checked ? 'border-success-text/30 bg-success-soft text-success-text' : 'border-line text-fg-secondary hover:bg-surface-hover',
+          )}
+        >
+          <span className={cn('flex size-3.5 items-center justify-center rounded-sm border', checked ? 'border-success-text bg-success-text text-surface-raised' : 'border-fg-muted')}>
+            {checked && <Icon icon={Tick02Icon} className="size-2.5" strokeWidth={3} />}
+          </span>
+          我已核对“{group.title}”
+        </button>
+      )}
     </section>
   )
 }
 
-function ReviewRow({ cr, index, renderDiff }: { cr: ChangeRequestOut; index: number; renderDiff: (outcome: ItemOutcome) => ReactNode }) {
+function ReviewRow({
+  cr,
+  index,
+  renderDiff,
+  focus,
+  onFocused,
+}: {
+  cr: ChangeRequestOut
+  index: number
+  renderDiff: (outcome: ItemOutcome) => ReactNode
+  focus: FocusRequest | null
+  onFocused: () => void
+}) {
   const view = cr.item_views?.[index]
   const all = rowIndices(cr, index)
-  const problems = all.flatMap((i) => cr.problems.filter((p) => p.item_index === i))
+  const problems = problemsOf(cr, index)
   const outcomes = all.flatMap((i) => cr.outcomes?.filter((o) => o.index === i) ?? [])
   const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const crKey = `${cr.id}-${cr.updated_at}`
+  // 定位在本行提交到页面之后执行（effect），所以刚展开出来的第 51 行也能找到；申请内容已更新的旧请求不执行
+  useEffect(() => {
+    if (!focus) return
+    onFocused()
+    const el = ref.current
+    if (!el || focus.key !== crKey) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    el.focus({ preventScroll: true })
+    el.classList.remove('hd-flash')
+    void el.offsetWidth
+    el.classList.add('hd-flash')
+  }, [focus?.seq])
   return (
-    // tabIndex=-1：从问题清单跳过来时焦点落在这一项（统一规范 R-ACT 7.3）
-    <div id={`item-${index}`} tabIndex={-1} className="grid scroll-mt-6 gap-2 rounded-lg outline-none">
+    // tabIndex=-1：从问题清单跳过来时焦点落在这一项（统一规范 R-ACT 7.3）；焦点环是减少动效时也有的静态反馈
+    <div
+      ref={ref}
+      id={`item-${index}`}
+      tabIndex={-1}
+      className="focus:ring-ring/40 grid scroll-mt-6 gap-2 rounded-lg outline-none focus:ring-2"
+    >
       <div className={cn('flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
         {view ? view.parts.map((part, k) => <RowPart key={k} kind={part.kind} text={part.text} tone={part.tone ?? undefined} />) : <span className="text-fg">{cr.item_summaries?.[index]}</span>}
         <span className="ml-auto flex items-center gap-3">
@@ -392,7 +479,7 @@ export function ReviewNav({
       </button>
       <nav className={cn('border-line-subtle gap-0.5 border-l pl-1.5 @review:grid', open ? 'grid' : 'hidden')}>
         {groups.map((g) => {
-          const problems = g.indices.filter((i) => cr.problems.some((p) => p.item_index === i)).length
+          const problems = groupProblemCount(cr, g)
           const done = checks.checked.has(g.key)
           return (
             <NavLink key={g.key} onClick={() => jump(`review-${g.key}`)}>

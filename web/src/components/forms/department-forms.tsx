@@ -531,6 +531,27 @@ export function DepartmentRelationCloseDialog({ relation, ...props }: DialogProp
 }
 
 // ------------------------------------------------------------------ 批量操作（部门列表里勾选多个部门）
+/** 批量对话框的对象说明：选了几个、跳过几个及原因、生成几项；名单超过 8 个时可展开看全 */
+function BatchScope({ rows, skipped, reason, todo }: { rows: DepartmentRow[]; skipped: number; reason: string; todo: number }) {
+  const [all, setAll] = useState(false)
+  const list = all ? rows : rows.slice(0, 8)
+  return (
+    <div className="grid gap-1 text-xs">
+      <p className="text-fg">
+        选择 {rows.length} 个部门{skipped > 0 && `，跳过 ${skipped} 个（${reason}）`}，生成 {todo} 项。
+      </p>
+      <p className="text-fg-secondary">
+        {list.map((d) => d.version.name).join('、')}
+        {rows.length > 8 && (
+          <button type="button" className="text-fg-secondary hover:text-fg ml-1 underline" onClick={() => setAll(!all)}>
+            {all ? '收起' : `展开全部 ${rows.length} 个`}
+          </button>
+        )}
+      </p>
+    </div>
+  )
+}
+
 /** 批量设置部门管理主分类：每个部门一项 department.classify；已经是该分类、或已撤销 / 被替代的部门跳过 */
 export function DepartmentBatchClassifyDialog({ rows, ...props }: DialogProps & { rows: DepartmentRow[] }) {
   const { data: schemes = [] } = useListClassificationSchemes()
@@ -539,7 +560,8 @@ export function DepartmentBatchClassifyDialog({ rows, ...props }: DialogProps & 
   const [day, setDay] = useEffectiveDate()
   const terminal = (d: DepartmentRow) => d.version.lifecycle === 'REVOKED' || d.version.lifecycle === 'SUPERSEDED'
   const todo = rows.filter((d) => !terminal(d) && d.main_class?.code !== value)
-  const skipped = rows.length - todo.length
+  const ended = rows.filter(terminal).length
+  const same = rows.length - todo.length - ended
   return (
     <ItemDialog
       {...props}
@@ -555,11 +577,12 @@ export function DepartmentBatchClassifyDialog({ rows, ...props }: DialogProps & 
         todo.map((d) => ({ kind: 'department.classify' as const, code: d.code, scheme_code: MAIN_SCHEME, class_code: value, effective_date: day }))
       }
     >
-      <p className="text-fg-secondary text-xs">
-        {rows.slice(0, 8).map((d) => d.version.name).join('、')}
-        {rows.length > 8 && ` 等 ${rows.length} 个`}
-        {value && skipped > 0 && `；其中 ${skipped} 个已是该分类或已退出，跳过`}
-      </p>
+      <BatchScope
+        rows={rows}
+        skipped={ended + same}
+        reason={[ended > 0 && `${ended} 个已撤销或被替代`, same > 0 && `${same} 个已是该分类`].filter(Boolean).join('、')}
+        todo={todo.length}
+      />
       <SelectField
         label="主分类"
         name="class_code"
@@ -601,11 +624,12 @@ export function DepartmentBatchParentDialog({ rows, ...props }: DialogProps & { 
         }))
       }
     >
-      <p className="text-fg-secondary text-xs">
-        {rows.slice(0, 8).map((d) => d.version.name).join('、')}
-        {rows.length > 8 && ` 等 ${rows.length} 个`}
-        {rows.length > todo.length && `；其中 ${rows.length - todo.length} 个已在目标位置，跳过`}
-      </p>
+      <BatchScope
+        rows={rows}
+        skipped={rows.length - todo.length}
+        reason={top ? '已是一级部门' : '已在所选上级下，或就是所选上级'}
+        todo={todo.length}
+      />
       <label className="text-fg flex items-center gap-2 text-xs">
         <input type="checkbox" className="accent-brand size-3.5" checked={top} onChange={(e) => setTop(e.target.checked)} />
         改为一级部门（没有上级）

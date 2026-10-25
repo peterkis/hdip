@@ -15,7 +15,7 @@ import {
   TextFontIcon,
 } from '@hugeicons/core-free-icons'
 import { useMutation } from '@tanstack/react-query'
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
 import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut, ReorgEventOut, DepartmentDetail } from '@/api/generated/model'
@@ -63,10 +63,12 @@ import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, period, versionNote, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone, PLANNED_TONE } from '@/lib/tones'
+import { useCurrentUsername } from '@/lib/session'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
 const MAIN_SCHEME = 'DEPT_MAIN_CLASS'
+const EMPTY_PICK: Map<number, DepartmentRow> = new Map()
 
 function LifecycleTag({ value }: { value: string }) {
   return <Tag tone={DEPARTMENT_LIFECYCLE_TONE[value] ?? 'gray'}>{DEPARTMENT_LIFECYCLE[value as DepartmentLifecycle] ?? value}</Tag>
@@ -132,18 +134,41 @@ export function DepartmentsPage() {
     }
   }
   const columns = full ? FULL_COLUMNS : COLUMNS
-  // 批量操作：勾选的部门 id；切换筛选不清空，便于分几次挑选
-  const [checked, setChecked] = useState<Set<number>>(new Set())
+  // 批量操作的所选集合（统一规范 C-04 / SC-04，U3R-02）：存勾选时查询返回的部门行，所以搜索、筛选、表 / 树切换后
+  // 仍能列出、计数并交给批量表单；选择条、名单、批量表单都只用这一份。绑定查看日期与当前身份：任一变化即清空
+  // （渲染时就不再使用旧选择，effect 里再清掉并提示一次），不把旧日期的部门快照带进新日期的批量操作。
+  const username = useCurrentUsername()
+  const selKey = `${asOf}|${username}`
+  const [sel, setSel] = useState<{ key: string; rows: Map<number, DepartmentRow> }>(() => ({ key: selKey, rows: new Map() }))
   const [batch, setBatch] = useState<'classify' | 'parent' | null>(null)
-  const toggleCheck = (id: number) =>
-    setChecked((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  const [showPicked, setShowPicked] = useState(false)
+  const current = sel.key === selKey ? sel.rows : EMPTY_PICK
+  useEffect(() => {
+    if (sel.key === selKey) return
+    if (sel.rows.size > 0) notify.info(`查看日期或身份已变，已清除之前选择的 ${sel.rows.size} 个部门`)
+    setSel({ key: selKey, rows: new Map() })
+    setBatch(null)
+    setShowPicked(false)
+  }, [selKey, sel])
+  const updatePick = (fn: (m: Map<number, DepartmentRow>) => void) =>
+    setSel((prev) => {
+      const rows = new Map(prev.key === selKey ? prev.rows : [])
+      fn(rows)
+      return { key: selKey, rows }
+    })
+  const toggleCheck = (d: DepartmentRow) =>
+    updatePick((m) => {
+      if (m.has(d.id)) m.delete(d.id)
+      else m.set(d.id, d)
     })
 
   const { data: all = [], isPending } = useListDepartments({ as_of: asOf, ...(q && { q }) })
+  // 同一天的新查询再次返回已选部门时用最新的行；没返回的保留勾选时的样子（只是当前没列出）
+  const picked = useMemo(() => {
+    const fresh = new Map(all.map((d) => [d.id, d]))
+    return [...current.values()].map((d) => fresh.get(d.id) ?? d)
+  }, [current, all])
+  if (picked.length === 0 && showPicked) setShowPicked(false)
   const { data: schemes = [] } = useListClassificationSchemes()
   const mainCodes = schemes.find((s) => s.code === MAIN_SCHEME)?.codes ?? []
 
@@ -170,9 +195,9 @@ export function DepartmentsPage() {
       return next
     })
 
-  // 选择跨筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
+  // 选择跨搜索、筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
   const visibleIds = useMemo(() => new Set(ordered.map((d) => d.id)), [ordered])
-  const hiddenChecked = [...checked].filter((id) => !visibleIds.has(id)).length
+  const hiddenChecked = picked.filter((d) => !visibleIds.has(d.id)).length
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
@@ -258,24 +283,31 @@ export function DepartmentsPage() {
                   <input
                     type="checkbox"
                     className="accent-brand size-3.5"
-                    checked={ordered.length > 0 && ordered.every((d) => checked.has(d.id))}
-                    onChange={(e) => setChecked(e.target.checked ? new Set([...checked, ...ordered.map((d) => d.id)]) : new Set())}
+                    checked={ordered.length > 0 && ordered.every((d) => current.has(d.id))}
+                    onChange={(e) =>
+                      updatePick((m) => {
+                        for (const d of ordered) {
+                          if (e.target.checked) m.set(d.id, d)
+                          else m.delete(d.id)
+                        }
+                      })
+                    }
                   />
-                  全选当前列出的 {ordered.length} 个部门（可先用上方筛选缩小范围，再批量设置主分类或行政上级）
+                  全选当前列出的 {ordered.length} 个部门（可先用上方筛选缩小范围，再批量设置主分类或行政上级；取消只去掉当前列出的）
                 </label>
               </td>
             </tr>
           )}
           {ordered.map((d) => (
-            <DbRow key={d.id} className={cn(checked.has(d.id) && 'bg-surface-selected')}>
+            <DbRow key={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
               {isMaintainer && (
                 <DbCell>
                   <input
                     type="checkbox"
                     aria-label={`选择 ${d.version.name}`}
                     className="accent-brand size-3.5"
-                    checked={checked.has(d.id)}
-                    onChange={() => toggleCheck(d.id)}
+                    checked={current.has(d.id)}
+                    onChange={() => toggleCheck(d)}
                   />
                 </DbCell>
               )}
@@ -354,36 +386,56 @@ export function DepartmentsPage() {
         </span>
         <span>上方统计只计查看日期当天“正式履职”的部门；筹备、暂停履职、撤销与计划中不计入</span>
       </DbFooter>
-      {checked.size > 0 && (
-        <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 shadow-md">
-          <span className="text-fg-secondary text-xs">
-            已选 <span className="text-fg-strong font-medium">{checked.size}</span> 个部门
-            {hiddenChecked > 0 && <>，其中当前列出 {checked.size - hiddenChecked} 个</>}
-          </span>
-          {hiddenChecked > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set([...checked].filter((id) => visibleIds.has(id))))}>
-              清除没列出的 {hiddenChecked} 个
+      {picked.length > 0 && (
+        <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 grid gap-2 rounded-lg border px-3 py-2 shadow-md">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-fg-secondary text-xs">
+              已选 <span className="text-fg-strong font-medium">{picked.length}</span> 个部门
+              {hiddenChecked > 0 && <>，其中当前列出 {picked.length - hiddenChecked} 个</>}
+            </span>
+            <Button size="sm" variant="ghost" aria-expanded={showPicked} onClick={() => setShowPicked(!showPicked)}>
+              <Icon icon={showPicked ? ArrowDown01Icon : ArrowRight01Icon} inline="start" />
+              {showPicked ? '收起名单' : `查看已选 ${picked.length} 个`}
             </Button>
+            {hiddenChecked > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => updatePick((m) => picked.forEach((d) => !visibleIds.has(d.id) && m.delete(d.id)))}>
+                清除没列出的 {hiddenChecked} 个
+              </Button>
+            )}
+            <span className="ml-auto flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" onClick={() => updatePick((m) => m.clear())}>
+                清除选择
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBatch('parent')}>
+                调整行政上级…
+              </Button>
+              <Button size="sm" onClick={() => setBatch('classify')}>
+                设置主分类…
+              </Button>
+            </span>
+          </div>
+          {showPicked && (
+            <ul aria-label="已选部门" className="border-line-subtle grid max-h-60 overflow-y-auto border-t pt-1">
+              {picked.map((d) => (
+                <li key={d.id} className="flex min-h-(--hd-control-height) items-center gap-2 text-xs">
+                  <span className="text-fg-strong min-w-0 truncate">{d.version.name}</span>
+                  <span className="text-fg-muted font-mono text-caption">{d.code}</span>
+                  {!visibleIds.has(d.id) && <span className="text-fg-muted text-caption">当前未列出</span>}
+                  <InlineAction className="ml-auto" onClick={() => updatePick((m) => m.delete(d.id))}>
+                    取消选择<span className="sr-only"> {d.version.name}</span>
+                  </InlineAction>
+                </li>
+              ))}
+            </ul>
           )}
-          <span className="ml-auto flex flex-wrap gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set())}>
-              清除选择
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setBatch('parent')}>
-              调整行政上级…
-            </Button>
-            <Button size="sm" onClick={() => setBatch('classify')}>
-              设置主分类…
-            </Button>
-          </span>
         </div>
       )}
       {creating && <DepartmentCreateDialog open onOpenChange={setCreating} />}
-      {batch === 'classify' && (
-        <DepartmentBatchClassifyDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      {batch === 'classify' && picked.length > 0 && (
+        <DepartmentBatchClassifyDialog open onOpenChange={(o) => !o && setBatch(null)} rows={picked} />
       )}
-      {batch === 'parent' && (
-        <DepartmentBatchParentDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      {batch === 'parent' && picked.length > 0 && (
+        <DepartmentBatchParentDialog open onOpenChange={(o) => !o && setBatch(null)} rows={picked} />
       )}
     </>
   )

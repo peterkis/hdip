@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   cancelChangeRequest,
@@ -21,7 +21,7 @@ import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, SearchBox } from '@/componen
 import { Segmented } from '@/components/kit/segmented'
 import { DetailFallback } from '@/components/kit/missing'
 import { ProblemCard } from '@/components/problem-card'
-import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks } from '@/components/change-review'
+import { groupItems, locateItem, REVIEW_PAGE, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks, type FocusRequest } from '@/components/change-review'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Steps, type StepItem } from '@/components/kit/steps'
 import { QuoteDownIcon } from '@hugeicons/core-free-icons'
@@ -319,23 +319,26 @@ export function ChangeDetailPage() {
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
   const [reorgEditing, setReorgEditing] = useState(false)
-  // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
-  const [itemLimit, setItemLimit] = useState(50)
   const groups = useMemo(() => (cr ? groupItems(cr) : []), [cr])
   const checks = useReviewChecks(cr ? `${cr.id}-${cr.updated_at}` : null, groups)
-  // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）；焦点移过去，底色闪一下作为定位反馈
+  // 大批量申请（如初始导入上千项）每组先显示 REVIEW_PAGE 行；可见行数按组记在这里，换一张申请时重置
+  const [view, setView] = useState<{ id: number; limits: Record<string, number>; focus: FocusRequest | null }>({ id, limits: {}, focus: null })
+  if (view.id !== id) setView({ id, limits: {}, focus: null })
+  const limitOf = (g: string) => view.limits[g] ?? REVIEW_PAGE
+  // 从顶部问题清单跳到对应的显示行：只把目标所在组展开到目标为止（其他组不动），行挂载后由该行滚动、聚焦并闪一下
+  const jumpSeq = useRef(0)
   const jumpTo = (index: number) => {
-    if (index >= itemLimit) setItemLimit(index + 1)
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`item-${index}`)
-      if (!el) return
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      el.focus({ preventScroll: true })
-      el.classList.remove('hd-flash')
-      void el.offsetWidth
-      el.classList.add('hd-flash')
-    })
+    if (!cr) return
+    const loc = locateItem(cr, groups, index)
+    if (!loc) return
+    const seq = ++jumpSeq.current
+    setView((v) => ({
+      ...v,
+      limits: loc.position >= (v.limits[loc.group] ?? REVIEW_PAGE) ? { ...v.limits, [loc.group]: loc.position + 1 } : v.limits,
+      focus: { owner: loc.owner, seq, key: `${cr.id}-${cr.updated_at}` },
+    }))
   }
+  const clearFocus = () => setView((v) => (v.focus ? { ...v, focus: null } : v))
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
   const [noteFor, setNoteFor] = useState<number | null>(null)
@@ -472,14 +475,24 @@ export function ChangeDetailPage() {
                   <h2 className="text-danger-text text-section font-semibold">
                     还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
                   </h2>
-                  {cr.problems.map((pr, k) => (
-                    <ProblemCard
-                      key={k}
-                      problem={pr}
-                      title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
-                      onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
-                    />
-                  ))}
+                  {cr.problems.map((pr, k) => {
+                    // 没有对应项的问题（整张申请的）只留在这里；有序号但找不到显示行时写明，不猜一个对象
+                    const at = pr.item_index
+                    const located = at != null && locateItem(cr, groups, at) !== null
+                    const label = at != null ? (cr.item_summaries?.[at] ?? cr.item_labels[at]) : undefined
+                    return (
+                      <ProblemCard
+                        key={k}
+                        problem={pr}
+                        title={
+                          at == null
+                            ? '整张申请'
+                            : `第 ${at + 1} 项 · ${label ?? '（未找到这一项）'}${located ? '' : '（无法定位到下方的行）'}`
+                        }
+                        onJump={located ? () => jumpTo(at!) : undefined}
+                      />
+                    )
+                  })}
                 </section>
               )}
 
@@ -529,6 +542,10 @@ export function ChangeDetailPage() {
                   checkable={checkable}
                   checked={checks.checked.has(g.key)}
                   onCheck={() => checks.toggle(g.key)}
+                  limit={limitOf(g.key)}
+                  onShowAll={() => setView((v) => ({ ...v, limits: { ...v.limits, [g.key]: g.indices.length } }))}
+                  focus={view.focus}
+                  onFocused={clearFocus}
                   renderDiff={(o) => <OutcomeDiff outcome={o} />}
                 />
               ))}

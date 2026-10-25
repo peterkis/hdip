@@ -439,6 +439,18 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     stage: 'done',
     note: 'U3：kit/missing 的 DetailFallback，六个详情页共用',
   },
+  {
+    rule: 'R-ACT 7.4 核对定位与组尾核对',
+    target: '问题按显示行归属（covered_by）计数与跳转；跳转只展开目标所在组；“我已核对”在组尾',
+    stage: 'done',
+    note: 'U3R-02：51 行与并入项用受控样本、门槛用真实草稿走查；减少动效偏好只按代码核对',
+  },
+  {
+    rule: 'C-04 批量选择范围',
+    target: '同一查看日期跨搜索、筛选、表 / 树保留所选部门；名单可查看与逐条取消；改日期或身份即清空',
+    stage: 'done',
+    note: 'U3R-02：部门列表；选择条、名单、两个批量表单用同一集合。其他页面的选择未改',
+  },
 ]
 
 function SpecV1Section() {
