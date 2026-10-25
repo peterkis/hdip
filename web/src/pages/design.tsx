@@ -434,10 +434,10 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮。U3R-01：build() 为纯函数、提交未通过才 reveal 定位；标签 ×、选项胶囊、增删后继也算改动；保存中不关闭、不重复保存，失败保留输入与请求键',
   },
   {
-    rule: 'R-STATE 详情三态',
-    target: '加载骨架 / 找不到 / 读取失败可重试 分开',
+    rule: 'R-STATE 读取状态',
+    target: '首次读取不写 0；失败不说成空；403 / 401 / 404 / 临时故障分开；同键刷新失败保留并标出；部分失败只影响所在区块',
     stage: 'done',
-    note: 'U3：kit/missing 的 DetailFallback，六个详情页共用',
+    note: 'U3：DetailFallback 六个详情页共用。U3R-03：kit/read-state 接入八个列表、编码明细与批量、组织总览、详情附属区；走查用受控响应。向导读取留 U3R-04',
   },
   {
     rule: 'R-ACT 7.4 核对定位与组尾核对',

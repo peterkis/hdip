@@ -39,15 +39,21 @@ export function FilterPill({
   options,
   onChange,
   icon,
+  optionsStatus = 'ready',
 }: {
   label: string
   value: string
   options: { value: string; label: string }[]
   onChange: (value: string) => void
   icon?: AppIcon
+  /** 选项来自另一次读取时传入其状态：读取中 / 失败时不把已选值说成“不在选项中”，也不清掉它（U3R-03） */
+  optionsStatus?: 'loading' | 'error' | 'ready'
 }) {
   // 值不在选项里（网址里的旧 id、选项还没加载）也要显示出来并可清除：不让看不见的条件悄悄生效（SC-06）
-  const selected = options.find((o) => o.value === value) ?? (value ? { value, label: options.length ? `${value}（不在当前选项中）` : '…' } : undefined)
+  const pending = optionsStatus === 'loading' ? '选项读取中' : optionsStatus === 'error' ? '选项未能读取' : null
+  const selected =
+    options.find((o) => o.value === value) ??
+    (value ? { value, label: pending ? `${value}（${pending}）` : `${value}（不在当前选项中）` } : undefined)
   return (
     <span className="inline-flex items-center">
       <span className={cn(pill, selected ? pillActive : pillIdle, selected && 'rounded-r-none pr-1.5')}>
@@ -65,6 +71,11 @@ export function FilterPill({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">全部{label}</option>
+          {pending && (
+            <option value={value || '__pending'} disabled>
+              {pending}
+            </option>
+          )}
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}

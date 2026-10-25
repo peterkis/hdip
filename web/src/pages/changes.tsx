@@ -20,6 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, SearchBox } from '@/components/kit/database'
 import { Segmented } from '@/components/kit/segmented'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, readStatus, StaleNotice } from '@/components/kit/read-state'
 import { ProblemCard } from '@/components/problem-card'
 import { groupItems, locateItem, REVIEW_PAGE, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks, type FocusRequest } from '@/components/change-review'
 import { InlineAction, Section } from '@/components/kit/section'
@@ -99,7 +100,11 @@ export function ChangesPage() {
       { replace: true },
     )
   // 一次取全部：各状态的计数是完整口径；筛选在页面里做，不逐行取详情
-  const { data: rows = [], isPending, isError, refetch, isFetching } = useListChangeRequests()
+  // 读取状态（U3R-03）：首次读取、失败时计数不写 0；同一范围刷新失败时照常显示上次结果并标出
+  const list = useListChangeRequests()
+  const listStatus = readStatus(list)
+  const isPending = listStatus === 'loading'
+  const rows = useMemo(() => list.data ?? [], [list.data])
   const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.value, rows.filter(v.test).length])), [rows])
   const current = VIEWS.find((v) => v.value === view)!
   const shown = useMemo(() => {
@@ -153,21 +158,15 @@ export function ChangesPage() {
           label="申请范围"
           value={view}
           onChange={(v) => setParam('view', v)}
-          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: isPending ? undefined : counts[v.value], accent: v.accent, divider: v.divider }))}
+          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: listStatus === 'ready' ? counts[v.value] : undefined, accent: v.accent, divider: v.divider }))}
         />
         <span className="flex-1" />
         <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="对象名称、编号、说明或申请人" />
       </div>
 
-      {isError ? (
-        <Callout tone="danger" title="没有取到变更申请">
-          <span className="flex flex-wrap items-center gap-3">
-            筛选条件已保留，可以重试。
-            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-              重试
-            </Button>
-          </span>
-        </Callout>
+      <StaleNotice what="变更申请" query={list} />
+      {listStatus === 'error' ? (
+        <ReadError what="变更申请" query={list} />
       ) : (
         <div className="overflow-x-auto" aria-busy={isPending || undefined}>
           <div className="min-w-2xl">
@@ -208,7 +207,7 @@ export function ChangesPage() {
           </div>
         </div>
       )}
-      {!isPending && !isError && (
+      {listStatus === 'ready' && (
         <DbFooter>
           <span>
             {shown.length} 份申请 · 当前范围：{current.label}
@@ -356,7 +355,7 @@ export function ChangeDetailPage() {
     },
   })
 
-  if (!cr)
+  if (!cr || isDenial(query.error))
     return <DetailFallback what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} query={query} invalid={!Number.isInteger(id)} />
   const p = cr.permissions
   /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */

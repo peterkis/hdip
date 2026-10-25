@@ -289,7 +289,9 @@ function UserSwitcher() {
         value={username}
         onChange={(e) => {
           setCurrentUsername(e.target.value)
-          qc.invalidateQueries()
+          // 换身份 = 新的读取范围（U3R-03）：等界面按新身份渲染后再重置缓存——旧身份读到的数据不再显示，
+          // 只重取此时仍启用的查询；新身份的权限没读到前，按权限启用的查询（如人员）不会带新身份提前发出
+          setTimeout(() => qc.resetQueries(), 0)
           const name = users.find((u) => u.username === e.target.value)?.display_name
           notify.info(`已切换为“${name ?? e.target.value}”`)
         }}

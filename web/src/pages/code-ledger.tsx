@@ -26,6 +26,7 @@ import { notify } from '@/lib/notify'
 import { CODE_STATUS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
+import { readFailure, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 
 const PAGE = 100
 
@@ -51,17 +52,31 @@ export function CodeLedgerPage() {
     setLimit(PAGE)
   }
 
-  const { data: systems = [], isSuccess: systemsLoaded } = useListSourceSystems({ as_of: asOf })
-  const { data: page, isPending } = useListExternalCodes({
+  // 读取状态（U3R-03）：计数、空态、“还没有来源系统”只由读取成功的数据得出
+  const systemsQuery = useListSourceSystems({ as_of: asOf })
+  const systems = systemsQuery.data ?? []
+  const systemsStatus = readStatus(systemsQuery)
+  const codesParams = {
     as_of: asOf,
     limit,
     ...(ns && { namespace_id: Number(ns) }),
     ...(status && { status }),
     ...(q && { q }),
+  }
+  const codesQuery = useListExternalCodes(codesParams, {
+    query: {
+      // 只多显示几条（limit 变了、其余条件相同）时沿用已显示的结果，不闪回读取中；换日期、筛选、搜索不沿用
+      placeholderData: (prev, prevQuery) => {
+        const before = prevQuery?.queryKey[1] as typeof codesParams | undefined
+        return before && JSON.stringify({ ...before, limit: 0 }) === JSON.stringify({ ...codesParams, limit: 0 }) ? prev : undefined
+      },
+    },
   })
+  const page = codesQuery.data
+  const codesStatus = readStatus(codesQuery)
   const rows = page?.rows ?? []
-  const counts = page?.counts ?? { pending: 0, mapped: 0, unmodeled: 0 }
-  const all = counts.pending + counts.mapped + counts.unmodeled
+  const counts = page?.counts
+  const all = counts ? counts.pending + counts.mapped + counts.unmodeled : undefined
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('external-codes', asOf),
@@ -81,7 +96,12 @@ export function CodeLedgerPage() {
               导出 CSV
             </Button>
             {canConfig && (
-              <Button variant="outline" onClick={() => setDialog('systems')}>
+              <Button
+                variant="outline"
+                disabled={systemsStatus !== 'ready'}
+                title={systemsStatus === 'ready' ? undefined : '来源系统尚未读取成功'}
+                onClick={() => setDialog('systems')}
+              >
                 <Icon icon={ServerStack01Icon} inline="start" />
                 来源系统
               </Button>
@@ -101,9 +121,14 @@ export function CodeLedgerPage() {
         }
       />
 
-      <LedgerGuide empty={!isPending && all === 0 && !q && !status && !ns} />
+      <LedgerGuide empty={codesStatus === 'ready' && all === 0 && !q && !status && !ns} />
 
-      {systemsLoaded && systems.length === 0 && (
+      {systemsStatus === 'error' && (
+        <div className="mb-4">
+          <ReadError what="来源系统与字典" query={systemsQuery} compact />
+        </div>
+      )}
+      {systemsStatus === 'ready' && systems.length === 0 && (
         <Callout className="mb-4" title="还没有登记来源系统">
           先登记来源系统实例（如某 HIS 实例、病案系统）及其字典，再登记字典里的代码。来源系统与字典是配置，维护人直接维护；代码与解释是业务数据，经变更申请确认。
         </Callout>
@@ -126,6 +151,7 @@ export function CodeLedgerPage() {
           value={ns}
           onChange={(v) => set('ns', v)}
           options={systems.flatMap((s) => s.namespaces.map((n) => ({ value: String(n.id), label: `${s.name} · ${n.name}` })))}
+          optionsStatus={systemsStatus}
         />
         {!batch && (
           <Segmented
@@ -134,7 +160,7 @@ export function CodeLedgerPage() {
             onChange={(v) => set('status', v === 'all' ? '' : v)}
             options={[
               { value: 'all', label: '全部', count: all },
-              ...(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => ({ value: k, label: CODE_STATUS[k], count: counts[k] })),
+              ...(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => ({ value: k, label: CODE_STATUS[k], count: counts?.[k] })),
             ]}
           />
         )}
@@ -147,10 +173,31 @@ export function CodeLedgerPage() {
 
       {batch ? (
         <BatchAdjudicate namespaceId={ns ? Number(ns) : undefined} q={q || undefined} />
-      ) : !isPending && rows.length === 0 ? (
+      ) : codesStatus === 'loading' ? (
+        <ReadLoading label="正在读取编码…" />
+      ) : codesStatus === 'error' ? (
+        <ReadError what="编码" query={codesQuery} />
+      ) : rows.length === 0 ? (
         <DbEmpty
           title={all === 0 && !q ? '台账里还没有代码' : '没有符合条件的代码'}
-          hint={all === 0 && !q ? '登记代码后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
+          hint={all === 0 && !q ? '登记代码后经提交、确认才会出现在这里。' : '查看日期不变；换个筛选条件或搜索词试试。'}
+          action={
+            (q || status || ns) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setQuery('')
+                  const next = new URLSearchParams(params)
+                  for (const k of ['ns', 'status']) next.delete(k)
+                  setParams(next, { replace: true })
+                  setLimit(PAGE)
+                }}
+              >
+                清除搜索与筛选
+              </Button>
+            )
+          }
         />
       ) : (
         <DbTable
@@ -168,13 +215,22 @@ export function CodeLedgerPage() {
         </DbTable>
       )}
 
+      {!batch && <StaleNotice what="编码" query={codesQuery} />}
       {!batch && (
         <DbFooter>
           <span>
-            显示 <span className="text-fg-secondary">{rows.length}</span> / {page?.total ?? 0} 条
+            {codesStatus === 'ready' && page ? (
+              <>
+                显示 <span className="text-fg-secondary">{rows.length}</span> / {page.total} 条
+              </>
+            ) : (
+              <>
+                显示 <Unknown reason="编码尚未读取成功" /> 条
+              </>
+            )}
           </span>
-          {page && rows.length < page.total && (
-            <Button variant="ghost" size="sm" onClick={() => setLimit(limit + PAGE)}>
+          {codesStatus === 'ready' && page && rows.length < page.total && (
+            <Button variant="ghost" size="sm" disabled={codesQuery.isFetching} onClick={() => setLimit(limit + PAGE)}>
               再显示 {Math.min(PAGE, page.total - rows.length)} 条
             </Button>
           )}
@@ -258,10 +314,37 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
 function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetExternalCode(id, { as_of: asOf })
+  const query = useGetExternalCode(id, { as_of: asOf })
+  const detailStatus = readStatus(query)
+  const data = detailStatus === 'ready' ? query.data : undefined
   const [assigning, setAssigning] = useState(false)
   const [closing, setClosing] = useState<AssignmentOut | null>(null)
-  if (!data) return null
+  // 点代码后立即出现弹层：读取中、失败都在弹层里说明，始终可以关闭；读取成功前不出现新增 / 结束解释（U3R-03）
+  if (!data)
+    return (
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{detailStatus === 'loading' ? '正在读取代码详情' : '代码详情'}</DialogTitle>
+            <DialogDescription>台账的筛选与位置保持不变。</DialogDescription>
+          </DialogHeader>
+          {detailStatus === 'loading' ? (
+            <ReadLoading label="正在读取代码详情…" rows={3} />
+          ) : readFailure(query.error) === 'missing' || readFailure(query.error) === 'invalid' ? (
+            <Callout tone="neutral" title="找不到这个代码">
+              链接里的代码可能已不存在或地址不完整，请从台账重新打开。
+            </Callout>
+          ) : (
+            <ReadError what="这个代码" query={query} compact />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   if (assigning) return <ExternalCodeAssignDialog open onOpenChange={(o) => !o && setAssigning(false)} code={data} />
   if (closing) return <AssignmentCloseDialog open onOpenChange={(o) => !o && setClosing(null)} assignment={closing} code={data} />
   return (

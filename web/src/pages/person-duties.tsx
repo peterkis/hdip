@@ -33,6 +33,7 @@ import { notify } from '@/lib/notify'
 import { PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
+import { ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 
 const DUTY = { HEAD: '部长', DEPUTY: '副部长' } as const
 const MODE = { FORMAL: '正式', ACTING: '主持工作 / 代理', CARETAKER: '代管' } as const
@@ -71,7 +72,8 @@ export function PersonDutiesPage() {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<DbSort | null>(null)
   const [dialog, setDialog] = useState<Dialog | null>(null)
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const departments = deptQuery.data ?? []
   // 台账与导出用同一组筛选
   const filters: Omit<ListPersonDutiesParams, 'as_of'> = {
     q: query.trim() || undefined,
@@ -80,8 +82,13 @@ export function PersonDutiesPage() {
     ...(f.duty && { duty: f.duty as 'HEAD' | 'DEPUTY' }),
     ...(f.mode && { mode: f.mode as 'FORMAL' | 'ACTING' | 'CARETAKER' }),
   }
-  const { data, isPending } = useListPersonDuties({ as_of: asOf, ...filters })
+  // 读取状态（U3R-03）：负责人一览与台账同一次读取；未成功时不写 0、不列“未登记负责人”
+  const list = useListPersonDuties({ as_of: asOf, ...filters })
+  const status = readStatus(list)
+  const data = status === 'ready' ? list.data : undefined
   const rows = useMemo(() => sortRows(data?.rows ?? [], sort), [data, sort])
+  const pendingBody =
+    status === 'loading' ? <ReadLoading label="正在读取部门任职…" /> : status === 'error' ? <ReadError what="部门任职" query={list} /> : null
 
   const exporting = useMutation({
     mutationFn: async () => downloadCsv('person-duties', asOf, filters),
@@ -97,7 +104,7 @@ export function PersonDutiesPage() {
         actions={
           <>
             {can('person.export') && (
-              <Button variant="ghost" disabled={exporting.isPending} onClick={() => exporting.mutate()} title="按当前筛选导出台账，一行一条职务">
+              <Button variant="ghost" disabled={exporting.isPending || status !== 'ready'} onClick={() => exporting.mutate()} title="按当前筛选导出台账，一行一条职务">
                 <Icon icon={Download01Icon} inline="start" />
                 导出台账
               </Button>
@@ -121,11 +128,13 @@ export function PersonDutiesPage() {
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
           options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+          optionsStatus={readStatus(deptQuery)}
         />
         <span className="text-fg-muted text-caption">查看日期 {asOf}；任职部门同时作用于负责人一览和台账，不含下级部门</span>
       </div>
+      <StaleNotice what="部门任职" query={list} />
       <div className="grid gap-8">
-        <Leaders rows={data?.leaders ?? []} department={f.dept ? departments.find((d) => String(d.id) === f.dept)?.version.name : undefined} />
+        <Leaders rows={data ? data.leaders : null} department={f.dept ? departments.find((d) => String(d.id) === f.dept)?.version.name : undefined} />
 
         <Section title="任职台账">
           <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="姓名、拼音码、代码、工号或部门名称" />}>
@@ -145,7 +154,9 @@ export function PersonDutiesPage() {
             )}
           </DbToolbar>
 
-          {!isPending && rows.length === 0 ? (
+          {pendingBody ? (
+            pendingBody
+          ) : rows.length === 0 ? (
             <DbEmpty
               title={query || f.active ? '没有符合条件的职务' : `${asOf} 没有登记部门职务`}
               hint="职务在人员详情或部门详情“人员”标签里任命；这里统一查询。"
@@ -256,18 +267,20 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
  *  只受“任职部门”筛选影响（职务、方式、检索词、含计划只作用于下方台账） */
 const LEADER_FOLD = 9
 
-function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department?: string }) {
+/** rows 为 null：任职尚未读取成功——统计写“—”，不列有负责人 / 未登记负责人（读取状态在下方台账里说明） */
+function Leaders({ rows, department }: { rows: DepartmentLeaderRow[] | null; department?: string }) {
   const { asOf } = useApp()
   // 部门多时负责人卡片默认折叠，不把台账挤出几屏；折叠只影响展示，统计不变（SC-15）
   const [allShown, setAllShown] = useState(false)
-  const filled = rows.filter((r) => r.heads.length > 0)
-  const vacant = rows.filter((r) => r.heads.length === 0)
+  const known = rows !== null
+  const filled = (rows ?? []).filter((r) => r.heads.length > 0)
+  const vacant = (rows ?? []).filter((r) => r.heads.length === 0)
   const presiding = filled.filter((r) => r.heads.some((h) => h.mode !== 'FORMAL'))
   const stats = [
-    { label: '部门', value: rows.length },
+    { label: '部门', value: (rows ?? []).length },
     { label: '有负责人', value: filled.length },
     { label: '由他人主持 / 代管', value: presiding.length },
-    { label: '未登记负责人', value: vacant.length, warn: vacant.length > 0 },
+    { label: '未登记负责人', value: vacant.length, warn: known && vacant.length > 0 },
   ]
   return (
     <Section
@@ -279,7 +292,9 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department
         {stats.map((s) => (
           <div key={s.label} className="px-4 py-3">
             <div className="text-fg-muted text-caption">{s.label}</div>
-            <div className={cn('text-lg font-semibold tabular-nums', s.warn ? 'text-warning-text' : 'text-fg-strong')}>{s.value}</div>
+            <div className={cn('text-lg font-semibold tabular-nums', s.warn ? 'text-warning-text' : 'text-fg-strong')}>
+              {known ? s.value : <Unknown reason="部门任职尚未读取成功" />}
+            </div>
           </div>
         ))}
       </div>
@@ -318,7 +333,8 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[]; department
           </div>
         </div>
       )}
-      {rows.length === 0 && <p className="text-fg-muted text-xs">当天没有正式履职的部门。</p>}
+      {known && rows.length === 0 && <p className="text-fg-muted text-xs">当天没有正式履职的部门。</p>}
+      {!known && <p className="text-fg-muted text-xs">负责人一览与下方台账同一次读取，读取成功后显示。</p>}
       <p className="text-fg-muted text-caption">
         列出当天正式履职的部门（及当天有部长职务的部门）。有主持工作或代管者时显示主持者并注明部长，与部门详情的“当前负责人”同一规则。未登记负责人 = 平台里没有登记当天的部长职务，不等于院方确认不设。
       </p>

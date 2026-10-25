@@ -9,7 +9,7 @@ import {
   TextFontIcon,
   UserGroupIcon,
 } from '@hugeicons/core-free-icons'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import { useGetCampus, useListCampuses, useListServiceUnits } from '@/api/generated/master/master'
 import type { CampusVersionOut } from '@/api/generated/model'
@@ -20,6 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -39,7 +40,10 @@ export function CampusesPage() {
   usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data: rows = [], isPending } = useListCampuses({ as_of: asOf })
+  // 读取状态（U3R-03）：空态与计数只由当前查看日期读取成功的数据得出
+  const list = useListCampuses({ as_of: asOf })
+  const status = readStatus(list)
+  const rows = list.data ?? []
   const [creating, setCreating] = useState(false)
 
   return (
@@ -56,7 +60,12 @@ export function CampusesPage() {
           )
         }
       />
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="院区" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取院区…" />
+      ) : status === 'error' ? (
+        <ReadError what="院区" query={list} />
+      ) : rows.length === 0 ? (
         <DbEmpty title={`${asOf} 没有院区`} hint="新建院区后经提交、确认才会出现在这里。" />
       ) : (
         // 统一规范 v1.0 SC-09：院区名称（代码 / 对外称谓在辅助行）/ 运营状态 / 主要运营方 / 地址 / 版本期间
@@ -108,7 +117,7 @@ export function CampusesPage() {
       )}
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 个院区
+          共 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="院区尚未读取成功" />}</span> 个院区
         </span>
         <span>显示 {asOf} 当天有效的版本；尚未开始的院区显示最早的计划版本</span>
       </DbFooter>
@@ -134,11 +143,14 @@ export function CampusDetailPage() {
   const { isMaintainer } = useMe()
   const query = useGetCampus(id, { as_of: asOf })
   const { data } = query
-  const { data: units = [] } = useListServiceUnits({ as_of: asOf, campus_id: id })
+  // 下属服务单元是独立读取（U3R-03）：失败时只影响这一节，不写 0 个单元、0 个部门
+  const unitsQuery = useListServiceUnits({ as_of: asOf, campus_id: id }, { query: { enabled: Number.isInteger(id) } })
+  const unitsStatus = readStatus(unitsQuery)
+  const units = useMemo(() => unitsQuery.data ?? [], [unitsQuery.data])
   const [dialog, setDialog] = useState<'revise' | 'status' | 'relation' | 'unit' | null>(null)
   const [showAllDepts, setShowAllDepts] = useState(false)
-  useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return <DetailFallback what="院区" back={{ to: '/campuses', label: '返回院区列表' }} query={query} invalid={!Number.isInteger(id)} />
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.versions[0].name}` : null)
+  if (!data || isDenial(query.error)) return <DetailFallback what="院区" back={{ to: '/campuses', label: '返回院区列表' }} query={query} invalid={!Number.isInteger(id)} />
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
@@ -228,9 +240,14 @@ export function CampusDetailPage() {
           </Callout>
         )}
         <Section
-          title={`服务单元（${units.length}）`}
+          title={unitsStatus === 'ready' ? `服务单元（${units.length}）` : '服务单元'}
           action={isMaintainer && !suspended ? <InlineAction onClick={() => setDialog('unit')}>新建服务单元</InlineAction> : null}
         >
+          {unitsStatus === 'loading' && <ReadLoading label="正在读取本院区的服务单元…" rows={3} />}
+          {unitsStatus === 'error' && <ReadError what="本院区的服务单元" query={unitsQuery} compact />}
+          {unitsStatus === 'ready' && (
+          <>
+          <StaleNotice what="服务单元" query={unitsQuery} />
           <p className="text-fg-secondary text-caption">
             <Icon icon={UserGroupIcon} className="mr-1 inline size-3.5 align-text-bottom" />
             {departments.length === 0 ? (
@@ -246,6 +263,8 @@ export function CampusDetailPage() {
             )}
           </p>
           <UnitsTable rows={units} hide={['campus']} />
+          </>
+          )}
         </Section>
 
         <Section

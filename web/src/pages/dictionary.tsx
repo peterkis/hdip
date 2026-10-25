@@ -13,7 +13,8 @@ import { useListClassificationSchemes } from '@/api/generated/master/master'
 import type { ClassificationCodeOut, ClassificationSchemeOut } from '@/api/generated/model'
 import { FormErrorsContext, requireFields, SelectField, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
 import { Callout } from '@/components/kit/callout'
-import { DbCell, DbRow, DbTable } from '@/components/kit/database'
+import { DbCell, DbEmpty, DbRow, DbTable } from '@/components/kit/database'
+import { ReadError, ReadLoading, readStatus, StaleNotice } from '@/components/kit/read-state'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
 import { PageHeader, usePageFrame } from '@/components/layout'
@@ -30,7 +31,10 @@ const FOLD = 12
 
 export function DictionaryPage() {
   usePageFrame('work')
-  const { data: schemes = [] } = useListClassificationSchemes()
+  // 读取状态（U3R-03）：读取中、失败、真的没有方案分开说
+  const list = useListClassificationSchemes()
+  const status = readStatus(list)
+  const schemes = list.data ?? []
   const { me } = useMe()
   const canEdit = me?.permissions.includes('dictionary.maintain') ?? false
   const [creating, setCreating] = useState(false)
@@ -51,11 +55,23 @@ export function DictionaryPage() {
       <Callout className="mb-6" title="配置字典：保存即生效，不经变更申请">
         维护人直接修改并记下维护人与时间；代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请。
       </Callout>
-      <div className="grid gap-8">
-        {schemes.map((s) => (
-          <SchemeSection key={s.id} scheme={s} canEdit={canEdit} />
-        ))}
-      </div>
+      <StaleNotice what="分类方案" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取分类方案…" />
+      ) : status === 'error' ? (
+        <ReadError what="分类方案" query={list} />
+      ) : schemes.length === 0 ? (
+        <DbEmpty
+          title="还没有登记分类方案"
+          hint={canEdit ? '用右上角“登记分类方案”登记第一个方案。' : '有“维护字典”权限的人登记后会出现在这里。'}
+        />
+      ) : (
+        <div className="grid gap-8">
+          {schemes.map((s) => (
+            <SchemeSection key={s.id} scheme={s} canEdit={canEdit} />
+          ))}
+        </div>
+      )}
     </>
   )
 }

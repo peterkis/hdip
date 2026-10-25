@@ -20,6 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { ChangeLink, InlineAction, InlineLink, Section } from '@/components/kit/section'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial } from '@/components/kit/read-state'
 import { MoreActions } from '@/components/kit/more-actions'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
@@ -54,8 +55,8 @@ export function ServiceUnitDetailPage() {
   const { data } = query
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
   const [closing, setClosing] = useState<DepartmentClassificationOut | null>(null)
-  useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data)
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.versions[0].name}` : null)
+  if (!data || isDenial(query.error))
     return (
       <DetailFallback what="服务单元" back={{ to: '/service-units', label: '返回服务单元列表' }} query={query} invalid={!Number.isInteger(id)} />
     )

@@ -313,6 +313,18 @@
 .hd-flash {
   animation: hd-flash 1.6s ease-out 1;
 }
+/* 刷新中的轻提示：稍后才出现，短暂刷新不闪（U3R-03） */
+@keyframes hd-delayed-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.hd-delayed {
+  animation: hd-delayed-in 0.15s ease-out 0.6s both;
+}
 @media (prefers-reduced-motion: reduce) {
   .hd-flash {
     animation: none;

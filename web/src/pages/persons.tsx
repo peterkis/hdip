@@ -42,6 +42,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, nextSort, SearchBox, ToggleChip, type DbSort } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { PropertyList } from '@/components/kit/property-list'
 import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -97,7 +98,8 @@ export function PersonsPage() {
   const f = useRosterFilters()
   const [query, setQuery] = useState('')
   const [registering, setRegistering] = useState(false)
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const departments = deptQuery.data ?? []
   // 名册与导出用同一组筛选：导出的行与页面一致
   const filters = {
     q: query.trim() || undefined,
@@ -105,7 +107,10 @@ export function PersonsPage() {
     ...(f.status && { status: f.status as PersonRow['status'] }),
     ...(f.dept && { department_id: Number(f.dept) }),
   }
-  const { data: rows = [], isPending } = useListPersons({ as_of: asOf, scope: f.all ? 'all' : 'as_of', ...filters })
+  // 读取状态（U3R-03）：人数、空态只由当前视角与筛选读取成功的数据得出；无人员权限时接口拒绝，说“无权”不说“没有人”
+  const list = useListPersons({ as_of: asOf, scope: f.all ? 'all' : 'as_of', ...filters })
+  const status = readStatus(list)
+  const rows = useMemo(() => list.data ?? [], [list.data])
   const types = optionLabels.engagement_type ?? {}
   const [sort, setSort] = useState<DbSort | null>(null)
   const sorted = useMemo(() => sortRows(rows, sort, types), [rows, sort, types])
@@ -127,7 +132,7 @@ export function PersonsPage() {
               <>
                 <Button
                   variant="ghost"
-                  disabled={exporting.isPending || f.all}
+                  disabled={exporting.isPending || f.all || status !== 'ready'}
                   onClick={() => exporting.mutate('persons')}
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出，与页面同一批人，一人一行'}
                 >
@@ -136,7 +141,7 @@ export function PersonsPage() {
                 </Button>
                 <Button
                   variant="ghost"
-                  disabled={exporting.isPending || f.all}
+                  disabled={exporting.isPending || f.all || status !== 'ready'}
                   onClick={() => exporting.mutate('person-relations')}
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出页面上的任用与主部门，一行一项任用'}
                 >
@@ -173,6 +178,7 @@ export function PersonsPage() {
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
           options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+          optionsStatus={readStatus(deptQuery)}
         />
         {!f.all && (
           <FilterPill
@@ -191,7 +197,12 @@ export function PersonsPage() {
         )}
       </DbToolbar>
 
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="人员" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取人员…" />
+      ) : status === 'error' ? (
+        <ReadError what="人员名册" query={list} />
+      ) : rows.length === 0 ? (
         <DbEmpty
           title={query || f.active ? '没有符合条件的人员' : `${asOf} 没有有效任用的人员`}
           hint={
@@ -254,7 +265,7 @@ export function PersonsPage() {
       )}
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 人
+          共 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="人员尚未读取成功" />}</span> 人
         </span>
         <span>
           {f.all ? '全部人员，不看日期，不能导出' : `${asOf} 当天有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
@@ -325,8 +336,8 @@ export function PersonDetailPage() {
   const { data } = query
   const [engaging, setEngaging] = useState(false)
   const [dialog, setDialog] = useState<PersonDialog | null>(null)
-  useCrumb(data && `${data.code} ${data.name}`)
-  if (!data) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.name}` : null)
+  if (!data || isDenial(query.error)) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
 
   const close = (o: boolean) => !o && setDialog(null)
   const live = data.engagements.filter((e) => !e.void)

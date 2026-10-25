@@ -7,6 +7,7 @@ import { InstitutionCreateDialog, InstitutionReviseDialog, RelationCreateDialog 
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { DetailFallback } from '@/components/kit/missing'
+import { combineStatus, isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { PropertyList } from '@/components/kit/property-list'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -25,7 +26,10 @@ export function InstitutionsPage() {
   usePageFrame('work')
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data: rows = [], isPending } = useListInstitutions({ as_of: asOf })
+  // 读取状态（U3R-03）：空态与计数只由当前查看日期读取成功的数据得出
+  const list = useListInstitutions({ as_of: asOf })
+  const status = readStatus(list)
+  const rows = list.data ?? []
   const [creating, setCreating] = useState(false)
 
   return (
@@ -42,7 +46,12 @@ export function InstitutionsPage() {
           )
         }
       />
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="主体" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取主体…" />
+      ) : status === 'error' ? (
+        <ReadError what="主体" query={list} />
+      ) : rows.length === 0 ? (
         <DbEmpty title={`${asOf} 没有主体`} hint="初始导入也作为一张变更申请，提交并确认一次。" />
       ) : (
         // 统一规范 v1.0 SC-08：名称（管理代码在辅助行）/ 主体性质 / 统一社会信用代码 / 版本期间
@@ -82,7 +91,7 @@ export function InstitutionsPage() {
       )}
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 个主体
+          共 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="主体尚未读取成功" />}</span> 个主体
         </span>
         <span>显示 {asOf} 当天有效的版本</span>
       </DbFooter>
@@ -109,11 +118,15 @@ export function InstitutionDetailPage() {
   const { isMaintainer } = useMe()
   const query = useGetInstitution(id, { as_of: asOf })
   const { data } = query
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
-  const { data: relations = [] } = useListOperatorRelations({ as_of: asOf, institution_id: id, include_future: true })
+  // 关系图另读院区与运营关系（U3R-03）：失败只影响图；下面的关系明细来自主体详情本身，照常显示
+  const campusesQuery = useListCampuses({ as_of: asOf })
+  const relationsQuery = useListOperatorRelations({ as_of: asOf, institution_id: id, include_future: true }, { query: { enabled: Number.isInteger(id) } })
+  const campuses = campusesQuery.data ?? []
+  const relations = relationsQuery.data ?? []
+  const graphStatus = combineStatus(readStatus(campusesQuery), readStatus(relationsQuery))
   const [dialog, setDialog] = useState<'revise' | 'relation' | null>(null)
-  useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data)
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.versions[0].name}` : null)
+  if (!data || isDenial(query.error))
     return <DetailFallback what="主体" back={{ to: '/institutions', label: '返回主体列表' }} query={query} invalid={!Number.isInteger(id)} />
 
   const latest = data.versions[0]
@@ -155,12 +168,22 @@ export function InstitutionDetailPage() {
           title={`运营的院区（${new Set(data.relations.map((r) => r.campus_id)).size}）`}
           action={isMaintainer ? <InlineAction onClick={() => setDialog('relation')}>建立运营关系</InlineAction> : null}
         >
-          <OperatorFlow
-            institutions={[{ id: data.id, code: data.code, name: shown.name, subtitle: shown.nature ?? undefined }]}
-            campuses={campuses}
-            relations={relations}
-            asOf={asOf}
-          />
+          {graphStatus === 'ready' ? (
+            <OperatorFlow
+              institutions={[{ id: data.id, code: data.code, name: shown.name, subtitle: shown.nature ?? undefined }]}
+              campuses={campuses}
+              relations={relations}
+              asOf={asOf}
+            />
+          ) : graphStatus === 'loading' ? (
+            <ReadLoading label="正在读取运营关系图…" rows={2} />
+          ) : (
+            <ReadError
+              what="运营关系图（下方明细不受影响）"
+              query={readStatus(campusesQuery) === 'error' ? campusesQuery : relationsQuery}
+              compact
+            />
+          )}
           <RelationsTable relations={data.relations} canEdit={isMaintainer} hide="institution" />
         </Section>
 

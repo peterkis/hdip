@@ -434,6 +434,8 @@ W3C 中文排版需求作为中文标点和混排的研究依据；具体字号�
 
 错误颜色不能覆盖全部正文。Callout/ProblemCard 采用浅底、小图标、清楚标题与修正方法，不使用粗红色侧条制造整屏视觉压力。
 
+**接入方式（2026-10-25，U3R-03）**：`components/kit/read-state.tsx` 只做分类与展示，不接管请求。`readStatus(query)` 得出 loading / error / ready（有当前查询键的成功结果才是 ready；401 / 403 即使有旧结果也是 error），`combineStatus` 合并一块内容的多个依赖；`ReadLoading`、`ReadError`（按状态码：401 身份不可用、403 无权、404 找不到、422 条件有误、其他可重试；`compact` 用于详情附属区，带 `role="alert"`）、`StaleNotice`（同一查询键刷新失败时写“可能不是最新”并可重试；刷新中稍后出现一行轻提示）、`Unknown`（计数未知写“—”并带读屏原因）。缓存边界：只在同一查询键内保留上次成功结果；换查看日期、筛选、对象、身份是新键，生成的 hooks 默认不跨键保留，新范围先显示自己的读取状态（编码台账“再显示 N 条”只改 limit 时例外，用 `placeholderData` 沿用已显示的行）。4xx 不自动重试（`main.tsx`）。开发期身份切换后重置全部查询（`resetQueries`，等界面按新身份渲染后执行）。`useMe().permsKnown` 区分“权限未读到”与“无权”。`FilterPill` 的 `optionsStatus` 让选项读取中 / 失败时已选值仍显示并可清除。
+
 ## 10. 图、矩阵、时间线与动效
 
 ### R-GRAPH 图形语义

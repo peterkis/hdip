@@ -34,6 +34,7 @@ import {
   ToggleChip,
   type DbColumn,
 } from '@/components/kit/database'
+import { combineStatus, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { Tag } from '@/components/kit/tag'
 import { PageHeader, usePageFrame } from '@/components/layout'
 import { Button } from '@/components/ui/button'
@@ -44,6 +45,8 @@ import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
 import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { indexDepartments, NO_CLASS } from '@/lib/org-overview'
+
+const EMPTY: never[] = []
 
 // 统一规范 v1.0 SC-06：名称（代码在辅助行）/ 类型 / 所属部门 / 院区 / 运营主体 / 状态 / 业务期间
 const COLUMNS: DbColumn[] = [
@@ -99,10 +102,14 @@ export function ServiceUnitsPage() {
   const [more, setMore] = useState(false)
   const showMore = more || !!f.inst || !!f.cls
 
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
-  const { data: institutions = [] } = useListInstitutions({ as_of: asOf })
-  const { data: units = [], isPending } = useListServiceUnits({
+  // 读取状态（U3R-03）：院区、部门、主体只供筛选选项；部门另供“含下级 / 主分类”在页内筛选——这时它失败，结果就未知
+  const campusQuery = useListCampuses({ as_of: asOf })
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const instQuery = useListInstitutions({ as_of: asOf })
+  const campuses = campusQuery.data ?? EMPTY
+  const departments = useMemo(() => deptQuery.data ?? [], [deptQuery.data])
+  const institutions = instQuery.data ?? EMPTY
+  const unitQuery = useListServiceUnits({
     as_of: asOf,
     include_future: f.future,
     ...(f.campus && { campus_id: Number(f.campus) }),
@@ -111,6 +118,12 @@ export function ServiceUnitsPage() {
     ...(f.inst && { institution_id: Number(f.inst) }),
   })
 
+  const units = useMemo(() => unitQuery.data ?? [], [unitQuery.data])
+  const needsDepts = (!!f.dept && f.sub) || !!f.cls
+  const deptStatus = readStatus(deptQuery)
+  const status = combineStatus(readStatus(unitQuery), needsDepts ? deptStatus : 'ready')
+  // 失败时说清是哪一次读取：单元本身，还是“含下级 / 主分类”要用的部门
+  const failed = readStatus(unitQuery) === 'error' ? { what: '服务单元', query: unitQuery } : { what: '部门（“含下级 / 主分类”筛选要用）', query: deptQuery }
   const idx = useMemo(() => indexDepartments(departments), [departments])
   const classOptions = useMemo(() => {
     const m = new Map<string, string>()
@@ -172,6 +185,7 @@ export function ServiceUnitsPage() {
           value={f.campus}
           onChange={(v) => f.set('campus', v)}
           options={campuses.map((c) => ({ value: String(c.id), label: c.version.name }))}
+          optionsStatus={readStatus(campusQuery)}
         />
         <FilterPill
           label="部门"
@@ -179,6 +193,7 @@ export function ServiceUnitsPage() {
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
           options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+          optionsStatus={deptStatus}
         />
         {f.dept && <ToggleChip label="含下级部门" checked={f.sub} onChange={(v) => f.set('sub', v ? '1' : '')} />}
         <FilterPill
@@ -203,8 +218,9 @@ export function ServiceUnitsPage() {
               value={f.inst}
               onChange={(v) => f.set('inst', v)}
               options={institutions.map((i) => ({ value: String(i.id), label: i.version.name }))}
+              optionsStatus={readStatus(instQuery)}
             />
-            <FilterPill label="主分类" icon={ListViewIcon} value={f.cls} onChange={(v) => f.set('cls', v)} options={classOptions} />
+            <FilterPill label="主分类" icon={ListViewIcon} value={f.cls} onChange={(v) => f.set('cls', v)} options={classOptions} optionsStatus={deptStatus} />
           </>
         ) : (
           <Button variant="ghost" size="sm" className="text-fg-muted" onClick={() => setMore(true)}>
@@ -219,7 +235,12 @@ export function ServiceUnitsPage() {
         )}
       </DbToolbar>
 
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="服务单元" query={unitQuery} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取服务单元…" />
+      ) : status === 'error' ? (
+        <ReadError what={failed.what} query={failed.query} />
+      ) : rows.length === 0 ? (
         <DbEmpty
           // 院区、部门、主体在服务端筛：有条件时是“筛选无结果”，不能说成当天没有单元（R-STATE）
           title={f.active || query ? '没有符合条件的服务单元' : `${asOf} 没有服务单元`}
@@ -249,8 +270,8 @@ export function ServiceUnitsPage() {
 
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 个单元
-          {rows.length !== units.length && `（筛选自 ${units.length} 个）`}
+          共 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="服务单元尚未读取成功" />}</span> 个单元
+          {status === 'ready' && rows.length !== units.length && `（筛选自 ${units.length} 个）`}
         </span>
         <span>“在运营”= 当天有有效版本，含暂停；已退出的不显示</span>
         <span>导出 CSV 是查看日期当天已生效的全部单元（含暂停，不含计划中与已退出），不按页面筛选</span>

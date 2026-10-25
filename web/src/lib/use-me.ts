@@ -9,6 +9,8 @@ export function useMe() {
   const permissions = new Set(data?.permissions ?? [])
   return {
     me: data,
+    /** 当前身份与权限已读到；未读到时 can() 一律为 false，不能据此说“无权”（U3R-03） */
+    permsKnown: data !== undefined,
     isMaintainer: roles.includes('maintainer'),
     isConfirmer: roles.includes('confirmer'),
     /** 按权限键判断（core/permissions.py），如 can('person.view') */
