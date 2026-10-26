@@ -31,6 +31,7 @@ import { downloadCsv } from '@/lib/download'
 import { period, today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { PLANNED_TONE } from '@/lib/tones'
+import { isSort, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 import { ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
@@ -57,8 +58,18 @@ function useDutyFilters() {
     mode: get('mode'),
     future: get('future') === '1',
     set,
-    active: ['dept', 'duty', 'mode', 'future'].some((k) => params.has(k)),
-    clear: () => setParams(new URLSearchParams(), { replace: true }),
+    key: params.toString(),
+    // 任职部门是负责人一览与台账的共同范围，台账的“清除筛选”不改它（U3R-05）
+    active: ['duty', 'mode', 'future'].some((k) => params.has(k)),
+    clear: () =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams()
+          if (prev.get('dept')) next.set('dept', prev.get('dept')!)
+          return next
+        },
+        { replace: true },
+      ),
   }
 }
 
@@ -69,8 +80,9 @@ export function PersonDutiesPage() {
   const { asOf } = useApp()
   const { can } = useMe()
   const f = useDutyFilters()
-  const [query, setQuery] = useState('')
-  const [sort, setSort] = useState<DbSort | null>(null)
+  // 检索词与排序是本页状态：从详情返回时取回，不写进网址（U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
+  const [sort, setSort] = useReturnState<DbSort | null>('sort', null, isSort)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const deptQuery = useListDepartments({ as_of: asOf })
   const departments = deptQuery.data ?? []
@@ -87,6 +99,8 @@ export function PersonDutiesPage() {
   const status = readStatus(list)
   const data = status === 'ready' ? list.data : undefined
   const rows = useMemo(() => sortRows(data?.rows ?? [], sort), [data, sort])
+  // 返回上下文：集合范围 = 查看日期 + 共同范围与筛选 + 检索词
+  const back = useListReturn({ scope: `${asOf}|${f.key}|${query.trim()}`, ready: status === 'ready', local: { q: query, sort } })
   const pendingBody =
     status === 'loading' ? <ReadLoading label="正在读取部门任职…" /> : status === 'error' ? <ReadError what="部门任职" query={list} /> : null
 
@@ -162,6 +176,7 @@ export function PersonDutiesPage() {
               hint="职务在人员详情或部门详情“人员”标签里任命；这里统一查询。"
             />
           ) : (
+            <div onClickCapture={back.onClickCapture}>
             <DbTable
               columns={[
                 // SC-15：任职部门 / 职务与方式 / 人员（代码在辅助行）/ 当前主部门 / 任用主体与类型 / 任职期间 / 依据 / 来源申请与行内动作
@@ -181,6 +196,7 @@ export function PersonDutiesPage() {
                 <DutyRow key={r.duty_id} r={r} onAction={can('person.change') ? (kind) => setDialog({ kind, row: r }) : undefined} />
               ))}
             </DbTable>
+            </div>
           )}
           {data && (
             <DbFooter>
@@ -208,7 +224,7 @@ function DutyRow({ r, onAction }: { r: DutyRegisterRow; onAction?: (kind: 'hando
   // 代管或兼任：任职部门不是此人的主部门，标清楚
   const elsewhere = r.primary_department && r.primary_department.id !== r.department.id
   return (
-    <DbRow className={cn(r.not_yet_effective && 'text-fg-muted')}>
+    <DbRow returnId={r.duty_id} className={cn(r.not_yet_effective && 'text-fg-muted')}>
       <DbCell>
         <Link className="text-fg-strong font-medium hover:underline" to={`/departments/${r.department.id}`}>
           {r.department.name}

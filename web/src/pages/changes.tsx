@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   cancelChangeRequest,
@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, SENSITIVE_FIELD, stamp } from '@/lib/format'
-import { useScrollMemory } from '@/lib/scroll-memory'
+import { useListReturn } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 
@@ -66,7 +66,6 @@ const VIEWS: { value: View; label: string; test: (r: ChangeRequestSummary) => bo
 ]
 
 const MASKED = '（已隐去）'
-const LAST_OPENED = 'hdip.changes.last-opened'
 
 /** 说明能不能显示：空的、只剩遮蔽提示的不显示 */
 function usableNote(note: string | null | undefined): string | null {
@@ -119,36 +118,9 @@ export function ChangesPage() {
           ),
       )
   }, [rows, current, query])
-  useScrollMemory(`changes?${params.toString()}`, !isPending)
-
-  // 从详情返回：焦点回到刚才打开的那一行（它已不在当前范围时不抢焦点）
-  useEffect(() => {
-    if (isPending) return
-    let id: string | null = null
-    try {
-      id = sessionStorage.getItem(LAST_OPENED)
-    } catch {
-      /* 忽略 */
-    }
-    if (!id) return
-    // 用过才清除：开发模式下 effect 会先跑一遍再清理，提前清除会让第二遍找不到
-    const frame = requestAnimationFrame(() => {
-      document.querySelector<HTMLAnchorElement>(`a[data-change-id="${id}"]`)?.focus({ preventScroll: true })
-      try {
-        sessionStorage.removeItem(LAST_OPENED)
-      } catch {
-        /* 忽略 */
-      }
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [isPending])
-  const remember = (id: number) => {
-    try {
-      sessionStorage.setItem(LAST_OPENED, String(id))
-    } catch {
-      /* 忽略 */
-    }
-  }
+  // 返回上下文（lib/scroll-memory.ts）：从详情返回时回到原范围、位置与刚才打开的那一行
+  const back = useListReturn({ scope: params.toString(), ready: !isPending && listStatus !== 'error' })
+  const remember = (id: number) => back.leave(id, `/changes/${id}`)
 
   return (
     <>
@@ -213,7 +185,6 @@ export function ChangesPage() {
             {shown.length} 份申请 · 当前范围：{current.label}
             {query && <> · 检索“{query}”</>}
           </span>
-          <span>状态与检索写在网址里；从详情返回时保留范围、位置与焦点</span>
         </DbFooter>
       )}
     </>
@@ -246,6 +217,7 @@ function WorkRow({ r, onOpen, onRowClick }: { r: ChangeRequestSummary; onOpen: (
         <Link
           to={`/changes/${r.id}`}
           data-change-id={r.id}
+          data-return-id={r.id}
           onClick={onOpen}
           className={cn(
             'line-clamp-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)',
@@ -418,6 +390,8 @@ export function ChangeDetailPage() {
                 </Link>
               </>
             )}
+            {/* 日期作用范围（U3R-05）：全局查看日期不筛选申请；确认时间也不是业务生效日期 */}
+            <span className="block">本页不按查看日期筛选；申请里的各项按各自的业务日期生效。</span>
           </>
         }
         actions={

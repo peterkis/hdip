@@ -26,6 +26,7 @@ import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
 import { useMe } from '@/lib/use-me'
+import { useListHref } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 
 const NARROW = '(max-width: 767px)'
@@ -348,6 +349,9 @@ function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: 
 }
 
 function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: ReactNode }) {
+  // 详情页的上一级：这次详情是从该列表打开的就回到原筛选与位置（U3R-05），否则是默认列表
+  const path = found?.item ? itemPath(found.item) : ''
+  const listHref = useListHref(path)
   return (
     <>
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
@@ -359,7 +363,7 @@ function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: Re
               <Sep />
             </span>
             <Link
-              to={itemPath(found.item)}
+              to={crumb ? listHref : path}
               className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
             >
               <Icon icon={found.item.icon} />

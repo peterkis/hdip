@@ -45,6 +45,7 @@ import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
 import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { indexDepartments, NO_CLASS } from '@/lib/org-overview'
+import { isBoolean, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 
 const EMPTY: never[] = []
 
@@ -86,6 +87,7 @@ function useFilters() {
     // 默认含计划中的单元；?future=0 只看当天已生效的（剧本 5 “在运营”）
     future: get('future') !== '0',
     set,
+    key: params.toString(),
     clear: () => setParams(new URLSearchParams(), { replace: true }),
     active: ['campus', 'dept', 'sub', 'cls', 'inst', 'type', 'status', 'future'].some((k) => params.has(k)),
   }
@@ -96,10 +98,11 @@ export function ServiceUnitsPage() {
   const { asOf, unitTypeOptions, optionLabels } = useApp()
   const { isMaintainer } = useMe()
   const f = useFilters()
-  const [query, setQuery] = useState('')
+  // 检索词与“更多筛选”展开是本页状态：从详情返回时取回（U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const [creating, setCreating] = useState(false)
   // 运营主体、主分类放“更多筛选”；设了值就一直展开，不让隐藏的条件悄悄生效
-  const [more, setMore] = useState(false)
+  const [more, setMore] = useReturnState('more', false, isBoolean)
   const showMore = more || !!f.inst || !!f.cls
 
   // 读取状态（U3R-03）：院区、部门、主体只供筛选选项；部门另供“含下级 / 主分类”在页内筛选——这时它失败，结果就未知
@@ -145,6 +148,8 @@ export function ServiceUnitsPage() {
           (u.version.pinyin ?? '').toLowerCase().includes(q)),
     )
   }, [units, idx, f.dept, f.sub, f.cls, f.type, f.status, query])
+  // 返回上下文：集合范围 = 查看日期 + 网址里的筛选 + 检索词
+  const back = useListReturn({ scope: `${asOf}|${f.key}|${query.trim()}`, ready: status === 'ready', local: { q: query, more } })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('service-units', asOf),
@@ -261,11 +266,13 @@ export function ServiceUnitsPage() {
           }
         />
       ) : (
-        <DbTable columns={COLUMNS}>
-          {rows.map((u) => (
-            <UnitRow key={u.id} unit={u} typeName={formatValue('unit_type', u.unit_type, optionLabels)} />
-          ))}
-        </DbTable>
+        <div onClickCapture={back.onClickCapture}>
+          <DbTable columns={COLUMNS}>
+            {rows.map((u) => (
+              <UnitRow key={u.id} unit={u} typeName={formatValue('unit_type', u.unit_type, optionLabels)} />
+            ))}
+          </DbTable>
+        </div>
       )}
 
       <DbFooter>
@@ -285,7 +292,7 @@ export function ServiceUnitsPage() {
 function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string }) {
   const v = u.version
   return (
-    <DbRow>
+    <DbRow returnId={u.id}>
       <DbCell>
         <span className="grid gap-0.5">
           <span className="flex items-center gap-2">

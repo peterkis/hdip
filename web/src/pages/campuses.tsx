@@ -33,6 +33,7 @@ import { UnitsTable } from '@/components/units-table'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period, versionNote, type OperatingStatus } from '@/lib/format'
+import { useListReturn } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { PLANNED_TONE } from '@/lib/tones'
 
@@ -45,6 +46,8 @@ export function CampusesPage() {
   const status = readStatus(list)
   const rows = list.data ?? []
   const [creating, setCreating] = useState(false)
+  // 返回上下文（U3R-05）：本页只按查看日期取数，返回时回到原位置与原对象
+  const back = useListReturn({ scope: asOf, ready: status === 'ready' })
 
   return (
     <>
@@ -69,6 +72,7 @@ export function CampusesPage() {
         <DbEmpty title={`${asOf} 没有院区`} hint="新建院区后经提交、确认才会出现在这里。" />
       ) : (
         // 统一规范 v1.0 SC-09：院区名称（代码 / 对外称谓在辅助行）/ 运营状态 / 主要运营方 / 地址 / 版本期间
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           columns={[
             { label: '名称', icon: TextFontIcon, className: 'min-w-44' },
@@ -79,7 +83,7 @@ export function CampusesPage() {
           ]}
         >
           {rows.map((r) => (
-            <DbRow key={r.id}>
+            <DbRow key={r.id} returnId={r.id}>
               <DbCell>
                 <span className="grid gap-0.5">
                   <span className="flex flex-wrap items-center gap-1.5">
@@ -114,6 +118,7 @@ export function CampusesPage() {
             </DbRow>
           ))}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>

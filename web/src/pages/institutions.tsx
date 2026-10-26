@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button'
 import { VersionTimeline } from '@/components/version-timeline'
 import { useApp } from '@/lib/app-context'
 import { formatValue, period, versionNote } from '@/lib/format'
+import { useListReturn } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { PLANNED_TONE } from '@/lib/tones'
 
@@ -31,6 +32,8 @@ export function InstitutionsPage() {
   const status = readStatus(list)
   const rows = list.data ?? []
   const [creating, setCreating] = useState(false)
+  // 返回上下文（U3R-05）：本页只按查看日期取数，返回时回到原位置与原对象
+  const back = useListReturn({ scope: asOf, ready: status === 'ready' })
 
   return (
     <>
@@ -55,6 +58,7 @@ export function InstitutionsPage() {
         <DbEmpty title={`${asOf} 没有主体`} hint="初始导入也作为一张变更申请，提交并确认一次。" />
       ) : (
         // 统一规范 v1.0 SC-08：名称（管理代码在辅助行）/ 主体性质 / 统一社会信用代码 / 版本期间
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           columns={[
             { label: '名称', icon: TextFontIcon, className: 'min-w-48' },
@@ -64,7 +68,7 @@ export function InstitutionsPage() {
           ]}
         >
           {rows.map((r) => (
-            <DbRow key={r.id}>
+            <DbRow key={r.id} returnId={r.id}>
               <DbCell>
                 <span className="grid gap-0.5">
                   <span className="flex flex-wrap items-center gap-1.5">
@@ -88,6 +92,7 @@ export function InstitutionsPage() {
             </DbRow>
           ))}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>

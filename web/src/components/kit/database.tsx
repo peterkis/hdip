@@ -219,9 +219,11 @@ export function DbTable({
   )
 }
 
-export function DbRow({ children, className }: { children: ReactNode; className?: string }) {
+export function DbRow({ children, className, returnId }: { children: ReactNode; className?: string; returnId?: string | number }) {
   return (
     <tr
+      // 返回上下文（lib/scroll-memory.ts）：从这一行进入详情、返回时回到这一行
+      data-return-id={returnId}
       className={cn(
         'border-line-subtle hover:bg-surface-hover group/row border-b transition-colors duration-(--hd-duration-fast)',
         className,

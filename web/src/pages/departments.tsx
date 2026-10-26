@@ -64,6 +64,7 @@ import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, period, versionNote, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone, PLANNED_TONE } from '@/lib/tones'
+import { isNumberList, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useCurrentUsername } from '@/lib/session'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
@@ -116,7 +117,8 @@ export function DepartmentsPage() {
   const future = params.get('future') !== '0'
   const lvl = params.get('level') ?? ''
   const mode = params.get('view') === 'tree' ? 'tree' : 'table'
-  const [query, setQuery] = useState('')
+  // 检索词与树的折叠是本页状态：从详情返回时取回（U3R-05，lib/scroll-memory.ts）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const q = useDeferredValue(query.trim())
   const [creating, setCreating] = useState(false)
   const [full, setFull] = useState(() => {
@@ -200,7 +202,8 @@ export function DepartmentsPage() {
     [all, future, cls, life, lvl],
   )
   // 层级树：按行政隶属深度优先排列，同级按代码；可折叠子树
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const [collapsedBefore] = useReturnState('collapsed', [] as number[], isNumberList)
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set(collapsedBefore))
   const tree = useMemo(() => (mode === 'tree' ? treeOrder(rows, collapsed) : null), [rows, mode, collapsed])
   const ordered: (DepartmentRow & { tree?: TreeMeta })[] = tree ?? rows
   const toggle = (id: number) =>
@@ -214,6 +217,13 @@ export function DepartmentsPage() {
   // 选择跨搜索、筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
   const visibleIds = useMemo(() => new Set(ordered.map((d) => d.id)), [ordered])
   const hiddenChecked = picked.filter((d) => !visibleIds.has(d.id)).length
+
+  // 返回上下文：集合范围 = 查看日期 + 网址里的筛选与视图 + 检索词
+  const back = useListReturn({
+    scope: `${asOf}|${params.toString()}|${q}`,
+    ready: status === 'ready',
+    local: { q: query, collapsed: [...collapsed] },
+  })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
@@ -310,6 +320,7 @@ export function DepartmentsPage() {
           }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable columns={isMaintainer ? [{ label: '', className: 'w-8' }, ...columns] : columns}>
           {isMaintainer && (
             <tr className="border-line-subtle border-b">
@@ -334,7 +345,7 @@ export function DepartmentsPage() {
             </tr>
           )}
           {ordered.map((d) => (
-            <DbRow key={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
+            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
               {isMaintainer && (
                 <DbCell>
                   <input
@@ -414,6 +425,7 @@ export function DepartmentsPage() {
             </DbRow>
           ))}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>

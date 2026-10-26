@@ -59,6 +59,7 @@ import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, primaryOn, WORK_NO_REAS
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
 import { EngagementTypeTag } from '@/components/engagement-type-tag'
 import { DutyBasis } from '@/components/department-persons'
+import { isSort, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -86,8 +87,18 @@ function useRosterFilters() {
     // 全部人员：含已离开、未来入职、无有效任用的人（查重、回查用）
     all: get('scope') === 'all',
     set,
-    active: ['dept', 'status', 'future', 'scope'].some((k) => params.has(k)),
-    clear: () => setParams(new URLSearchParams(), { replace: true }),
+    key: params.toString(),
+    // 视角（按日期名册 / 全部人员）是阅读视角，不是筛选：“清除筛选”不改它（U3R-05）
+    active: ['dept', 'status', 'future'].some((k) => params.has(k)),
+    clear: () =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams()
+          if (prev.get('scope')) next.set('scope', prev.get('scope')!)
+          return next
+        },
+        { replace: true },
+      ),
   }
 }
 
@@ -96,7 +107,8 @@ export function PersonsPage() {
   const { asOf, optionLabels } = useApp()
   const { can } = useMe()
   const f = useRosterFilters()
-  const [query, setQuery] = useState('')
+  // 检索词与排序是本页状态：从详情返回时取回，不写进网址（姓名检索不进地址栏，U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const [registering, setRegistering] = useState(false)
   const deptQuery = useListDepartments({ as_of: asOf })
   const departments = deptQuery.data ?? []
@@ -112,8 +124,10 @@ export function PersonsPage() {
   const status = readStatus(list)
   const rows = useMemo(() => list.data ?? [], [list.data])
   const types = optionLabels.engagement_type ?? {}
-  const [sort, setSort] = useState<DbSort | null>(null)
+  const [sort, setSort] = useReturnState<DbSort | null>('sort', null, isSort)
   const sorted = useMemo(() => sortRows(rows, sort, types), [rows, sort, types])
+  // 返回上下文：集合范围 = 查看日期 + 视角与筛选 + 检索词
+  const back = useListReturn({ scope: `${asOf}|${f.key}|${query.trim()}`, ready: status === 'ready', local: { q: query, sort } })
 
   const exporting = useMutation({
     mutationFn: async (dataset: 'persons' | 'person-relations') => downloadCsv(dataset, asOf, filters),
@@ -216,6 +230,7 @@ export function PersonsPage() {
           }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           columns={[
             // SC-13：姓名（人员代码在辅助行）/ 任用 / 主部门 / 业务工号 / 任用期间；多项任用在各列逐项对齐
@@ -229,7 +244,7 @@ export function PersonsPage() {
           onSort={(key) => setSort(nextSort(sort, key))}
         >
           {sorted.map((r) => (
-            <DbRow key={r.id}>
+            <DbRow key={r.id} returnId={r.id}>
               <DbCell>
                 <span className="grid gap-0.5">
                   <span className="flex flex-wrap items-center gap-1.5">
@@ -262,6 +277,7 @@ export function PersonsPage() {
             </DbRow>
           ))}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>
@@ -340,12 +356,23 @@ export function PersonDetailPage() {
   if (!data || isDenial(query.error)) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
 
   const close = (o: boolean) => !o && setDialog(null)
-  const live = data.engagements.filter((e) => !e.void)
+  // 任用事实分开判断（U3R-05，统一规范 SC-14）：有没有记录看全部任用；当天有效看未撤销且覆盖查看日期的；
+  // 撤销、已结束、计划中的记录都还在下方各自的分区里，摘要不说成“没有记录”
+  const all = data.engagements
+  const live = all.filter((e) => !e.void)
+  const voided = all.length - live.length
   const current = live.filter((e) => covers(e.valid_from, e.valid_to, asOf))
+  const planned = live.filter((e) => e.valid_from > asOf).sort((a, b) => a.valid_from.localeCompare(b.valid_from))
   const formerNames = data.versions.filter((v, i) => !v.void && i > 0 && data.versions[i - 1].revise_reason === 'RENAME')
-  // 没有任用记录与查看日期当天没有有效任用分开说（统一规范 SC-14）
-  const noCurrent = (
-    <span className="text-fg-muted">{live.length ? '查看日期当天没有有效任用' : '没有任用记录'}</span>
+  const noCurrent = <span className="text-fg-muted">{all.length ? '查看日期当天没有有效任用' : '没有任用记录'}</span>
+  const noCurrentDetail = all.length ? (
+    <span className="text-fg-muted">
+      查看日期当天没有有效任用
+      {planned.length > 0 && `；有计划任用（${planned[0].valid_from} 起）`}
+      {voided > 0 && (voided === all.length ? '；现有任用记录均已撤销' : `；另有 ${voided} 项已撤销`)}
+    </span>
+  ) : (
+    noCurrent
   )
 
   // 统一规范 SC-14：姓名 / 人员代码 → 当前身份与关系摘要 → 每项任用一个分区 → 姓名历史。
@@ -387,7 +414,7 @@ export function PersonDetailPage() {
                 ))}
               </span>
             ) : (
-              noCurrent
+              noCurrentDetail
             ),
           },
           {
@@ -433,7 +460,7 @@ export function PersonDetailPage() {
       )}
 
       <div className="mt-8 grid gap-8">
-        <Section title={`任用与部门归属（${live.length}）`}>
+        <Section title={`任用与部门归属（${voided ? `共 ${all.length} 项，其中已撤销 ${voided} 项` : all.length}）`}>
           {data.engagements.length === 0 ? (
             <p className="text-fg-secondary text-xs">没有任用记录。人员身份保留；建立任用后再登记部门归属与工号。</p>
           ) : (

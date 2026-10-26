@@ -3,8 +3,8 @@
 // 状态按查看日期计算：当天没有任何解释的代码即“待裁决”，不单独存状态。
 import { Add01Icon, Download01Icon, ServerStack01Icon } from '@hugeicons/core-free-icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useDeferredValue, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useDeferredValue, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useCreateCodeNamespace, useCreateSourceSystem, useUpdateCodeNamespace } from '@/api/generated/dictionary/dictionary'
 import { useGetExternalCode, useListExternalCodes, useListSourceSystems } from '@/api/generated/master/master'
 import type { AssignmentOut, ExternalCodeRow, SourceSystemOut } from '@/api/generated/model'
@@ -24,11 +24,14 @@ import { downloadCsv } from '@/lib/download'
 import { CODE_STATUS, SOURCE_KIND, stamp, type CodeStatus } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { CODE_STATUS_TONE } from '@/lib/tones'
+import { isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 import { readFailure, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 
 const PAGE = 100
+const isShown = (v: unknown): v is { scope: string; limit: number } =>
+  !!v && typeof v === 'object' && isString((v as { scope?: unknown }).scope) && Number.isInteger((v as { limit?: unknown }).limit) && (v as { limit: number }).limit >= PAGE
 
 export function CodeLedgerPage() {
   usePageFrame('work')
@@ -40,17 +43,54 @@ export function CodeLedgerPage() {
   const status = (params.get('status') ?? '') as CodeStatus | ''
   const openId = Number(params.get('code')) || null
   const batch = params.get('batch') === '1'
-  const [query, setQuery] = useState('')
+  // 检索词与已显示条数是本页状态：从部门、单元详情返回时取回（U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const q = useDeferredValue(query.trim())
-  const [limit, setLimit] = useState(PAGE)
+  // 已显示条数只属于一个集合范围（查看日期 + 字典 + 状态 + 检索词）；范围变了从头显示，打开 / 关闭代码详情不改它
+  const scope = `${asOf}|${ns}|${status}|${q}`
+  const [shown, setShown] = useReturnState('shown', { scope, limit: PAGE }, isShown)
+  if (shown.scope !== scope) setShown({ scope, limit: PAGE })
+  const limit = shown.scope === scope ? shown.limit : PAGE
+  const setLimit = (n: number) => setShown({ scope, limit: n })
   const [dialog, setDialog] = useState<'register' | 'assign' | 'systems' | null>(null)
+  // 改筛选：替换当前历史记录（不为每次筛选留一条“后退”）
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params)
     if (v) next.set(k, v)
     else next.delete(k)
     setParams(next, { replace: true })
-    setLimit(PAGE)
   }
+  // 代码详情：从台账里打开时新增一条历史记录，浏览器后退即关闭；关闭时回到来源那条记录。
+  // 直接打开带 ?code= 的地址（没有来源）时，关闭只去掉 code，留在台账
+  const location = useLocation()
+  const navigate = useNavigate()
+  const openCode = (id: number) => {
+    const next = new URLSearchParams(params)
+    next.set('code', String(id))
+    setParams(next, { state: { codeFrom: 'ledger' } })
+  }
+  const closeCode = () => {
+    if ((location.state as { codeFrom?: string } | null)?.codeFrom === 'ledger') navigate(-1)
+    else set('code', '')
+  }
+  // 关闭详情（含浏览器后退）后焦点回到打开它的那一行；那一行已不在当前结果里就不抢焦点
+  const lastCode = useRef<number | null>(null)
+  useEffect(() => {
+    if (openId) {
+      lastCode.current = openId
+      return
+    }
+    if (!lastCode.current) return
+    const id = lastCode.current
+    const frame = requestAnimationFrame(() => {
+      lastCode.current = null
+      const button = document.querySelector<HTMLElement>(`[data-return-id="${id}"] button`)
+      if (!button) return
+      button.focus({ preventScroll: true })
+      button.scrollIntoView({ block: 'nearest' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [openId])
 
   // 读取状态（U3R-03）：计数、空态、“还没有来源系统”只由读取成功的数据得出
   const systemsQuery = useListSourceSystems({ as_of: asOf })
@@ -77,6 +117,9 @@ export function CodeLedgerPage() {
   const rows = page?.rows ?? []
   const counts = page?.counts
   const all = counts ? counts.pending + counts.mapped + counts.unmodeled : undefined
+
+  // 返回上下文：从行里的部门、单元链接离开再回来时，回到原范围、已显示条数、位置与原行
+  const back = useListReturn({ scope: `${scope}|${batch}`, ready: codesStatus === 'ready', local: { q: query, shown: { scope, limit } } })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('external-codes', asOf),
@@ -191,7 +234,6 @@ export function CodeLedgerPage() {
                   const next = new URLSearchParams(params)
                   for (const k of ['ns', 'status']) next.delete(k)
                   setParams(next, { replace: true })
-                  setLimit(PAGE)
                 }}
               >
                 清除搜索与筛选
@@ -200,6 +242,7 @@ export function CodeLedgerPage() {
           }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           // SC-11：源代码 + 源名称 / 来源系统与字典 / 解释状态 / 当前解释（多条按院区条件的解释逐条列出）
           columns={[
@@ -210,9 +253,10 @@ export function CodeLedgerPage() {
           ]}
         >
           {rows.map((r) => (
-            <CodeRow key={r.id} row={r} onOpen={() => set('code', String(r.id))} />
+            <CodeRow key={r.id} row={r} onOpen={() => openCode(r.id)} />
           ))}
         </DbTable>
+        </div>
       )}
 
       {!batch && <StaleNotice what="编码" query={codesQuery} />}
@@ -239,7 +283,7 @@ export function CodeLedgerPage() {
         </DbFooter>
       )}
 
-      {openId && <CodeDetailDialog id={openId} onClose={() => set('code', '')} />}
+      {openId && <CodeDetailDialog id={openId} onClose={closeCode} />}
       {dialog === 'register' && (
         <ExternalCodeRegisterDialog open onOpenChange={(o) => !o && setDialog(null)} namespace={nsKey(systems, ns)} />
       )}
@@ -281,7 +325,7 @@ function TargetCell({ a }: { a: AssignmentOut }) {
 
 function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void }) {
   return (
-    <DbRow>
+    <DbRow returnId={r.id}>
       <DbCell>
         {/* 源代码是本场景的主识别值，与源名称一起作为详情入口 */}
         <button type="button" onClick={onOpen} className="group/code flex items-baseline gap-2 text-left">

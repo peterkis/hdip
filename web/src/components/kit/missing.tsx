@@ -3,6 +3,7 @@
 // 其他失败说“没能读取”并给重试——失败不说成不存在。不留空白页。
 // 调用方：if (!data || isDenial(query.error)) return <DetailFallback … />（刷新时被拒绝也不再显示旧内容）。
 import { Link } from 'react-router'
+import { useListHref } from '@/lib/scroll-memory'
 import { DbEmpty } from '@/components/kit/database'
 import { failureText, readFailure } from '@/components/kit/read-state'
 import { Button } from '@/components/ui/button'
@@ -10,12 +11,22 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 type Back = { to: string; label: string }
 
+/** “返回列表”：这次详情是从该列表打开的就回到原筛选与位置（U3R-05） */
+function BackButton({ back }: { back: Back }) {
+  const to = useListHref(back.to)
+  return (
+    <Button variant="outline" size="sm" render={<Link to={to} />}>
+      {back.label}
+    </Button>
+  )
+}
+
 export function Missing({ what, back }: { what: string; back: Back }) {
   return (
     <DbEmpty
       title={`找不到这个${what}`}
       hint="地址可能不完整或对象不存在，请从列表重新进入。"
-      action={<Button variant="outline" size="sm" render={<Link to={back.to} />}>{back.label}</Button>}
+      action={<BackButton back={back} />}
     />
   )
 }
@@ -41,7 +52,7 @@ export function DetailFallback({
       <DbEmpty
         title={title}
         hint={hint}
-        action={<Button variant="outline" size="sm" render={<Link to={back.to} />}>{back.label}</Button>}
+        action={<BackButton back={back} />}
       />
     )
   }
@@ -55,9 +66,7 @@ export function DetailFallback({
             <Button size="sm" disabled={query.isFetching} onClick={() => query.refetch()}>
               {query.isFetching ? '正在重试…' : '重试'}
             </Button>
-            <Button variant="outline" size="sm" render={<Link to={back.to} />}>
-              {back.label}
-            </Button>
+            <BackButton back={back} />
           </span>
         }
       />
