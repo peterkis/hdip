@@ -16,7 +16,7 @@ import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
 import { fillNewCodes, isNewCode, newCode } from '@/components/forms/new-code'
 import { FormErrorsContext, requireFields, SelectField, TextField, type Option } from '@/components/forms/fields'
-import type { ChangeItemInput } from '@/components/forms/item-dialog'
+import { saveFailureText, type ChangeItemInput } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
 import { Callout } from '@/components/kit/callout'
 import { FormEditContext } from '@/components/kit/form-edit'
@@ -427,7 +427,8 @@ export function DepartmentReorgWizard({
   }
 
   const save = useMutation({
-    // 一张完整草稿：新建时创建，回到向导时整体替换原草稿的变更项；请求键在本次打开期间不变，重试拿回同一批代码
+    // 一张完整草稿：新建时创建，回到向导时整体替换原草稿的变更项；请求键在本次打开期间不变，重试拿回同一批代码。
+    // 请求体只由向导内容决定（不读草稿），内容没改的重试与上次相同，服务端认作同一次保存（迁移 0022）
     mutationFn: async () => {
       const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
       const items = await fillNewCodes(buildItems(), requestKey)
@@ -809,7 +810,7 @@ export function DepartmentReorgWizard({
         )}
         {save.error && (
           <p role="alert" className="text-danger-text text-xs">
-            保存未成功：{save.error.message}。已填写的内容与选择都还在，可以再次保存。
+            {saveFailureText(save.error, '已填写的内容与选择都还在')}
           </p>
         )}
         {confirmClose ? (

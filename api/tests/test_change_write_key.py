@@ -23,24 +23,42 @@ def test_retry_create_returns_same_draft(api):
 
 
 def test_retry_append_does_not_duplicate_items(api):
-    """前端“加入已有草稿”是读取草稿后整体 PUT；响应丢失后重读草稿再追加，同一键不会再写一遍。"""
+    """“加入已有草稿”是读取草稿后整体 PUT；
+    响应丢失后前端原样重发同一请求体，服务端认键不再写一遍。"""
     api.apply(*world())
     cr = api.draft(dept_create(code="A", name="甲科"))
     new = dept_create(code="B", name="乙科")
     body = {"items": [*cr["items"], new], "note": cr["note"], "request_key": "key-append-0001"}
     r = api.put(f"/api/change-requests/{cr['id']}", body)
     assert r.status_code == 200, r.text
-    assert len(r.json()["items"]) == 2
-    # 重试：按已更新的草稿再追加一次（重复的“乙科”）
-    stale = api.get(f"/api/change-requests/{cr['id']}").json()
-    retry = {
-        "items": [*stale["items"], new],
-        "note": stale["note"],
-        "request_key": "key-append-0001",
-    }
-    r2 = api.put(f"/api/change-requests/{cr['id']}", retry)
+    r2 = api.put(f"/api/change-requests/{cr['id']}", body)
     assert r2.status_code == 200, r2.text
     assert len(r2.json()["items"]) == 2
+
+
+def test_changed_submission_with_same_key_is_not_reported_as_saved(api):
+    """上次保存已写入（响应丢失），用户改了内容再用同一个键保存：拒绝并说明，不把旧结果当新内容已保存。"""
+    api.apply(*world())
+    item = dept_create(code="A", name="甲科")
+    first = _create(api, [item], "key-edit-0001").json()
+    edited = _create(api, [dept_create(code="A", name="甲科（改）")], "key-edit-0001")
+    assert edited.status_code == 409
+    assert f"上一次保存其实已写入申请 #{first['id']}" in edited.json()["message"]
+    # 追加到已有草稿同理：重读后再追加一遍（内容不同）不会被当成重试
+    cr = api.draft(dept_create(code="B", name="乙科"))
+    new = dept_create(code="C", name="丙科")
+    ok = api.put(
+        f"/api/change-requests/{cr['id']}",
+        {"items": [*cr["items"], new], "note": None, "request_key": "key-edit-0002"},
+    )
+    assert ok.status_code == 200
+    stale = api.get(f"/api/change-requests/{cr['id']}").json()
+    again = api.put(
+        f"/api/change-requests/{cr['id']}",
+        {"items": [*stale["items"], new], "note": None, "request_key": "key-edit-0002"},
+    )
+    assert again.status_code == 409
+    assert len(api.get(f"/api/change-requests/{cr['id']}").json()["items"]) == 2
 
 
 def test_key_is_per_user(api):

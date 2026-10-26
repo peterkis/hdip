@@ -836,6 +836,7 @@
 | `request_key` | text | 是 |  |  |
 | `action` | text | 是 |  |  |
 | `change_request_id` | bigint | 是 |  | → `change_request` |
+| `payload_hash` | text | 是 |  |  |
 | `written_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
 
 约束：
@@ -843,6 +844,7 @@
 - `change_request_write_pkey`（主键）：`PRIMARY KEY (id)`
 - `change_request_write_key_uniq`（唯一）：`UNIQUE (user_id, request_key)`
 - `change_request_write_action_check`（检查）：`CHECK ((action = ANY (ARRAY['create'::text, 'update'::text])))`
+- `change_request_write_hash_check`（检查）：`CHECK ((payload_hash ~ '^[0-9a-f]{64}$'::text))`
 - `change_request_write_key_check`（检查）：`CHECK (((length(request_key) >= 8) AND (length(request_key) <= 100)))`
 
 触发器：

@@ -495,6 +495,8 @@ class ChangeRequestWrite(Base):
     request_key: Mapped[str] = mapped_column(Text)
     action: Mapped[str] = mapped_column(Text)
     change_request_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    # 写入时的提交内容摘要（变更项 + 说明，SHA-256）：同键再写时据此区分“重试”与“改过之后又保存”
+    payload_hash: Mapped[str] = mapped_column(Text)
     written_at: Mapped[datetime] = mapped_column(server_default=NOW)
 
 

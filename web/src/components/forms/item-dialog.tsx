@@ -18,6 +18,7 @@ import {
   useListChangeRequests,
 } from '@/api/generated/changes/changes'
 import type { ChangeRequestWrite } from '@/api/generated/model'
+import { ApiError } from '@/api/fetcher'
 import { FormErrorsContext, isFieldErrors, type FieldErrors } from '@/components/forms/fields'
 import { fillNewCodes } from '@/components/forms/new-code'
 import { Callout } from '@/components/kit/callout'
@@ -53,9 +54,25 @@ export function useDraftItems(): ChangeItemInput[] {
   return useContext(DraftItemsContext)
 }
 
+/**
+ * 保存失败的说明（迁移 0022 之后）：
+ * - 网络中断等没拿到服务端答复：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
+ * - 409：同一次保存的请求键已写入过别的内容（上次其实已成功、之后又改过），服务端的说明已写明去核对哪张申请。
+ * - 其他被拒（校验未通过等）：没有写入，改好后再保存。
+ */
+export function saveFailureText(error: Error, kept: string): string {
+  if (!(error instanceof ApiError))
+    return `保存结果未确定：${error.message}。服务端可能已经写入；内容不改直接再保存会先核对，不会重复；改过内容再保存时，如果上次其实已写入，会提示你去核对那张申请。${kept}。`
+  if (error.status === 409) return `${error.message}${kept}。`
+  return `保存未成功：${error.message}。${kept}，改好后可再次保存。`
+}
+
 export function useAddItem() {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  // 本次打开的表单已发出的请求体，按“提交内容”记住：内容没改的重试原样重发（不重读草稿、不再追加一遍），
+  // 服务端才能认出是同一次保存；内容改过就重新组装——若上次其实已写入，服务端会拒绝并说明（迁移 0022）
+  const sent = useRef<{ fp: string; target: number | 'new'; body: ChangeRequestWrite } | null>(null)
   return useMutation({
     mutationFn: async ({
       item,
@@ -71,11 +88,19 @@ export function useAddItem() {
       requestKey?: string
     }) => {
       const raw = Array.isArray(item) ? item : [item]
+      const fp = JSON.stringify({ raw, target, note: note ?? null })
+      const send = (t: number | 'new', body: ChangeRequestWrite) => (t === 'new' ? createChangeRequest(body) : updateChangeRequest(t, body))
+      if (sent.current?.fp === fp) return send(sent.current.target, sent.current.body)
       const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
       const request_key = requestKey ?? null
-      if (target === 'new') return createChangeRequest({ items, note: note ?? null, request_key })
-      const cr = await getChangeRequest(target)
-      return updateChangeRequest(target, { items: [...cr.items, ...items], note: cr.note, request_key })
+      let body: ChangeRequestWrite
+      if (target === 'new') body = { items, note: note ?? null, request_key }
+      else {
+        const cr = await getChangeRequest(target)
+        body = { items: [...cr.items, ...items], note: cr.note, request_key }
+      }
+      sent.current = { fp, target, body }
+      return send(target, body)
     },
     onSuccess: async (cr, { target, item }) => {
       const n = Array.isArray(item) ? `（${item.length} 项）` : ''
@@ -183,7 +208,7 @@ export function ItemDialog({
 
   const pending = add.isPending
   const error =
-    formError ?? (add.error ? `保存未成功：${add.error.message}。已填写的内容都还在，改好后可再次保存。` : null)
+    formError ?? (add.error ? saveFailureText(add.error, '已填写的内容都还在') : null)
   /** 取消、×、Esc、点遮罩都走这里：保存中不关闭（请求已发出，关掉也撤不回）；改过内容时先确认一次 */
   const requestClose = (next: boolean) => {
     if (next) return onOpenChange(true)

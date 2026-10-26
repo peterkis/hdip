@@ -601,3 +601,5 @@ U3.1 收尾的第一阶段（任务包 `docs/refer/HDIP-U3.1-Prompt-Pack-v1.0-20
 ### 补充：草稿写入幂等（2026-10-26，分支 `feat/draft-write-idempotency`）
 
 关闭 U3R-01 遗留 R01-1。迁移 0022 新增只追加的 `change_request_write`（用户 + 请求键唯一）；`workflow.create_draft / update_draft` 接收 `request_key`，同一用户同一键再次写入时原样返回那张申请，不再写入；键已用于另一次保存返回 409。前端 `ItemDialog` 与组织变更向导写草稿时带上本次打开的请求键（与取号同一个）。检查：`make test` 213 通过（新增 `test_change_write_key.py` 6 项）；`npm --prefix web run build`、`make check` 通过；走查库实测见 `docs/剧本走查记录.md`。
+
+补充（PR #1 评审 P2）：同一请求键的再次保存若内容改过（上次其实已写入、用户之后又编辑），原实现会原样返回旧结果、表单关闭，修改被悄悄丢弃。现登记提交内容摘要 `payload_hash`：内容相同才当作重试，内容不同返回 409 并说明；前端同一次打开的表单记住已发出的请求体，未改动的重试原样重发；失败提示区分“结果未确定 / 409 / 被拒”。后端测试 7 项（新增“改过内容不被当成已保存”），浏览器实测见走查记录。
