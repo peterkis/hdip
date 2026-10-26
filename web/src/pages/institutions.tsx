@@ -145,7 +145,7 @@ export function InstitutionDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        meta={
           <>
             主体代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
           </>

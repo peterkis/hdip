@@ -3,7 +3,7 @@
 // 右侧日历按钮打开浏览器自带的选择器（隐藏的 date 输入框，只借它的日历）。
 // 值的约定不变：完整且合法的日期才向外报出 'YYYY-MM-DD'，清空或未输完报出 ''；离开时若外部值仍有效，未输完的内容恢复为原值。
 import { Calendar03Icon } from '@hugeicons/core-free-icons'
-import { useEffect, useRef, useState, type ChangeEvent, type ComponentProps, type FocusEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type ComponentProps, type FocusEvent, type KeyboardEvent } from 'react'
 import { Icon } from '@/components/kit/icon'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -59,6 +59,18 @@ export function DateInput({
       const deleting = (e.nativeEvent as InputEvent).inputType?.startsWith('delete')
       take(deleting ? raw.replace(/[^\d-]/g, '') : shape(raw))
     },
+    // 键盘打开日历：Alt + ↓（日历按钮不单独占 Tab 停靠点，输入框就是它的等效入口）
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.altKey && e.key === 'ArrowDown') {
+        e.preventDefault()
+        try {
+          picker.current?.showPicker()
+        } catch {
+          /* 浏览器不支持时照常手输 */
+        }
+      }
+      rest.onKeyDown?.(e)
+    },
     onBlur: (e: FocusEvent<HTMLInputElement>) => {
       if (text && !isDate(text) && value) setText(value)
       rest.onBlur?.(e)
@@ -75,6 +87,7 @@ export function DateInput({
         type="button"
         tabIndex={-1}
         aria-label="从日历选择"
+        title="从日历选择（键盘：在日期框里按 Alt + ↓）"
         disabled={rest.disabled}
         onClick={() => {
           try {
@@ -84,8 +97,9 @@ export function DateInput({
           }
         }}
         className={cn(
-          'text-fg-muted hover:text-fg flex shrink-0 items-center justify-center disabled:pointer-events-none',
-          bare ? 'ml-1' : 'absolute right-1.5',
+          // 图标 14，命中区 24×24（U3R-07，R-A11Y 独立目标）
+          'text-fg-muted hover:text-fg hover:bg-surface-hover flex size-6 shrink-0 items-center justify-center rounded-sm disabled:pointer-events-none',
+          bare ? 'ml-0.5' : 'absolute right-0.5',
         )}
       >
         <Icon icon={Calendar03Icon} className="size-3.5" />

@@ -27,7 +27,7 @@ export function DepartmentPersons({ rows, suspended }: { rows: DepartmentPersonR
         <DbTable columns={[{ label: '人员' }, { label: '任用' }, { label: '归属期间' }]}>
           {rows.map((r) => (
             <DbRow key={r.assignment_id}>
-              <DbCell className="py-1.5">
+              <DbCell>
                 <span className="flex items-center gap-1.5">
                   <Link className="text-fg-strong font-medium hover:underline" to={`/persons/${r.person_id}`}>
                     {r.person_name}

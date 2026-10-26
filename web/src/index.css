@@ -337,4 +337,15 @@
   .hd-flash {
     animation: none;
   }
+  /* 关系图的流动虚线（运营关系“运行中”）停下，保留虚线线型与文字（U3R-07，R-MOTION） */
+  .react-flow__edge.animated path,
+  .react-flow__edge-path {
+    animation: none !important;
+  }
+  .hd-delayed {
+    animation-duration: 0s;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }

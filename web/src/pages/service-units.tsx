@@ -80,7 +80,7 @@ export function ServiceUnitDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        meta={
           <>
             单元代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
           </>

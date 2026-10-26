@@ -173,9 +173,9 @@ export function CampusDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        description={shown.public_name ? <>对外称“{shown.public_name}”</> : undefined}
+        meta={
           <>
-            {shown.public_name && <>对外称“{shown.public_name}” · </>}
             院区代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
           </>
         }

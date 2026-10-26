@@ -65,9 +65,10 @@ function Label({ htmlFor, label, required }: { htmlFor: string; label: string; r
   )
 }
 
-function Help({ error, hint }: { error?: string; hint?: ReactNode }) {
-  if (error) return <FieldDescription className="text-danger-text">{error}</FieldDescription>
-  return hint ? <FieldDescription>{hint}</FieldDescription> : null
+// 说明与错误用同一个 id，经 aria-describedby 关联到字段（没有说明时该 id 不存在，读屏忽略）
+function Help({ id, error, hint }: { id: string; error?: string; hint?: ReactNode }) {
+  if (error) return <FieldDescription id={id} className="text-danger-text text-xs">{error}</FieldDescription>
+  return hint ? <FieldDescription id={id}>{hint}</FieldDescription> : null
 }
 
 // ------------------------------------------------------------------ 字段
@@ -104,6 +105,7 @@ export function TextField({
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
           className={invalidFill}
           onChange={(v) => {
             f.touch()
@@ -118,6 +120,7 @@ export function TextField({
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
           className={invalidFill}
           onChange={(e) => {
             f.touch()
@@ -125,7 +128,7 @@ export function TextField({
           }}
         />
       )}
-      <Help error={f.error} hint={hint ?? (type === 'date' && name === 'effective_date' ? EFFECTIVE_DATE_HINT : undefined)} />
+      <Help id={`${f.id}-help`} error={f.error} hint={hint ?? (type === 'date' && name === 'effective_date' ? EFFECTIVE_DATE_HINT : undefined)} />
     </Field>
   )
 }
@@ -169,6 +172,7 @@ export function SelectField({
         value={value}
         disabled={disabled}
         aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
         onChange={(e) => {
           f.touch()
           onChange(e.target.value)
@@ -181,7 +185,7 @@ export function SelectField({
           </NativeSelectOption>
         ))}
       </NativeSelect>
-      <Help error={f.error} hint={hint} />
+      <Help id={`${f.id}-help`} error={f.error} hint={hint} />
     </Field>
   )
 }

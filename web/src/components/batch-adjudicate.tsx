@@ -143,7 +143,7 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
                 </DbCell>
                 <DbCell className="font-mono whitespace-nowrap">{r.code}</DbCell>
                 <DbCell>{r.source_name ?? <span className="text-fg-disabled">—</span>}</DbCell>
-                <DbCell className="py-1.5">
+                <DbCell>
                   {(r.suggestions ?? []).length === 0 ? (
                     <span className="text-fg-muted">没有候选，可用“统一解释”处理</span>
                   ) : (

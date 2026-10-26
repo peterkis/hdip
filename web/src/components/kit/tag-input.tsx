@@ -56,7 +56,7 @@ export function TagInput({
             <button
               type="button"
               aria-label={`移除 ${t}`}
-              className="hover:bg-surface-hover ml-0.5 rounded-sm p-0.5"
+              className="hover:bg-surface-hover -my-1 -mr-1 flex size-6 items-center justify-center rounded-sm"
               onClick={() => change(value.filter((x) => x !== t))}
             >
               <Icon icon={Cancel01Icon} className="size-3" />

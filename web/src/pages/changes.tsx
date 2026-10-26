@@ -42,7 +42,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, SENSITIVE_FIELD, stamp } from '@/lib/format'
 import { useListReturn } from '@/lib/scroll-memory'
-import { cn } from '@/lib/utils'
+import { cn, scrollBehavior } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 
 // ------------------------------------------------------------------ 列表
@@ -378,7 +378,8 @@ export function ChangeDetailPage() {
             变更申请 #{cr.id} <ChangeStatusBadge status={cr.status} />
           </span>
         }
-        description={
+        description="本页不按查看日期筛选；申请里的各项按各自的业务日期生效。"
+        meta={
           <>
             {cr.created_by.display_name} 起草 · {cr.items.length} 项变更
             {cr.copied_from_id && (
@@ -390,8 +391,6 @@ export function ChangeDetailPage() {
                 </Link>
               </>
             )}
-            {/* 日期作用范围（U3R-05）：全局查看日期不筛选申请；确认时间也不是业务生效日期 */}
-            <span className="block">本页不按查看日期筛选；申请里的各项按各自的业务日期生效。</span>
           </>
         }
         actions={
@@ -442,7 +441,7 @@ export function ChangeDetailPage() {
         )}
         <div className="@container">
           <div className="grid items-start gap-6 @review:grid-cols-(--hd-review-columns)">
-            <div className="grid min-w-0 gap-9">
+            <div className="grid min-w-0 gap-8">
               {cr.problems.length > 0 && (
                 <section className="grid gap-2" aria-label="需要处理的问题">
                   <h2 className="text-danger-text text-section font-semibold">
@@ -539,7 +538,7 @@ export function ChangeDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+                      document.querySelector('main')?.scrollTo({ top: 0, behavior: scrollBehavior() })
                       document.getElementById('change-primary-action')?.focus({ preventScroll: true })
                     }}
                   >

@@ -32,7 +32,9 @@ import { Link } from 'react-router'
 import { Callout } from '@/components/kit/callout'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag, TONES, type Tone } from '@/components/kit/tag'
-import { DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
+import { DbCell, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
+import { Segmented } from '@/components/kit/segmented'
+import { FrameSample } from '@/components/layout'
 import { TagInput } from '@/components/kit/tag-input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -61,7 +63,7 @@ import {
   OPERATING_STATUS_TONE,
   UNIT_STATUS_TONE,
 } from '@/lib/tones'
-import { cn } from '@/lib/utils'
+import { cn, scrollBehavior } from '@/lib/utils'
 
 const SECTIONS: { id: string; label: string; icon: AppIcon }[] = [
   { id: 'overview', label: '概览', icon: BookOpen01Icon },
@@ -135,7 +137,7 @@ function Sidebar({ active }: { active: string }) {
         {SECTIONS.map((s) => (
           <button
             key={s.id}
-            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: scrollBehavior() })}
             className={cn(
               'flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-(--hd-duration-fast)',
               active === s.id
@@ -590,9 +592,20 @@ function DesignToolbar() {
   const [chip, setChip] = useState(true)
   const [q, setQ] = useState('')
   const [tags, setTags] = useState<string[]>(['门诊'])
+  const [view, setView] = useState<'table' | 'tree' | 'flow'>('table')
   return (
     <div className="grid gap-3">
       <DbToolbar right={<SearchBox value={q} onChange={setQ} placeholder="名称、拼音码或代码" />}>
+        <Segmented
+          label="视图"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'table', label: '表格' },
+            { value: 'tree', label: '层级树' },
+            { value: 'flow', label: '关系图' },
+          ]}
+        />
         <FilterPill
           label="生命周期"
           value={pill}
@@ -852,8 +865,10 @@ function ControlsSection() {
         </Field>
       </div>
       <div className="grid gap-2">
-        <SubTitle>工具栏控件（键盘 Tab 进入看焦点轮廓）</SubTitle>
-        <DesignToolbar />
+        <SubTitle>工具栏控件（键盘 Tab 进入看焦点轮廓；分段单选用方向键切换）</SubTitle>
+        <FrameSample frame="work">
+          <DesignToolbar />
+        </FrameSample>
         <p className="text-fg-muted text-caption">
           占位提示用 placeholder 角色，不借 disabled；透明的筛选胶囊、搜索框、标签输入在可见外层显示焦点。
         </p>
@@ -1003,6 +1018,17 @@ const SAMPLE_UNITS = [
   { code: 'XNK-BY-OPD', name: '心血管内科门诊', type: '门诊单元', dept: '心血管内科', campus: '本部院区', status: 'RETIRED', period: '2020-01-01 ~ 2026-12-31' },
 ]
 
+const LONG_ROWS = [
+  { id: 1, name: '心内科', code: 'D000001', note: '正式履职' },
+  { id: 2, name: '呼吸与危重症医学科', code: 'D000002', note: '自 2020-01-01 起；上级：内科（行政视图）' },
+  {
+    id: 3,
+    name: '成都市第三人民医院高新院区心血管内科与呼吸与危重症医学科联合门诊（2027 年起筹备，名称以院发〔2026〕31 号文件为准）',
+    code: 'D000003',
+    note: '依据：院发〔2026〕31 号；长名称自然换行，不截断、不省略，代码单独一行',
+  },
+]
+
 function TableSection() {
   return (
     <Section
@@ -1010,6 +1036,22 @@ function TableSection() {
       title="表格"
       description="Notion 数据库式：无外框、横线分隔、表头灰色常规字重、行悬停底色；代码用等宽字体，状态用标签。"
     >
+      <SubTitle>标准行（真实 DbTable：单元格上下 8、左右 12，最小 44；多行内容自然增高）</SubTitle>
+      <FrameSample frame="work">
+        <DbTable columns={[{ label: '名称', className: 'w-1/2', sortKey: 'name' }, { label: '说明' }]} sort={null} onSort={() => {}}>
+          {LONG_ROWS.map((r) => (
+            <DbRow key={r.id}>
+              <DbCell>
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="text-fg-strong font-medium">{r.name}</span>
+                  <span className="text-fg-muted font-mono text-caption">{r.code}</span>
+                </span>
+              </DbCell>
+              <DbCell className="text-fg-secondary">{r.note}</DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
+      </FrameSample>
       <Rows head={['代码', '名称', '类型', '所属部门', '院区', '状态', '期间']}>
         {SAMPLE_UNITS.map((u) => (
           <Row key={u.code}>

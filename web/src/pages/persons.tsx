@@ -381,7 +381,7 @@ export function PersonDetailPage() {
     <>
       <PageHeader
         title={data.name}
-        description={
+        meta={
           <>
             人员代码 <span className="font-mono">{data.code}</span>（系统分配、永不改变，与业务工号无关）· 按查看日期 {asOf} 显示
           </>

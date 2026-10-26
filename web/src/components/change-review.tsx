@@ -10,7 +10,7 @@ import type { ChangeRequestOut, ItemOutcome, ProblemItem } from '@/api/generated
 import { Icon } from '@/components/kit/icon'
 import { Tag, type Tone } from '@/components/kit/tag'
 import { ProblemCard } from '@/components/problem-card'
-import { cn } from '@/lib/utils'
+import { cn, scrollBehavior } from '@/lib/utils'
 
 // ------------------------------------------------------------------ 分组
 interface GroupDef {
@@ -317,8 +317,7 @@ function ReviewRow({
     onFocused()
     const el = ref.current
     if (!el || focus.key !== crKey) return
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    el.scrollIntoView({ behavior: scrollBehavior(), block: 'start' })
     el.focus({ preventScroll: true })
     el.classList.remove('hd-flash')
     void el.offsetWidth
@@ -332,7 +331,7 @@ function ReviewRow({
       tabIndex={-1}
       className="focus:outline-(--hd-focus-ring) grid scroll-mt-6 gap-2 rounded-lg outline-none focus:outline-2 focus:outline-solid focus:outline-offset-2"
     >
-      <div className={cn('flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
+      <div className={cn('flex min-h-(--hd-row-height) flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
         {view ? view.parts.map((part, k) => <RowPart key={k} kind={part.kind} text={part.text} tone={part.tone ?? undefined} />) : <span className="text-fg">{cr.item_summaries?.[index]}</span>}
         <span className="ml-auto flex items-center gap-3">
           {view?.meta && <span className="text-fg-muted font-mono text-caption">{view.meta}</span>}
@@ -376,11 +375,11 @@ function RowPart({ kind, text, tone }: { kind: string; text: string; tone?: stri
   switch (kind) {
     case 'chip':
     case 'new':
-      return <span className="text-fg-strong text-sm font-semibold whitespace-nowrap">{text}</span>
+      return <span className="text-fg-strong min-w-0 font-semibold break-words">{text}</span>
     case 'ref':
-      return <span className="border-line text-fg rounded-md border px-1.5 py-px text-xs whitespace-nowrap">{text}</span>
+      return <span className="border-line text-fg min-w-0 rounded-md border px-1.5 py-px text-xs break-words">{text}</span>
     case 'out':
-      return <span className="text-fg-muted decoration-fg-disabled text-sm font-semibold whitespace-nowrap line-through">{text}</span>
+      return <span className="text-fg-muted decoration-fg-disabled min-w-0 font-semibold break-words line-through">{text}</span>
     case 'tag':
       return (
         <Tag tone={TAG_TONE[tone ?? 'gray'] ?? 'gray'} className="text-caption">
@@ -449,7 +448,7 @@ export function ReviewNav({
   const [open, setOpen] = useState(false)
   const jump = (id: string) => {
     setOpen(false)
-    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    document.getElementById(id)?.scrollIntoView({ behavior: scrollBehavior(), block: 'start' })
   }
   const pct = checks.total ? Math.round((checks.done / checks.total) * 100) : 0
   const problemCount = cr.problems.length

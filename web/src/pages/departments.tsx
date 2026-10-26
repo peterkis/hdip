@@ -691,10 +691,10 @@ export function DepartmentDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        meta={
           <>
             管理编码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
-            <span className="text-fg-muted"> · 内部 ID {data.id}</span>
+            <> · 内部 ID {data.id}</>
           </>
         }
         actions={
@@ -1186,7 +1186,7 @@ function RelationsTable({
               {r.to_department ? dept(r.to_department) : <span className="text-fg-muted">整个院区</span>}
               {r.campus_name && <span className="text-fg-muted ml-1.5 text-caption">@ {r.campus_name}</span>}
             </DbCell>
-            <DbCell className="py-2 whitespace-normal">{r.scope}</DbCell>
+            <DbCell className="whitespace-normal">{r.scope}</DbCell>
             <DbCell className="whitespace-nowrap">{period(r.valid_from, r.valid_to)}</DbCell>
             <DbCell className="text-right">
               {onClose && r.valid_to === null && (

@@ -179,6 +179,8 @@ export function DbTable({
             {columns.map((c, i) => (
               <th
                 key={c.label || `c${i}`}
+                scope="col"
+                aria-sort={c.sortKey && onSort ? (sort?.key === c.sortKey ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                 className={cn(
                   'font-normal whitespace-nowrap',
                   spec ? 'h-(--hd-row-header-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
@@ -190,15 +192,14 @@ export function DbTable({
                   <button
                     type="button"
                     onClick={() => onSort(c.sortKey!)}
-                    aria-sort={sort?.key === c.sortKey ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                    title="点击排序"
-                    className="hover:text-fg group/sort inline-flex items-center gap-1.5"
+                    title={`按${c.label}排序：升序 → 降序 → 取消`}
+                    className="hover:text-fg group/sort -mx-1 inline-flex h-(--hd-control-height-sm) items-center gap-1.5 rounded-sm px-1"
                   >
                     {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
                     {c.label}
                     <Icon
                       icon={sort?.key === c.sortKey ? (sort.dir === 'asc' ? ArrowUp01Icon : ArrowDown01Icon) : ArrowUpDownIcon}
-                      className={cn('size-3.5', sort?.key === c.sortKey ? 'text-fg' : 'opacity-0 group-hover/sort:opacity-100')}
+                      className={cn('size-3.5', sort?.key === c.sortKey ? 'text-fg' : 'opacity-0 group-hover/sort:opacity-100 group-focus-visible/sort:opacity-100')}
                       strokeWidth={2}
                     />
                   </button>
@@ -240,7 +241,7 @@ export function DbCell({ children, className }: { children?: ReactNode; classNam
     <td
       className={cn(
         'border-line-subtle align-middle',
-        spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
+        spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x) py-(--hd-cell-padding-y)' : 'h-9 px-2',
         lines && '[&:not(:first-child)]:border-l',
         className,
       )}

@@ -127,8 +127,8 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
                 <span className="text-fg-muted font-mono text-caption select-all">{c.code}</span>
               </span>
             </DbCell>
-            <DbCell className="py-2 whitespace-normal">{c.criterion ?? '—'}</DbCell>
-            <DbCell className="text-fg-secondary py-2 whitespace-normal">{c.caution ?? '—'}</DbCell>
+            <DbCell className="whitespace-normal">{c.criterion ?? '—'}</DbCell>
+            <DbCell className="text-fg-secondary whitespace-normal">{c.caution ?? '—'}</DbCell>
             <DbCell className="text-fg-muted text-caption whitespace-nowrap">
               {c.updated_by ? `${c.updated_by.display_name} · ${stamp(c.updated_at)}` : '初始配置'}
             </DbCell>

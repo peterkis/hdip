@@ -280,6 +280,8 @@
      共享水平 gutter 24（<768 为 16）；work / document 的最大宽度都指内容净宽（不含 gutter）；canvas 不设上限 */
   --hd-layout-gutter: var(--hd-space-24);
   --hd-layout-gutter-narrow: var(--hd-space-16);
+  --hd-shell-rail-width: var(--hd-space-40);     /* 桌面侧栏收起后的控制轨道：展开按钮有真实占位，顶栏与正文同一偏移（U3R-07） */
+  --hd-dialog-max-height: calc(100svh - 2rem);    /* 弹窗整体不超过视口，长表单在弹窗内滚动、标题不被推出（U3R-07） */
   --hd-page-work-max: 90rem;          /* 1440 */
   --hd-page-document-max: 56.25rem;   /* 900 */
   --hd-page-top-gap: var(--hd-space-24);
@@ -296,6 +298,7 @@
   --hd-work-row-min-height: 4rem;
   --hd-work-row-padding-y: var(--hd-space-12);
   --hd-cell-padding-x: var(--hd-space-12);
+  --hd-cell-padding-y: var(--hd-space-8);        /* 标准单元格上下留白（U3R-07）：多行内容增高后不贴分隔线 */
   --hd-control-height-touch: 2.75rem; /* 44：触控主要控件 */
   /* 申请工作列表（统一规范 v1.0 R-ROW 5.2，U1）：变更概要（弹性，至少占一半）| 状态 | 最近处理 */
   --hd-work-list-columns: minmax(0, 1fr) 5.5rem 9.5rem;

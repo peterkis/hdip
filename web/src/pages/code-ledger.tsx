@@ -339,7 +339,7 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
       <DbCell className="whitespace-nowrap">
         <Tag tone={CODE_STATUS_TONE[r.status]}>{CODE_STATUS[r.status as CodeStatus]}</Tag>
       </DbCell>
-      <DbCell className="py-1.5">
+      <DbCell>
         {r.current.length ? (
           <span className="grid gap-1">
             {r.current.map((a) => (
@@ -417,13 +417,13 @@ function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) 
               const current = a.valid_from <= asOf && (a.valid_to === null || a.valid_to >= asOf)
               return (
                 <DbRow key={a.id} className={cn(!current && 'text-fg-muted')}>
-                  <DbCell className="py-1.5">
+                  <DbCell>
                     <TargetCell a={a} />
                   </DbCell>
                   <DbCell className="whitespace-nowrap">
                     {a.valid_from} → {a.valid_to ?? '长期'}
                   </DbCell>
-                  <DbCell className="py-1.5">{a.evidence_note ?? '—'}</DbCell>
+                  <DbCell>{a.evidence_note ?? '—'}</DbCell>
                   <DbCell className="whitespace-nowrap">
                     <Link to={`/changes/${a.change_id}`} className="text-fg-secondary hover:underline">
                       #{a.change_id}

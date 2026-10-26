@@ -22,7 +22,9 @@
     "frame_formula": "min(W - 2*G, M), centered inside the post-sidebar region",
     "review_nav_width": 200,
     "review_nav_gap": 24,
-    "review_nav_min_frame": 1040
+    "review_nav_min_frame": 1040,
+    "shell_rail_width_px": 40,
+    "dialog_max_height": "calc(100svh - 2rem)（--hd-dialog-max-height）"
   },
   "typography": {
     "font_strategy": "existing_system_stack_no_network_font",
@@ -86,7 +88,9 @@
     "work_internal_gap": 4,
     "row_gap": 0,
     "default_separator": "horizontal",
-    "vertical_separator": "explicit_comparison_or_matrix_variant"
+    "vertical_separator": "explicit_comparison_or_matrix_variant",
+    "cell_padding_y_px": 8,
+    "u3r07_note": "标准单元格上下 8（--hd-cell-padding-y）、左右 12、最小 44；已接入并实测（U3R-07）"
   },
   "controls": {
     "default_height": 32,
@@ -96,7 +100,8 @@
       24,
       24
     ],
-    "icon_visual_size": 16
+    "icon_visual_size": 16,
+    "independent_target_min_px": 24
   },
   "radius": {
     "tag": 4,
