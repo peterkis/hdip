@@ -326,11 +326,13 @@ export function ChangeDetailPage() {
   /** 说明写入成功：立刻把服务端返回的草稿写进详情缓存，并把说明基准前移到这次写入（PR #1 评审）。
    *  不等之后的整体刷新——刷新前旧缓存会把基准“回退”成保存前的版本；提交前自动保存后提交失败时，
    *  也不会走到刷新。两种情况下一次保存都会带着旧版本被自己挡成 412 */
-  const adoptNoteWrite = (next: ChangeRequestOut) => {
+  // sent：发出请求时输入框里的说明。请求返回前用户可能还在输入（慢网络）：缓存与基准照常更新，
+  // 输入框只在仍等于发出时的内容才换成服务端保存的文本；之后又改过的保留，作为未保存的修改
+  const adoptNoteWrite = (next: ChangeRequestOut, sent: string) => {
     qc.setQueryData(getGetChangeRequestQueryKey(next.id), next)
     const text = next.note ?? ''
     setNoteBase({ id: next.id, note: text, version: next.updated_at })
-    setNote(text)
+    setNote((current) => (current === sent ? text : current))
   }
 
   const action = useMutation({
@@ -362,8 +364,13 @@ export function ChangeDetailPage() {
       onClick={() =>
         run(async () => {
           // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-          if (noteDirty)
-            adoptNoteWrite(await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at }))
+          if (noteDirty) {
+            const sent = note
+            adoptNoteWrite(
+              await updateChangeRequest(id, { items: cr.items, note: sent.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at }),
+              sent,
+            )
+          }
           return submitChangeRequest(id)
         }, `申请 #${id} 已提交，等待确认`)
       }
@@ -384,8 +391,9 @@ export function ChangeDetailPage() {
   // 带读取时的 updated_at：草稿此后在别处被改过，服务端拒绝（412），不用页面上的旧变更项覆盖
   const saveNote = () =>
     run(async () => {
-      const next = await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
-      adoptNoteWrite(next)
+      const sent = note
+      const next = await updateChangeRequest(id, { items: cr.items, note: sent.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
+      adoptNoteWrite(next, sent)
       return next
     }, '变更说明已保存')
 
