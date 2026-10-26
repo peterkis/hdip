@@ -755,7 +755,10 @@ export function DepartmentDetailPage() {
             label: '主体归属',
             value: affiliation ? (
               <>
-                {affiliation.institution_name}
+                {/* T7.2（U3R-08）：主体名称进入主体详情；“调整”是独立的动作 */}
+                <Link className="hover:underline" to={`/institutions/${affiliation.institution_id}`}>
+                  {affiliation.institution_name}
+                </Link>
                 {edit('调整', 'affiliate')}
               </>
             ) : isMaintainer && !terminal ? (
@@ -936,7 +939,13 @@ export function DepartmentDetailPage() {
                   key: a.id,
                   current: a === affiliation,
                   ended: a.valid_to !== null && a.valid_to < asOf,
-                  cells: [a.institution_name, period(a.valid_from, a.valid_to), <ChangeLink id={a.change_id} />],
+                  cells: [
+                    <Link className="hover:underline" to={`/institutions/${a.institution_id}`}>
+                      {a.institution_name}
+                    </Link>,
+                    period(a.valid_from, a.valid_to),
+                    <ChangeLink id={a.change_id} />,
+                  ],
                 }))}
                 empty="未登记主体归属"
               />

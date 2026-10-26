@@ -42,10 +42,11 @@ import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
 import { notify } from '@/lib/notify'
 import { formatValue, UNIT_STATUS, type UnitStatus } from '@/lib/format'
-import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
+import { UNIT_STATUS_TONE } from '@/lib/tones'
 import { useMe } from '@/lib/use-me'
 import { indexDepartments, NO_CLASS } from '@/lib/org-overview'
 import { isBoolean, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
+import { UnitNameCell } from '@/components/units-table'
 
 const EMPTY: never[] = []
 
@@ -293,24 +294,7 @@ function UnitRow({ unit: u, typeName }: { unit: ServiceUnitRow; typeName: string
   const v = u.version
   return (
     <DbRow returnId={u.id}>
-      <DbCell>
-        <span className="grid gap-0.5">
-          <span className="flex items-center gap-2">
-            <Link
-              to={`/service-units/${u.id}`}
-              className="text-fg-strong decoration-line-strong truncate font-medium underline-offset-4 hover:underline"
-            >
-              {v.name}
-            </Link>
-            {u.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
-          </span>
-          <span className="text-fg-muted text-caption whitespace-nowrap">
-            <span className="font-mono select-all">{u.code}</span>
-            {/* 后续版本用文字说明，不只放一个时钟图标（SC-06） */}
-            {u.has_later_versions && <> · 之后有已确认的新版本</>}
-          </span>
-        </span>
-      </DbCell>
+      <UnitNameCell unit={u} />
       <DbCell className="whitespace-nowrap">{typeName}</DbCell>
       <DbCell className="whitespace-nowrap">
         <Link to={`/departments/${v.department_id}`} className="hover:underline">

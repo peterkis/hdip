@@ -115,8 +115,8 @@ export function DepartmentDuties({ rows, onAction }: { rows: DepartmentDutyRow[]
             <span className="text-fg-muted ml-1.5 font-mono text-caption">{d.person_code}</span>
           </DbCell>
           <DbCell className="text-fg-secondary whitespace-nowrap">{period(d.valid_from, d.valid_to)}</DbCell>
-          <DbCell className="max-w-56 truncate">
-            <DutyBasis note={d.basis_note} />
+          <DbCell className="max-w-80 min-w-40">
+            <DutyBasis note={d.basis_note} expandable />
           </DbCell>
           <DbCell className="whitespace-nowrap">
             {onAction && (!d.valid_to || d.valid_to >= today()) && (

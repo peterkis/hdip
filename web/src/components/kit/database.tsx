@@ -235,10 +235,11 @@ export function DbRow({ children, className, returnId }: { children: ReactNode; 
   )
 }
 
-export function DbCell({ children, className }: { children?: ReactNode; className?: string }) {
+export function DbCell({ children, className, colSpan }: { children?: ReactNode; className?: string; colSpan?: number }) {
   const { spec, lines } = useContext(TableCtx)
   return (
     <td
+      colSpan={colSpan}
       className={cn(
         'border-line-subtle align-middle',
         spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x) py-(--hd-cell-padding-y)' : 'h-9 px-2',

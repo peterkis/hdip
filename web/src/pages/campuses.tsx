@@ -91,11 +91,11 @@ export function CampusesPage() {
                       {r.version.name}
                     </Link>
                     {r.not_yet_effective && <Tag tone={PLANNED_TONE}>{r.version.valid_from} 起</Tag>}
-                    {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
                   </span>
                   <span className="text-fg-muted text-caption">
                     <span className="font-mono select-all">{r.code}</span>
                     {r.version.public_name && <> · 对外称 {r.version.public_name}</>}
+                    {r.has_later_versions && <> · 之后有已确认的新版本</>}
                   </span>
                 </span>
               </DbCell>

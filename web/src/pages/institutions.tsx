@@ -79,9 +79,11 @@ export function InstitutionsPage() {
                       {r.version.name}
                     </Link>
                     {r.not_yet_effective && <Tag tone={PLANNED_TONE}>计划中</Tag>}
-                    {r.has_later_versions && <Tag tone="blue">有后续版本</Tag>}
                   </span>
-                  <span className="text-fg-muted font-mono text-caption select-all">{r.code}</span>
+                  <span className="text-fg-muted text-caption">
+                    <span className="font-mono select-all">{r.code}</span>
+                    {r.has_later_versions && <> · 之后有已确认的新版本</>}
+                  </span>
                 </span>
               </DbCell>
               <DbCell className="whitespace-nowrap">{formatValue('nature', r.version.nature)}</DbCell>
@@ -138,6 +140,11 @@ export function InstitutionDetailPage() {
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
   const shown = onDay ?? latest
   const close = (o: boolean) => !o && setDialog(null)
+  // 运营关系的计数口径分开写（T7.6，U3R-08）：当前 / 计划按院区去重（两者可能重叠，不相加），已结束按关系段计
+  const segs = data.relations.filter((r) => !r.valid_to || r.valid_to >= r.valid_from)
+  const currentCampuses = new Set(segs.filter((r) => r.valid_from <= asOf && (!r.valid_to || r.valid_to >= asOf)).map((r) => r.campus_id))
+  const plannedCampuses = new Set(segs.filter((r) => r.valid_from > asOf).map((r) => r.campus_id))
+  const endedSegments = segs.filter((r) => r.valid_to && r.valid_to < asOf).length
 
   // 统一规范 SC-08：名称 / 代码 / 版本 → 登记属性 → 运营的院区（图 + 明细）→ 版本与事件。
   // 主体没有业务启停状态；“建立运营关系”只放在运营院区一节的标题右侧
@@ -170,9 +177,13 @@ export function InstitutionDetailPage() {
 
       <div className="mt-8 grid gap-8">
         <Section
-          title={`运营的院区（${new Set(data.relations.map((r) => r.campus_id)).size}）`}
+          title="运营关系"
           action={isMaintainer ? <InlineAction onClick={() => setDialog('relation')}>建立运营关系</InlineAction> : null}
         >
+          <p className="text-fg-secondary text-xs">
+            {asOf} 当天运营 {currentCampuses.size} 个院区 · 计划 {plannedCampuses.size} 个院区 · 已结束 {endedSegments} 段关系
+            <span className="text-fg-muted text-caption"> — 图只画当天有效与计划中的关系，下方明细列出全部历史</span>
+          </p>
           {graphStatus === 'ready' ? (
             <OperatorFlow
               institutions={[{ id: data.id, code: data.code, name: shown.name, subtitle: shown.nature ?? undefined }]}

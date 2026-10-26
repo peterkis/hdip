@@ -288,6 +288,7 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[] | null; dep
   const { asOf } = useApp()
   // 部门多时负责人卡片默认折叠，不把台账挤出几屏；折叠只影响展示，统计不变（SC-15）
   const [allShown, setAllShown] = useState(false)
+  const [vacantShown, setVacantShown] = useState(false)
   const known = rows !== null
   const filled = (rows ?? []).filter((r) => r.heads.length > 0)
   const vacant = (rows ?? []).filter((r) => r.heads.length === 0)
@@ -329,24 +330,32 @@ function Leaders({ rows, department }: { rows: DepartmentLeaderRow[] | null; dep
         </div>
       )}
       {filled.length > LEADER_FOLD && (
-        <Button variant="ghost" size="sm" className="text-fg-muted justify-self-start" onClick={() => setAllShown(!allShown)}>
-          {allShown ? '收起' : `展开全部 ${filled.length} 个有负责人的部门`}
+        <Button variant="ghost" size="sm" className="text-fg-muted justify-self-start" aria-expanded={allShown} onClick={() => setAllShown(!allShown)}>
+          {allShown ? '收起' : `展开其余 ${filled.length - LEADER_FOLD} 个有负责人的部门`}
         </Button>
       )}
+      {/* V7（U3R-08）：未登记负责人的部门也默认只列 9 个，用顿号分隔的连续文字链接，不堆成标签墙；
+          折叠只影响呈现，统计与台账范围不变 */}
       {vacant.length > 0 && (
         <div className="grid gap-1.5">
-          <div className="text-fg-muted text-caption">未登记负责人（{vacant.length}）</div>
-          <div className="flex flex-wrap gap-1.5">
-            {vacant.map((r) => (
-              <Link
-                key={r.department.id}
-                to={`/departments/${r.department.id}`}
-                className="border-line-strong text-fg-secondary hover:bg-surface-hover rounded-md border border-dashed px-2 py-0.5 text-xs"
-              >
-                {r.department.name}
-              </Link>
-            ))}
+          <div className="text-fg-muted text-caption">
+            未登记负责人（{vacant.length}）{!vacantShown && vacant.length > LEADER_FOLD && ` · 先列 ${LEADER_FOLD} 个`}
           </div>
+          <p className="text-fg-secondary text-xs">
+            {(vacantShown ? vacant : vacant.slice(0, LEADER_FOLD)).map((r, i) => (
+              <span key={r.department.id}>
+                {i > 0 && <span className="text-fg-muted">、</span>}
+                <Link to={`/departments/${r.department.id}`} className="hover:text-fg underline-offset-4 hover:underline">
+                  {r.department.name}
+                </Link>
+              </span>
+            ))}
+          </p>
+          {vacant.length > LEADER_FOLD && (
+            <Button variant="ghost" size="sm" className="text-fg-muted justify-self-start" aria-expanded={vacantShown} onClick={() => setVacantShown(!vacantShown)}>
+              {vacantShown ? '收起' : `展开其余 ${vacant.length - LEADER_FOLD} 个未登记负责人的部门`}
+            </Button>
+          )}
         </div>
       )}
       {known && rows.length === 0 && <p className="text-fg-muted text-xs">当天没有正式履职的部门。</p>}

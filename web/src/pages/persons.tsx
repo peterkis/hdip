@@ -243,39 +243,64 @@ export function PersonsPage() {
           sort={sort}
           onSort={(key) => setSort(nextSort(sort, key))}
         >
-          {sorted.map((r) => (
-            <DbRow key={r.id} returnId={r.id}>
-              <DbCell>
-                <span className="grid gap-0.5">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
-                      {r.name}
-                    </Link>
-                    {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
-                  </span>
-                  <span className="text-fg-muted text-caption">
-                    <span className="font-mono select-all">{r.code}</span>
-                    {r.matched && <> · 命中 {r.matched}</>}
-                  </span>
-                </span>
-              </DbCell>
-              <Stacked rows={r} render={(e) => <EngagementTypeTag code={e.engagement_type} />} />
-              <Stacked
-                rows={r}
-                render={(e) =>
-                  e.department ? (
-                    <Link className="hover:underline" to={`/departments/${e.department.id}`}>
-                      {e.department.name}
-                    </Link>
-                  ) : (
-                    <Tag tone="yellow">暂未分配</Tag>
-                  )
-                }
-              />
-              <Stacked rows={r} mono render={(e) => e.work_no ?? <span className="text-fg-muted font-sans">未登记</span>} />
-              <Stacked rows={r} render={(e) => period(e.valid_from, e.valid_to)} />
-            </DbRow>
-          ))}
+          {/* V6（U3R-08）：一项任用一条共享子行，主体与类型、主部门、工号、期间在同一水平线上；
+              姓名按人跨行（rowSpan），人数仍按人计。缺工号、暂未分配都占位写明，不删掉以免错配 */}
+          {sorted.map((r) => {
+            const items = r.engagements.length ? r.engagements : [null]
+            return items.map((e, i) => (
+              <DbRow
+                key={`${r.id}-${e?.id ?? 'none'}`}
+                returnId={i === 0 ? r.id : undefined}
+                className={cn(i < items.length - 1 && 'border-b-0', e?.not_yet_effective && 'text-fg-muted')}
+              >
+                {i === 0 && (
+                  <td rowSpan={items.length} className="border-line-subtle h-(--hd-row-height) border-b px-(--hd-cell-padding-x) py-(--hd-cell-padding-y) align-top">
+                    <span className="grid gap-0.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
+                          {r.name}
+                        </Link>
+                        {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
+                      </span>
+                      <span className="text-fg-muted text-caption">
+                        <span className="font-mono select-all">{r.code}</span>
+                        {r.matched && <> · 命中 {r.matched}</>}
+                        {items.length > 1 && <> · {items.length} 项任用</>}
+                      </span>
+                    </span>
+                  </td>
+                )}
+                {e ? (
+                  <>
+                    <DbCell>
+                      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className="text-fg-secondary">{e.institution_name}</span>
+                        <EngagementTypeTag code={e.engagement_type} />
+                        {e.not_yet_effective && <Tag tone={PLANNED_TONE}>计划</Tag>}
+                      </span>
+                    </DbCell>
+                    <DbCell className="text-fg-secondary">
+                      {e.department ? (
+                        <Link className="hover:underline" to={`/departments/${e.department.id}`}>
+                          {e.department.name}
+                        </Link>
+                      ) : (
+                        <Tag tone="yellow">暂未分配</Tag>
+                      )}
+                    </DbCell>
+                    <DbCell className="font-mono text-caption whitespace-nowrap">
+                      {e.work_no ?? <span className="text-fg-muted font-sans">未登记</span>}
+                    </DbCell>
+                    <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(e.valid_from, e.valid_to)}</DbCell>
+                  </>
+                ) : (
+                  <DbCell className="text-fg-muted" colSpan={4}>
+                    没有任用记录
+                  </DbCell>
+                )}
+              </DbRow>
+            ))
+          })}
         </DbTable>
         </div>
       )}
@@ -314,30 +339,6 @@ function sortRows(rows: PersonRow[], sort: DbSort | null, types: Record<string, 
     if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1
     return sign * zh.compare(x, y)
   })
-}
-
-/** 一人多项任用时，在同一格里上下排列 */
-function Stacked({
-  rows,
-  render,
-  mono,
-}: {
-  rows: PersonRow
-  render: (e: PersonRow['engagements'][number]) => React.ReactNode
-  mono?: boolean
-}) {
-  if (rows.engagements.length === 0) return <DbCell className="text-fg-disabled">—</DbCell>
-  return (
-    <DbCell className={cn('text-fg-secondary whitespace-nowrap', mono && 'font-mono text-caption')}>
-      <span className="grid gap-1">
-        {rows.engagements.map((e) => (
-          <span key={e.id} className={cn(e.not_yet_effective && 'text-fg-muted')}>
-            {render(e)}
-          </span>
-        ))}
-      </span>
-    </DbCell>
-  )
 }
 
 // ================================================================== 详情
@@ -403,49 +404,40 @@ export function PersonDetailPage() {
         items={[
           { label: '状态', value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },
           {
+            // V6（U3R-08）：一项当前任用一行，“主体 · 类型 — 主部门 — 工号”同一行读完；缺工号写“未登记工号”，不删项错配
             label: '当前任用',
             value: current.length ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
-                {current.map((e) => (
-                  <span key={e.id} className="inline-flex items-center gap-1.5">
-                    {e.institution_name}
-                    <EngagementTypeTag code={e.engagement_type} />
-                  </span>
-                ))}
-              </span>
-            ) : (
-              noCurrentDetail
-            ),
-          },
-          {
-            label: '当前主部门',
-            value: current.length ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
+              <span className="grid gap-1.5">
                 {current.map((e) => {
                   const a = primaryOn(e.assignments, asOf)
-                  return a ? (
-                    <Link key={e.id} className="hover:underline" to={`/departments/${a.department.id}`}>
-                      {a.department.name}
-                    </Link>
-                  ) : (
-                    <Tag key={e.id} tone="yellow">
-                      暂未分配
-                    </Tag>
+                  const no = e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no
+                  return (
+                    <span key={e.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Link className="hover:underline" to={`/institutions/${e.institution_id}`}>
+                        {e.institution_name}
+                      </Link>
+                      <EngagementTypeTag code={e.engagement_type} />
+                      <span aria-hidden className="text-fg-disabled">·</span>
+                      {a ? (
+                        <Link className="hover:underline" to={`/departments/${a.department.id}`}>
+                          {a.department.name}
+                        </Link>
+                      ) : (
+                        <Tag tone="yellow">暂未分配</Tag>
+                      )}
+                      <span aria-hidden className="text-fg-disabled">·</span>
+                      {no ? (
+                        <span className="font-mono">工号 {no}</span>
+                      ) : (
+                        <span className="text-fg-muted">未登记工号</span>
+                      )}
+                    </span>
                   )
                 })}
               </span>
             ) : (
-              noCurrent
+              noCurrentDetail
             ),
-          },
-          {
-            label: '当前业务工号',
-            value: current.length
-              ? current
-                  .map((e) => e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no)
-                  .filter(Boolean)
-                  .join('、') || null
-              : noCurrent,
           },
           { label: '曾用名', value: formerNames.map((v) => v.name).join('、') || null },
           { label: '拼音码', value: data.pinyin && <span className="font-mono">{data.pinyin}</span> },
@@ -516,7 +508,9 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
       <header className="border-line-subtle flex flex-wrap items-start gap-x-3 gap-y-2 border-b px-4 py-3">
         <div className="grid min-w-0 gap-1">
           <span className="flex flex-wrap items-center gap-2 text-xs">
-            <span className={cn('font-semibold', e.void ? 'text-fg-secondary' : 'text-fg-strong')}>{e.institution_name}</span>
+            <Link className={cn('font-semibold hover:underline', e.void ? 'text-fg-secondary' : 'text-fg-strong')} to={`/institutions/${e.institution_id}`}>
+              {e.institution_name}
+            </Link>
             <EngagementTypeTag code={e.engagement_type} />
             <Tag tone={state.tone}>{state.label}</Tag>
           </span>

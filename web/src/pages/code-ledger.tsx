@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { CODE_STATUS, SOURCE_KIND, stamp, type CodeStatus } from '@/lib/format'
+import { CODE_STATUS, period, SOURCE_KIND, stamp, type CodeStatus } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { CODE_STATUS_TONE } from '@/lib/tones'
 import { isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
@@ -421,7 +421,7 @@ function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) 
                     <TargetCell a={a} />
                   </DbCell>
                   <DbCell className="whitespace-nowrap">
-                    {a.valid_from} → {a.valid_to ?? '长期'}
+                    {period(a.valid_from, a.valid_to)}
                   </DbCell>
                   <DbCell>{a.evidence_note ?? '—'}</DbCell>
                   <DbCell className="whitespace-nowrap">
