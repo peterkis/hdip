@@ -7,6 +7,7 @@
 
 import hashlib
 import json
+from datetime import datetime
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -239,12 +240,22 @@ def update_draft(
     items: list[ChangeItem],
     note: str | None,
     request_key: str | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> ChangeRequest:
     cr = get_for_update(s, change_id, user)
     digest = _payload_hash(dump_items(items), _clean(note))
     # 带请求键的重试：上次已写入（如已追加变更项），内容相同就不再写第二次
     if _written_with_key(s, user, request_key, "update", digest, change_id) is not None:
         return cr
+    # 版本前提：请求体是按发起时读到的草稿组装的整份内容；
+    # 草稿此后又被改过（如另一个标签页追加了变更项），
+    # 照写会把中间的修改覆盖掉，所以拒绝。放在同键重试判断之后：已写入过的重试照常认出
+    if expected_updated_at is not None and cr.updated_at != expected_updated_at:
+        raise BusinessError(
+            f"草稿 #{cr.id} 在你读取之后又被修改过，这次保存没有写入，以免覆盖那些修改。"
+            "请重新打开草稿核对后再保存。",
+            412,
+        )
     _require_status(cr, "draft")
     _require_creator(cr, user)
     # 组织变更是一个整体：含组织变更事件的草稿，不能只留下它的部分变更项（会拆散原子变更）

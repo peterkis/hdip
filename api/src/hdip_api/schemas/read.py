@@ -422,6 +422,9 @@ class ChangeRequestWrite(BaseModel):
     # 不重复写入，原样返回那张申请。
     # 前端每打开一次表单生成一个，重试时不变（迁移 0022）
     request_key: Annotated[str, StringConstraints(min_length=8, max_length=100)] | None = None
+    # 更新草稿的前提（选填）：发起时读到的草稿 updated_at。草稿此后被改过就拒绝（412），
+    # 不用旧内容覆盖中间的修改；新建时不用
+    expected_updated_at: datetime | None = None
 
 
 class ReturnBody(BaseModel):

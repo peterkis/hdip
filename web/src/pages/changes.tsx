@@ -348,7 +348,7 @@ export function ChangeDetailPage() {
       onClick={() =>
         run(async () => {
           // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null })
+          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: cr.updated_at })
           return submitChangeRequest(id)
         }, `申请 #${id} 已提交，等待确认`)
       }
@@ -366,7 +366,9 @@ export function ChangeDetailPage() {
     </Button>
   ) : null
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
-  const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
+  // 带读取时的 updated_at：草稿此后在别处被改过，服务端拒绝（412），不用页面上的旧变更项覆盖
+  const saveNote = () =>
+    run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: cr.updated_at }), '变更说明已保存')
 
   // 统一规范 SC-03：页头（编号、状态、动作）→ 处理步骤 → 阻塞信息（问题、权限、隐去说明）→ 变更说明 → 逐组核对 + 目录 → 结束提醒。
   // 净内容宽 ≥1040 时目录在右侧（200px），更窄时在上方并可展开
@@ -591,7 +593,7 @@ function ReorgEditor({ cr, sourceCode, onClose }: { cr: ChangeRequestOut; source
         parentCode: row.parent?.code ?? null,
         mainClass: row.main_class?.code ?? null,
       }}
-      draft={{ id: cr.id, note: cr.note ?? null, items: cr.items }}
+      draft={{ id: cr.id, note: cr.note ?? null, items: cr.items, updated_at: cr.updated_at }}
     />
   )
 }

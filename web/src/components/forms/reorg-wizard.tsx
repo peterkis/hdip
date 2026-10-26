@@ -79,6 +79,8 @@ export interface ReorgDraft {
   id: number
   note: string | null
   items: ChangeItemInput[]
+  /** 打开向导时读到的草稿版本：保存时作为前提，草稿之后在别处被改过就拒绝（412），不整体覆盖 */
+  updated_at: string
 }
 
 type Item = Record<string, unknown> & { kind: string }
@@ -434,7 +436,7 @@ export function DepartmentReorgWizard({
       const items = await fillNewCodes(buildItems(), requestKey)
       // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
       return draft
-        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note, request_key: requestKey })
+        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note, request_key: requestKey, expected_updated_at: draft.updated_at })
         : createChangeRequest({ items, note, request_key: requestKey })
     },
     onSuccess: async (cr) => {

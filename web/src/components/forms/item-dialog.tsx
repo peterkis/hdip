@@ -58,12 +58,13 @@ export function useDraftItems(): ChangeItemInput[] {
  * 保存失败的说明（迁移 0022 之后）：
  * - 网络中断等没拿到服务端答复：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
  * - 409：同一次保存的请求键已写入过别的内容（上次其实已成功、之后又改过），服务端的说明已写明去核对哪张申请。
+ * - 412：草稿在读取之后被别处改过，这次没有写入（以免覆盖），服务端说明已写明。
  * - 其他被拒（校验未通过等）：没有写入，改好后再保存。
  */
 export function saveFailureText(error: Error, kept: string): string {
   if (!(error instanceof ApiError))
     return `保存结果未确定：${error.message}。服务端可能已经写入；内容不改直接再保存会先核对，不会重复；改过内容再保存时，如果上次其实已写入，会提示你去核对那张申请。${kept}。`
-  if (error.status === 409) return `${error.message}${kept}。`
+  if (error.status === 409 || error.status === 412) return `${error.message}${kept}。`
   return `保存未成功：${error.message}。${kept}，改好后可再次保存。`
 }
 
@@ -90,17 +91,28 @@ export function useAddItem() {
       const raw = Array.isArray(item) ? item : [item]
       const fp = JSON.stringify({ raw, target, note: note ?? null })
       const send = (t: number | 'new', body: ChangeRequestWrite) => (t === 'new' ? createChangeRequest(body) : updateChangeRequest(t, body))
-      if (sent.current?.fp === fp) return send(sent.current.target, sent.current.body)
-      const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
-      const request_key = requestKey ?? null
-      let body: ChangeRequestWrite
-      if (target === 'new') body = { items, note: note ?? null, request_key }
-      else {
-        const cr = await getChangeRequest(target)
-        body = { items: [...cr.items, ...items], note: cr.note, request_key }
+      // 按最新草稿组装：加入已有草稿时带上读到的 updated_at 作为前提，草稿之后被别处改过，服务端拒绝（412）而不覆盖
+      const build = async () => {
+        const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
+        const request_key = requestKey ?? null
+        let body: ChangeRequestWrite
+        if (target === 'new') body = { items, note: note ?? null, request_key }
+        else {
+          const cr = await getChangeRequest(target)
+          body = { items: [...cr.items, ...items], note: cr.note, request_key, expected_updated_at: cr.updated_at }
+        }
+        sent.current = { fp, target, body }
+        return body
       }
-      sent.current = { fp, target, body }
-      return send(target, body)
+      const body = sent.current?.fp === fp ? sent.current.body : await build()
+      try {
+        return await send(target, body)
+      } catch (e) {
+        // 412 只在请求键还没写入过时出现（写入过的重试先被认出）：上次没有写入，按最新草稿重新组装再保存一次，
+        // 中间的修改得以保留，也不会重复追加
+        if (e instanceof ApiError && e.status === 412 && target !== 'new') return send(target, await build())
+        throw e
+      }
     },
     onSuccess: async (cr, { target, item }) => {
       const n = Array.isArray(item) ? `（${item.length} 项）` : ''

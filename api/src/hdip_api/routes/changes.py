@@ -89,7 +89,15 @@ def get_change(session: SessionDep, user: CurrentUser, change_id: int):
 @router.put("/{change_id}", response_model=ChangeRequestOut, operation_id="updateChangeRequest")
 def update_change(session: SessionDep, user: CurrentUser, change_id: int, body: ChangeRequestWrite):
     with _masked_errors(session, user, change_id):
-        workflow.update_draft(session, user, change_id, body.items, body.note, body.request_key)
+        workflow.update_draft(
+            session,
+            user,
+            change_id,
+            body.items,
+            body.note,
+            body.request_key,
+            body.expected_updated_at,
+        )
     return _done(session, change_id, user)
 
 

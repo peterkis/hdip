@@ -107,3 +107,56 @@ def test_without_key_behaves_as_before(api):
     )
     assert a.status_code == b.status_code == 200
     assert a.json()["id"] != b.json()["id"]
+
+
+def _put(api, cid, body):
+    return api.put(f"/api/change-requests/{cid}", body)
+
+
+def test_stale_append_does_not_overwrite_intervening_edit(api):
+    """缓存的整份请求体在第一次就没写入时，草稿已被别处改过：拒绝（412），不覆盖中间的修改。"""
+    api.apply(*world())
+    cr = api.draft(dept_create(code="A", name="甲科"))
+    stale_body = {
+        "items": [*cr["items"], dept_create(code="B", name="乙科")],
+        "note": None,
+        "request_key": "key-stale-0001",
+        "expected_updated_at": cr["updated_at"],
+    }
+    # 另一个标签页先追加了丙科（不带请求键，与以前一样）
+    other = _put(
+        api, cr["id"], {"items": [*cr["items"], dept_create(code="C", name="丙科")], "note": "补充"}
+    )
+    assert other.status_code == 200, other.text
+    r = _put(api, cr["id"], stale_body)
+    assert r.status_code == 412
+    assert "在你读取之后又被修改过" in r.json()["message"]
+    now = api.get(f"/api/change-requests/{cr['id']}").json()
+    assert [i["name"] for i in now["items"]] == ["甲科", "丙科"]
+    assert now["note"] == "补充"
+    # 前端随后重读草稿、在最新内容上再追加（同一个键，未登记过）：照常写入
+    fresh = {
+        "items": [*now["items"], dept_create(code="B", name="乙科")],
+        "note": now["note"],
+        "request_key": "key-stale-0001",
+        "expected_updated_at": now["updated_at"],
+    }
+    ok = _put(api, cr["id"], fresh)
+    assert ok.status_code == 200, ok.text
+    assert [i["name"] for i in ok.json()["items"]] == ["甲科", "丙科", "乙科"]
+
+
+def test_committed_retry_is_recognised_before_precondition(api):
+    """已写入过的重试：草稿的 updated_at 已因那次写入改变，但同键同内容先被认出，原样返回。"""
+    api.apply(*world())
+    cr = api.draft(dept_create(code="A", name="甲科"))
+    body = {
+        "items": [*cr["items"], dept_create(code="B", name="乙科")],
+        "note": None,
+        "request_key": "key-commit-0001",
+        "expected_updated_at": cr["updated_at"],
+    }
+    assert _put(api, cr["id"], body).status_code == 200
+    again = _put(api, cr["id"], body)
+    assert again.status_code == 200, again.text
+    assert len(again.json()["items"]) == 2
