@@ -255,6 +255,22 @@ export function ServiceUnitDetailPage() {
               title: '开设',
               detail: (v) => `${formatValue('unit_type', data.unit_type, optionLabels)} · ${v.department_name} · ${v.campus_name}`,
             }}
+            // 退出写进时间线，与演变图、页头结论同一事实（U3R-09）：拆分 / 合并退出写后继与来源申请；无后继的是永久退出
+            extra={
+              data.retired_after
+                ? [
+                    data.successors.length
+                      ? {
+                          key: 'retired',
+                          date: data.retired_after,
+                          title: `退出（${data.successors[0].lineage_type === 'MERGE' ? '合并' : '拆分'}）`,
+                          detail: `${data.successors[0].lineage_type === 'MERGE' ? '合并为' : '拆分为'} ${data.successors.map((r) => r.successor_name).join('、')}，后继自 ${data.successors[0].effective_date} 起`,
+                          changeId: data.successors[0].change_id,
+                        }
+                      : { key: 'retired', date: data.retired_after, title: '永久退出', detail: '最后有效日当天仍有效，之后不再有新版本' },
+                  ]
+                : []
+            }
           />
           <p className="text-fg-secondary text-caption">
             登记于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。

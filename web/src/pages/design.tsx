@@ -38,6 +38,7 @@ import { FrameSample } from '@/components/layout'
 import { TagInput } from '@/components/kit/tag-input'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -878,6 +879,14 @@ function ControlsSection() {
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="destructive">放弃并关闭</Button>
           <Badge variant="destructive">2 处问题</Badge>
+          {/* 菜单里的危险项：文字与图标 danger-text，键盘高亮 danger-soft（R-COL 4.5） */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>更多</DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem>复制为新草稿</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive">撤销申请</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Alert variant="destructive">
           <AlertTitle>退回申请需要写明原因</AlertTitle>
@@ -1029,6 +1038,12 @@ const LONG_ROWS = [
   },
 ]
 
+const ENGAGEMENT_ROWS: { inst: string; type: string; dept: string; no: string | null; from: string; to: string | null; planned?: boolean }[] = [
+  { inst: '成都市第三人民医院医疗集团', type: '外聘专家', dept: '临床研究与医学伦理委员会办公室', no: 'G0912', from: '2025-03-01', to: null },
+  { inst: '成都市第三人民医院', type: '合同（人事代理）', dept: '心血管疾病与胸痛急救多学科诊疗中心', no: null, from: '2026-10-01', to: '2026-12-31' },
+  { inst: '成都市第三人民医院', type: '在编', dept: '呼吸内科', no: '0731', from: '2027-01-01', to: null, planned: true },
+]
+
 function TableSection() {
   return (
     <Section
@@ -1048,6 +1063,35 @@ function TableSection() {
                 </span>
               </DbCell>
               <DbCell className="text-fg-secondary">{r.note}</DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
+      </FrameSample>
+      <SubTitle>一人多项任用：一项任用一条共享子行（姓名跨行，缺值占位）</SubTitle>
+      <FrameSample frame="work">
+        <DbTable columns={[{ label: '姓名' }, { label: '任用' }, { label: '主部门' }, { label: '业务工号' }, { label: '任用期间' }]}>
+          {ENGAGEMENT_ROWS.map((e, i) => (
+            <DbRow key={e.inst + e.from} className={cn(i < ENGAGEMENT_ROWS.length - 1 && 'border-b-0')}>
+              {i === 0 && (
+                <td rowSpan={ENGAGEMENT_ROWS.length} className="border-line-subtle border-b px-(--hd-cell-padding-x) py-(--hd-cell-padding-y) align-top">
+                  <span className="grid gap-0.5">
+                    <span className="text-fg-strong font-medium">欧阳文珺</span>
+                    <span className="text-fg-muted text-caption">
+                      <span className="font-mono">P000019</span> · 3 项任用
+                    </span>
+                  </span>
+                </td>
+              )}
+              <DbCell>
+                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="text-fg-secondary">{e.inst}</span>
+                  <Tag tone="gray">{e.type}</Tag>
+                  {e.planned && <Tag tone="yellow">计划</Tag>}
+                </span>
+              </DbCell>
+              <DbCell className="text-fg-secondary">{e.dept}</DbCell>
+              <DbCell className="font-mono text-caption whitespace-nowrap">{e.no ?? <span className="text-fg-muted font-sans">未登记</span>}</DbCell>
+              <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{e.from} 至 {e.to ?? '长期'}</DbCell>
             </DbRow>
           ))}
         </DbTable>

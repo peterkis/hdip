@@ -230,6 +230,11 @@ def _require_assignment_ok(s: Session, a: PersonAssignment, field_name: str) -> 
         raise ItemError(message, field_name, facts=facts)
 
 
+def _changed_to(closed_change_id: int | None, now: str) -> str:
+    """结束日与发起时不同：由某张申请改的写申请号；随所属任用截断等没有单独申请的，只说现在的值。"""
+    return f"已被申请 #{closed_change_id} 改为{now}" if closed_change_id else f"现在是{now}"
+
+
 def _locked_assignment(s: Session, assignment_id: int, expected: date | None) -> PersonAssignment:
     a = s.get(PersonAssignment, assignment_id, with_for_update=True)
     if a is None:
@@ -239,7 +244,7 @@ def _locked_assignment(s: Session, assignment_id: int, expected: date | None) ->
     if a.valid_to != expected:
         now = "长期有效" if a.valid_to is None else f"最后有效日 {a.valid_to.isoformat()}"
         raise ItemError(
-            f"这条归属已被申请 #{a.closed_change_id} 改为{now}，与发起时看到的不同",
+            f"这条归属{_changed_to(a.closed_change_id, now)}，与发起时看到的不同",
             "assignment_id",
             hint="请刷新人员详情，按现在的情况重新发起。",
         )
@@ -699,7 +704,7 @@ def person_engagement_set_end(ctx: Ctx, item: PersonEngagementSetEnd) -> dict:
     if old != item.expected_valid_to:
         now = "长期有效" if old is None else f"最后有效日 {old.isoformat()}"
         raise ItemError(
-            f"这项任用已被申请 #{e.closed_change_id} 改为{now}，与发起时看到的不同",
+            f"这项任用{_changed_to(e.closed_change_id, now)}，与发起时看到的不同",
             "engagement_id",
             hint="请刷新人员详情，按现在的情况重新发起。",
         )
@@ -954,7 +959,7 @@ def _locked_duty(s: Session, duty_id: int, expected: date | None) -> PersonDuty:
     if d.valid_to != expected:
         now = "长期有效" if d.valid_to is None else f"最后有效日 {d.valid_to.isoformat()}"
         raise ItemError(
-            f"这条职务已被申请 #{d.closed_change_id} 改为{now}，与发起时看到的不同",
+            f"这条职务{_changed_to(d.closed_change_id, now)}，与发起时看到的不同",
             "duty_id",
             hint="请刷新页面，按现在的情况重新发起。",
         )
