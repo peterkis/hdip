@@ -1,5 +1,6 @@
 // Notion 数据库视图的基本件：工具栏、筛选胶囊、搜索、表格、底部计数。各列表页共用。
 import { Icon, type AppIcon } from '@/components/kit/icon'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { ArrowDown01Icon, ArrowUp01Icon, ArrowUpDownIcon, Cancel01Icon, Search01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { createContext, useContext, type ReactNode } from 'react'
 import { useFrame } from '@/components/layout'
@@ -24,7 +25,7 @@ export function DbToolbar({ children, right }: { children?: ReactNode; right?: R
 }
 
 const pill =
-  'relative inline-flex h-(--hd-control-height) items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast)'
+  'relative inline-flex h-(--hd-control-height) items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast) has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)'
 const pillIdle = 'border-line text-fg-secondary hover:bg-surface-hover'
 const pillActive = 'border-transparent bg-brand-muted text-brand-text hover:bg-brand-soft'
 
@@ -38,15 +39,21 @@ export function FilterPill({
   options,
   onChange,
   icon,
+  optionsStatus = 'ready',
 }: {
   label: string
   value: string
   options: { value: string; label: string }[]
   onChange: (value: string) => void
   icon?: AppIcon
+  /** 选项来自另一次读取时传入其状态：读取中 / 失败时不把已选值说成“不在选项中”，也不清掉它（U3R-03） */
+  optionsStatus?: 'loading' | 'error' | 'ready'
 }) {
   // 值不在选项里（网址里的旧 id、选项还没加载）也要显示出来并可清除：不让看不见的条件悄悄生效（SC-06）
-  const selected = options.find((o) => o.value === value) ?? (value ? { value, label: options.length ? `${value}（不在当前选项中）` : '…' } : undefined)
+  const pending = optionsStatus === 'loading' ? '选项读取中' : optionsStatus === 'error' ? '选项未能读取' : null
+  const selected =
+    options.find((o) => o.value === value) ??
+    (value ? { value, label: pending ? `${value}（${pending}）` : `${value}（不在当前选项中）` } : undefined)
   return (
     <span className="inline-flex items-center">
       <span className={cn(pill, selected ? pillActive : pillIdle, selected && 'rounded-r-none pr-1.5')}>
@@ -64,6 +71,11 @@ export function FilterPill({
           onChange={(e) => onChange(e.target.value)}
         >
           <option value="">全部{label}</option>
+          {pending && (
+            <option value={value || '__pending'} disabled>
+              {pending}
+            </option>
+          )}
           {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
@@ -73,6 +85,7 @@ export function FilterPill({
       </span>
       {selected && (
         <button
+          type="button"
           aria-label={`清除${label}筛选`}
           className={cn(pill, pillActive, 'rounded-l-none border-l-0 pl-1 pr-2')}
           onClick={() => onChange('')}
@@ -86,8 +99,18 @@ export function FilterPill({
 
 /** 开关胶囊：如“含计划中”。 */
 export function ToggleChip({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
+  const markDirty = useMarkDirty()
+  // type="button"：放在表单里时只切换选项，不提交表单（U3R-01 S1）
   return (
-    <button aria-pressed={checked} className={cn(pill, checked ? pillActive : pillIdle)} onClick={() => onChange(!checked)}>
+    <button
+      type="button"
+      aria-pressed={checked}
+      className={cn(pill, checked ? pillActive : pillIdle)}
+      onClick={() => {
+        markDirty()
+        onChange(!checked)
+      }}
+    >
       {checked && <Icon icon={Tick02Icon} className="size-3.5" />}
       {label}
     </button>
@@ -96,11 +119,11 @@ export function ToggleChip({ label, checked, onChange }: { label: string; checke
 
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-(--hd-control-height) min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
+    <label className="hover:bg-surface-hover focus-within:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) flex h-(--hd-control-height) min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
       <Icon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
       <input
         type="search"
-        className="placeholder:text-fg-disabled w-full min-w-0 bg-transparent text-xs outline-none sm:w-40"
+        className="placeholder:text-fg-placeholder w-full min-w-0 bg-transparent text-xs outline-none sm:w-40"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -156,6 +179,8 @@ export function DbTable({
             {columns.map((c, i) => (
               <th
                 key={c.label || `c${i}`}
+                scope="col"
+                aria-sort={c.sortKey && onSort ? (sort?.key === c.sortKey ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none') : undefined}
                 className={cn(
                   'font-normal whitespace-nowrap',
                   spec ? 'h-(--hd-row-header-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
@@ -167,15 +192,14 @@ export function DbTable({
                   <button
                     type="button"
                     onClick={() => onSort(c.sortKey!)}
-                    aria-sort={sort?.key === c.sortKey ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                    title="点击排序"
-                    className="hover:text-fg group/sort inline-flex items-center gap-1.5"
+                    title={`按${c.label}排序：升序 → 降序 → 取消`}
+                    className="hover:text-fg group/sort -mx-1 inline-flex h-(--hd-control-height-sm) items-center gap-1.5 rounded-sm px-1"
                   >
                     {c.icon && <Icon icon={c.icon} className="size-4" strokeWidth={1.75} />}
                     {c.label}
                     <Icon
                       icon={sort?.key === c.sortKey ? (sort.dir === 'asc' ? ArrowUp01Icon : ArrowDown01Icon) : ArrowUpDownIcon}
-                      className={cn('size-3.5', sort?.key === c.sortKey ? 'text-fg' : 'opacity-0 group-hover/sort:opacity-100')}
+                      className={cn('size-3.5', sort?.key === c.sortKey ? 'text-fg' : 'opacity-0 group-hover/sort:opacity-100 group-focus-visible/sort:opacity-100')}
                       strokeWidth={2}
                     />
                   </button>
@@ -196,9 +220,11 @@ export function DbTable({
   )
 }
 
-export function DbRow({ children, className }: { children: ReactNode; className?: string }) {
+export function DbRow({ children, className, returnId }: { children: ReactNode; className?: string; returnId?: string | number }) {
   return (
     <tr
+      // 返回上下文（lib/scroll-memory.ts）：从这一行进入详情、返回时回到这一行
+      data-return-id={returnId}
       className={cn(
         'border-line-subtle hover:bg-surface-hover group/row border-b transition-colors duration-(--hd-duration-fast)',
         className,
@@ -209,13 +235,14 @@ export function DbRow({ children, className }: { children: ReactNode; className?
   )
 }
 
-export function DbCell({ children, className }: { children?: ReactNode; className?: string }) {
+export function DbCell({ children, className, colSpan }: { children?: ReactNode; className?: string; colSpan?: number }) {
   const { spec, lines } = useContext(TableCtx)
   return (
     <td
+      colSpan={colSpan}
       className={cn(
         'border-line-subtle align-middle',
-        spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x)' : 'h-9 px-2',
+        spec ? 'h-(--hd-row-height) px-(--hd-cell-padding-x) py-(--hd-cell-padding-y)' : 'h-9 px-2',
         lines && '[&:not(:first-child)]:border-l',
         className,
       )}

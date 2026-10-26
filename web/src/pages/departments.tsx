@@ -15,7 +15,7 @@ import {
   TextFontIcon,
 } from '@hugeicons/core-free-icons'
 import { useMutation } from '@tanstack/react-query'
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import { useGetDepartment, useListClassificationSchemes, useListDepartments, useListOrgViews } from '@/api/generated/master/master'
 import type { DepartmentAliasOut, DepartmentClassificationOut, DepartmentRelationOut, DepartmentRow, DepartmentVersionOut, ReorgEventOut, DepartmentDetail } from '@/api/generated/model'
@@ -44,6 +44,7 @@ import { Icon } from '@/components/kit/icon'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { MoreActions } from '@/components/kit/more-actions'
 import { PageHeader, usePageFrame } from '@/components/layout'
 import { Segmented } from '@/components/kit/segmented'
@@ -63,10 +64,13 @@ import { downloadCsv } from '@/lib/download'
 import { DEPARTMENT_LIFECYCLE, DEPT_RELATION, ESTABLISHMENT_FORM, levelName, period, versionNote, type DepartmentLifecycle, type DeptRelationKind } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { DEPARTMENT_LIFECYCLE_TONE, DEPT_RELATION_TONE, MAIN_CLASS_TONE, levelTone, PLANNED_TONE } from '@/lib/tones'
+import { isNumberList, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
+import { useCurrentUsername } from '@/lib/session'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
 const MAIN_SCHEME = 'DEPT_MAIN_CLASS'
+const EMPTY_PICK: Map<number, DepartmentRow> = new Map()
 
 function LifecycleTag({ value }: { value: string }) {
   return <Tag tone={DEPARTMENT_LIFECYCLE_TONE[value] ?? 'gray'}>{DEPARTMENT_LIFECYCLE[value as DepartmentLifecycle] ?? value}</Tag>
@@ -113,7 +117,8 @@ export function DepartmentsPage() {
   const future = params.get('future') !== '0'
   const lvl = params.get('level') ?? ''
   const mode = params.get('view') === 'tree' ? 'tree' : 'table'
-  const [query, setQuery] = useState('')
+  // 检索词与树的折叠是本页状态：从详情返回时取回（U3R-05，lib/scroll-memory.ts）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const q = useDeferredValue(query.trim())
   const [creating, setCreating] = useState(false)
   const [full, setFull] = useState(() => {
@@ -132,20 +137,58 @@ export function DepartmentsPage() {
     }
   }
   const columns = full ? FULL_COLUMNS : COLUMNS
-  // 批量操作：勾选的部门 id；切换筛选不清空，便于分几次挑选
-  const [checked, setChecked] = useState<Set<number>>(new Set())
+  // 批量操作的所选集合（统一规范 C-04 / SC-04，U3R-02）：存勾选时查询返回的部门行，所以搜索、筛选、表 / 树切换后
+  // 仍能列出、计数并交给批量表单；选择条、名单、批量表单都只用这一份。绑定查看日期与当前身份：任一变化即清空
+  // （渲染时就不再使用旧选择，effect 里再清掉并提示一次），不把旧日期的部门快照带进新日期的批量操作。
+  const username = useCurrentUsername()
+  const selKey = `${asOf}|${username}`
+  const [sel, setSel] = useState<{ key: string; rows: Map<number, DepartmentRow> }>(() => ({ key: selKey, rows: new Map() }))
   const [batch, setBatch] = useState<'classify' | 'parent' | null>(null)
-  const toggleCheck = (id: number) =>
-    setChecked((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
+  const [showPicked, setShowPicked] = useState(false)
+  const current = sel.key === selKey ? sel.rows : EMPTY_PICK
+  useEffect(() => {
+    if (sel.key === selKey) return
+    if (sel.rows.size > 0) notify.info(`查看日期或身份已变，已清除之前选择的 ${sel.rows.size} 个部门`)
+    setSel({ key: selKey, rows: new Map() })
+    setBatch(null)
+    setShowPicked(false)
+  }, [selKey, sel])
+  const updatePick = (fn: (m: Map<number, DepartmentRow>) => void) =>
+    setSel((prev) => {
+      const rows = new Map(prev.key === selKey ? prev.rows : [])
+      fn(rows)
+      return { key: selKey, rows }
+    })
+  const toggleCheck = (d: DepartmentRow) =>
+    updatePick((m) => {
+      if (m.has(d.id)) m.delete(d.id)
+      else m.set(d.id, d)
     })
 
-  const { data: all = [], isPending } = useListDepartments({ as_of: asOf, ...(q && { q }) })
-  const { data: schemes = [] } = useListClassificationSchemes()
-  const mainCodes = schemes.find((s) => s.code === MAIN_SCHEME)?.codes ?? []
+  // 读取状态（U3R-03）：统计、空态、计数只由当前范围读取成功的数据得出
+  const list = useListDepartments({ as_of: asOf, ...(q && { q }) })
+  const status = readStatus(list)
+  const all = useMemo(() => list.data ?? [], [list.data])
+  // 同一天的新查询再次返回已选部门时用最新的行；没返回的保留勾选时的样子（只是当前没列出）
+  const picked = useMemo(() => {
+    const fresh = new Map(all.map((d) => [d.id, d]))
+    return [...current.values()].map((d) => fresh.get(d.id) ?? d)
+  }, [current, all])
+  if (picked.length === 0 && showPicked) setShowPicked(false)
+  const schemeQuery = useListClassificationSchemes()
+  const mainCodes = schemeQuery.data?.find((s) => s.code === MAIN_SCHEME)?.codes ?? []
+  const filtered = !!(q || cls || life || lvl || !future)
+  const clearFilters = () => {
+    setQuery('')
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        for (const k of ['class', 'lifecycle', 'level', 'future']) next.delete(k)
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   const rows = useMemo(
     () =>
@@ -159,7 +202,8 @@ export function DepartmentsPage() {
     [all, future, cls, life, lvl],
   )
   // 层级树：按行政隶属深度优先排列，同级按代码；可折叠子树
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set())
+  const [collapsedBefore] = useReturnState('collapsed', [] as number[], isNumberList)
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set(collapsedBefore))
   const tree = useMemo(() => (mode === 'tree' ? treeOrder(rows, collapsed) : null), [rows, mode, collapsed])
   const ordered: (DepartmentRow & { tree?: TreeMeta })[] = tree ?? rows
   const toggle = (id: number) =>
@@ -170,9 +214,16 @@ export function DepartmentsPage() {
       return next
     })
 
-  // 选择跨筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
+  // 选择跨搜索、筛选保留：写明其中有几个当前没列出，可以一键清掉，避免批量时带上看不见的部门
   const visibleIds = useMemo(() => new Set(ordered.map((d) => d.id)), [ordered])
-  const hiddenChecked = [...checked].filter((id) => !visibleIds.has(id)).length
+  const hiddenChecked = picked.filter((d) => !visibleIds.has(d.id)).length
+
+  // 返回上下文：集合范围 = 查看日期 + 网址里的筛选与视图 + 检索词
+  const back = useListReturn({
+    scope: `${asOf}|${params.toString()}|${q}`,
+    ready: status === 'ready',
+    local: { q: query, collapsed: [...collapsed] },
+  })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('departments', asOf),
@@ -206,7 +257,14 @@ export function DepartmentsPage() {
         }
       />
 
-      {!q && <DeptStats rows={all} codes={mainCodes} onPick={(c) => set('class', c)} active={cls} />}
+      {!q && (
+        <DeptStats
+          rows={status === 'ready' ? all : null}
+          codes={readStatus(schemeQuery) === 'ready' ? mainCodes : null}
+          onPick={(c) => set('class', c)}
+          active={cls}
+        />
+      )}
 
       <DbToolbar right={<SearchBox value={query} onChange={setQuery} placeholder="名称、拼音码、别名或代码" />}>
         <Segmented
@@ -244,12 +302,25 @@ export function DepartmentsPage() {
         <ToggleChip label="完整字段" checked={full} onChange={toggleFull} />
       </DbToolbar>
 
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="部门" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取部门…" />
+      ) : status === 'error' ? (
+        <ReadError what="部门" query={list} />
+      ) : rows.length === 0 ? (
         <DbEmpty
-          title={all.length === 0 ? (q ? `没有找到“${q}”` : '还没有部门') : '没有符合条件的部门'}
-          hint={all.length === 0 && !q ? '新建部门后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
+          title={!filtered ? `${asOf} 没有部门` : q && all.length === 0 ? `没有找到“${q}”` : '当前条件下没有部门'}
+          hint={!filtered ? '新建部门后经提交、确认才会出现在这里。' : '查看日期不变；清除搜索与筛选后再看。'}
+          action={
+            filtered && (
+              <Button size="sm" variant="outline" onClick={clearFilters}>
+                清除搜索与筛选
+              </Button>
+            )
+          }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable columns={isMaintainer ? [{ label: '', className: 'w-8' }, ...columns] : columns}>
           {isMaintainer && (
             <tr className="border-line-subtle border-b">
@@ -258,24 +329,31 @@ export function DepartmentsPage() {
                   <input
                     type="checkbox"
                     className="accent-brand size-3.5"
-                    checked={ordered.length > 0 && ordered.every((d) => checked.has(d.id))}
-                    onChange={(e) => setChecked(e.target.checked ? new Set([...checked, ...ordered.map((d) => d.id)]) : new Set())}
+                    checked={ordered.length > 0 && ordered.every((d) => current.has(d.id))}
+                    onChange={(e) =>
+                      updatePick((m) => {
+                        for (const d of ordered) {
+                          if (e.target.checked) m.set(d.id, d)
+                          else m.delete(d.id)
+                        }
+                      })
+                    }
                   />
-                  全选当前列出的 {ordered.length} 个部门（可先用上方筛选缩小范围，再批量设置主分类或行政上级）
+                  全选当前列出的 {ordered.length} 个部门（可先用上方筛选缩小范围，再批量设置主分类或行政上级；取消只去掉当前列出的）
                 </label>
               </td>
             </tr>
           )}
           {ordered.map((d) => (
-            <DbRow key={d.id} className={cn(checked.has(d.id) && 'bg-surface-selected')}>
+            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
               {isMaintainer && (
                 <DbCell>
                   <input
                     type="checkbox"
                     aria-label={`选择 ${d.version.name}`}
                     className="accent-brand size-3.5"
-                    checked={checked.has(d.id)}
-                    onChange={() => toggleCheck(d.id)}
+                    checked={current.has(d.id)}
+                    onChange={() => toggleCheck(d)}
                   />
                 </DbCell>
               )}
@@ -347,43 +425,64 @@ export function DepartmentsPage() {
             </DbRow>
           ))}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>
-          列出 <span className="text-fg-secondary">{rows.length}</span> 个部门（当前筛选）
+          列出 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="部门尚未读取成功" />}</span> 个部门（当前筛选）
         </span>
         <span>上方统计只计查看日期当天“正式履职”的部门；筹备、暂停履职、撤销与计划中不计入</span>
       </DbFooter>
-      {checked.size > 0 && (
-        <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 shadow-md">
-          <span className="text-fg-secondary text-xs">
-            已选 <span className="text-fg-strong font-medium">{checked.size}</span> 个部门
-            {hiddenChecked > 0 && <>，其中当前列出 {checked.size - hiddenChecked} 个</>}
-          </span>
-          {hiddenChecked > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set([...checked].filter((id) => visibleIds.has(id))))}>
-              清除没列出的 {hiddenChecked} 个
+      {picked.length > 0 && (
+        <div className="bg-surface-raised border-line sticky bottom-3 z-20 mt-3 grid gap-2 rounded-lg border px-3 py-2 shadow-md">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-fg-secondary text-xs">
+              已选 <span className="text-fg-strong font-medium">{picked.length}</span> 个部门
+              {hiddenChecked > 0 && <>，其中当前列出 {picked.length - hiddenChecked} 个</>}
+            </span>
+            <Button size="sm" variant="ghost" aria-expanded={showPicked} onClick={() => setShowPicked(!showPicked)}>
+              <Icon icon={showPicked ? ArrowDown01Icon : ArrowRight01Icon} inline="start" />
+              {showPicked ? '收起名单' : `查看已选 ${picked.length} 个`}
             </Button>
+            {hiddenChecked > 0 && (
+              <Button size="sm" variant="ghost" onClick={() => updatePick((m) => picked.forEach((d) => !visibleIds.has(d.id) && m.delete(d.id)))}>
+                清除没列出的 {hiddenChecked} 个
+              </Button>
+            )}
+            <span className="ml-auto flex flex-wrap gap-2">
+              <Button size="sm" variant="ghost" onClick={() => updatePick((m) => m.clear())}>
+                清除选择
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setBatch('parent')}>
+                调整行政上级…
+              </Button>
+              <Button size="sm" onClick={() => setBatch('classify')}>
+                设置主分类…
+              </Button>
+            </span>
+          </div>
+          {showPicked && (
+            <ul aria-label="已选部门" className="border-line-subtle grid max-h-60 overflow-y-auto border-t pt-1">
+              {picked.map((d) => (
+                <li key={d.id} className="flex min-h-(--hd-control-height) items-center gap-2 text-xs">
+                  <span className="text-fg-strong min-w-0 truncate">{d.version.name}</span>
+                  <span className="text-fg-muted font-mono text-caption">{d.code}</span>
+                  {!visibleIds.has(d.id) && <span className="text-fg-muted text-caption">当前未列出</span>}
+                  <InlineAction className="ml-auto" label={`取消选择 ${d.version.name}`} onClick={() => updatePick((m) => m.delete(d.id))}>
+                    取消选择
+                  </InlineAction>
+                </li>
+              ))}
+            </ul>
           )}
-          <span className="ml-auto flex flex-wrap gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setChecked(new Set())}>
-              清除选择
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setBatch('parent')}>
-              调整行政上级…
-            </Button>
-            <Button size="sm" onClick={() => setBatch('classify')}>
-              设置主分类…
-            </Button>
-          </span>
         </div>
       )}
       {creating && <DepartmentCreateDialog open onOpenChange={setCreating} />}
-      {batch === 'classify' && (
-        <DepartmentBatchClassifyDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      {batch === 'classify' && picked.length > 0 && (
+        <DepartmentBatchClassifyDialog open onOpenChange={(o) => !o && setBatch(null)} rows={picked} />
       )}
-      {batch === 'parent' && (
-        <DepartmentBatchParentDialog open onOpenChange={(o) => !o && setBatch(null)} rows={all.filter((d) => checked.has(d.id))} />
+      {batch === 'parent' && picked.length > 0 && (
+        <DepartmentBatchParentDialog open onOpenChange={(o) => !o && setBatch(null)} rows={picked} />
       )}
     </>
   )
@@ -456,39 +555,51 @@ function DeptStats({
   onPick,
   active,
 }: {
-  rows: DepartmentRow[]
-  codes: { code: string; name: string }[]
+  /** null = 部门尚未读取成功（读取中或失败），各格不写数字 */
+  rows: DepartmentRow[] | null
+  /** null = 分类方案尚未读取成功，按分类的格不列出 */
+  codes: { code: string; name: string }[] | null
   onPick: (code: string) => void
   active: string
 }) {
-  const inCount = rows.filter(counted)
+  const known = rows !== null
+  const num = (n: number) => (known ? n : <Unknown reason="部门尚未读取成功" />)
+  const inCount = (rows ?? []).filter(counted)
   const byClass = (code: string) => inCount.filter((d) => d.main_class?.code === code).length
   const unclassified = inCount.filter((d) => !d.main_class).length
   // 不计入：尚未设立（计划中）或仍在筹备的部门
-  const preparing = rows.filter((d) => d.not_yet_effective || d.version.lifecycle === 'PREPARING').length
-  const suspended = rows.filter((d) => !d.not_yet_effective && d.version.lifecycle === 'SUSPENDED').length
+  const preparing = (rows ?? []).filter((d) => d.not_yet_effective || d.version.lifecycle === 'PREPARING').length
+  const suspended = (rows ?? []).filter((d) => !d.not_yet_effective && d.version.lifecycle === 'SUSPENDED').length
   const cell = 'grid gap-0.5 px-3 py-2 text-left transition-colors duration-(--hd-duration-fast)'
   return (
     <div className="border-line-subtle mb-4 grid grid-cols-2 overflow-hidden rounded-lg border sm:grid-cols-4 lg:grid-cols-9">
       <div className={cn(cell, 'bg-surface-subtle')}>
-        <span className="text-fg-strong text-lg font-semibold tabular-nums">{inCount.length}</span>
+        <span className="text-fg-strong text-lg font-semibold tabular-nums">{num(inCount.length)}</span>
         <span className="text-fg-muted text-caption">正式履职部门数</span>
       </div>
-      {[...codes.map((c) => ({ code: c.code, name: c.name, n: byClass(c.code) })), { code: '_none', name: '未分类', n: unclassified }].map((c) => (
+      {codes === null && (
+        <div className={cn(cell, 'col-span-2 sm:col-span-2 lg:col-span-7')}>
+          <span className="text-fg-muted text-lg font-semibold">
+            <Unknown reason="分类方案尚未读取成功" />
+          </span>
+          <span className="text-fg-muted text-caption">按主分类（分类方案尚未读取）</span>
+        </div>
+      )}
+      {[...(codes ?? []).map((c) => ({ code: c.code, name: c.name, n: byClass(c.code) })), ...(codes ? [{ code: '_none', name: '未分类', n: unclassified }] : [])].map((c) => (
         <button
           key={c.code}
           type="button"
           onClick={() => onPick(active === c.code ? '' : c.code)}
           className={cn(cell, 'hover:bg-surface-hover', active === c.code && 'bg-brand-muted')}
         >
-          <span className="text-fg-strong text-lg font-semibold tabular-nums">{c.n}</span>
+          <span className="text-fg-strong text-lg font-semibold tabular-nums">{num(c.n)}</span>
           <span className="text-fg-muted text-caption">{c.name}</span>
         </button>
       ))}
       <div className={cell} title="筹备中、尚未正式履职的部门不进入正式统计">
         <span className="text-fg-muted text-lg font-semibold tabular-nums">
-          {preparing}
-          {suspended > 0 && <span className="text-caption font-normal"> · 暂停 {suspended}</span>}
+          {num(preparing)}
+          {known && suspended > 0 && <span className="text-caption font-normal"> · 暂停 {suspended}</span>}
         </span>
         <span className="text-fg-muted text-caption">筹备 / 计划中（不计入）</span>
       </div>
@@ -517,29 +628,37 @@ export function DepartmentDetailPage() {
   usePageFrame('document')
   const id = Number(useParams().id)
   const { asOf } = useApp()
-  const { isMaintainer, can } = useMe()
+  const { isMaintainer, can, permsKnown } = useMe()
   const query = useGetDepartment(id, { as_of: asOf })
   const { data } = query
-  const { data: persons = [] } = useListDepartmentPersons(
+  // 人员、职务是独立读取（U3R-03）：无 person.view 不发请求、写“无权查看”；权限未读到时既不发请求也不说无权；
+  // 读取中、失败时不写 0 人、不写“未登记负责人”
+  const canPersons = can('person.view')
+  const personsQuery = useListDepartmentPersons(
     id,
     { as_of: asOf, include_future: true },
-    { query: { enabled: can('person.view') && Number.isInteger(id) } },
+    { query: { enabled: canPersons && Number.isInteger(id) } },
   )
-  const { data: duties = [] } = useListDepartmentDuties(
+  const dutiesQuery = useListDepartmentDuties(
     id,
     { as_of: asOf, include_future: true },
-    { query: { enabled: can('person.view') && Number.isInteger(id) } },
+    { query: { enabled: canPersons && Number.isInteger(id) } },
   )
+  const persons = useMemo(() => personsQuery.data ?? [], [personsQuery.data])
+  const duties = dutiesQuery.data ?? []
+  const personsStatus = permsKnown ? (canPersons ? readStatus(personsQuery) : 'denied') : 'loading'
+  const dutiesStatus = permsKnown ? (canPersons ? readStatus(dutiesQuery) : 'denied') : 'loading'
   const [dutyDialog, setDutyDialog] = useState<{ kind: 'assign' } | { kind: 'handover' | 'end'; duty: DepartmentDutyRow } | null>(null)
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [closingAlias, setClosingAlias] = useState<DepartmentAliasOut | null>(null)
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
   const [closingClass, setClosingClass] = useState<DepartmentClassificationOut | null>(null)
-  const { data: views = [] } = useListOrgViews()
+  const viewsQuery = useListOrgViews()
+  const views = viewsQuery.data ?? []
   // 当前标签写在网址里（?tab=），返回、刷新、转发链接都回到同一标签（统一规范 0.2）
   const [params, setParams] = useSearchParams()
   const asked = params.get('tab') as TabKey | null
-  const tab: TabKey = asked && TAB_KEYS.includes(asked) && (asked !== 'persons' || can('person.view')) ? asked : 'props'
+  const tab: TabKey = asked && TAB_KEYS.includes(asked) && (asked !== 'persons' || canPersons || !permsKnown) ? asked : 'props'
   const setTab = (v: TabKey) =>
     setParams(
       (p) => {
@@ -549,8 +668,8 @@ export function DepartmentDetailPage() {
       },
       { replace: true },
     )
-  useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data) return <DetailFallback what="部门" back={{ to: '/departments', label: '返回部门列表' }} query={query} invalid={!Number.isInteger(id)} />
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.versions[0].name}` : null)
+  if (!data || isDenial(query.error)) return <DetailFallback what="部门" back={{ to: '/departments', label: '返回部门列表' }} query={query} invalid={!Number.isInteger(id)} />
 
   const latest = data.versions[0]
   const onDay = data.versions.find((v) => v.valid_from <= asOf && (v.valid_to === null || v.valid_to >= asOf))
@@ -572,10 +691,10 @@ export function DepartmentDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        meta={
           <>
             管理编码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
-            <span className="text-fg-muted"> · 内部 ID {data.id}</span>
+            <> · 内部 ID {data.id}</>
           </>
         }
         actions={
@@ -636,7 +755,10 @@ export function DepartmentDetailPage() {
             label: '主体归属',
             value: affiliation ? (
               <>
-                {affiliation.institution_name}
+                {/* T7.2（U3R-08）：主体名称进入主体详情；“调整”是独立的动作 */}
+                <Link className="hover:underline" to={`/institutions/${affiliation.institution_id}`}>
+                  {affiliation.institution_name}
+                </Link>
                 {edit('调整', 'affiliate')}
               </>
             ) : isMaintainer && !terminal ? (
@@ -657,7 +779,16 @@ export function DepartmentDetailPage() {
           },
           {
             label: '当前负责人',
-            value: can('person.view') ? <DepartmentLeader duties={duties} /> : <span className="text-fg-muted">无权查看人员</span>,
+            value:
+              dutiesStatus === 'denied' ? (
+                <span className="text-fg-muted">无权查看人员</span>
+              ) : dutiesStatus === 'ready' ? (
+                <DepartmentLeader duties={duties} />
+              ) : dutiesStatus === 'loading' ? (
+                <Unknown reason="正在读取部门职务" />
+              ) : (
+                <span className="text-fg-muted">职务没有读取成功，见“人员”标签</span>
+              ),
           },
           {
             label: '承担职责',
@@ -691,7 +822,9 @@ export function DepartmentDetailPage() {
           <TabsTrigger value="class">分类与归属</TabsTrigger>
           <TabsTrigger value="org">隶属与管理关系</TabsTrigger>
           <TabsTrigger value="units">服务单元（{data.units.length}）</TabsTrigger>
-          {can('person.view') && <TabsTrigger value="persons">人员（{personNow.size}）</TabsTrigger>}
+          {personsStatus !== 'denied' && (
+            <TabsTrigger value="persons">人员（{personsStatus === 'ready' ? personNow.size : '—'}）</TabsTrigger>
+          )}
           <TabsTrigger value="codes">外部编码（{data.external_codes.length}）</TabsTrigger>
           <TabsTrigger value="history">版本与事件</TabsTrigger>
         </TabsList>
@@ -806,7 +939,13 @@ export function DepartmentDetailPage() {
                   key: a.id,
                   current: a === affiliation,
                   ended: a.valid_to !== null && a.valid_to < asOf,
-                  cells: [a.institution_name, period(a.valid_from, a.valid_to), <ChangeLink id={a.change_id} />],
+                  cells: [
+                    <Link className="hover:underline" to={`/institutions/${a.institution_id}`}>
+                      {a.institution_name}
+                    </Link>,
+                    period(a.valid_from, a.valid_to),
+                    <ChangeLink id={a.change_id} />,
+                  ],
                 }))}
                 empty="未登记主体归属"
               />
@@ -816,6 +955,7 @@ export function DepartmentDetailPage() {
 
         {tab === 'org' && (
           <>
+            {readStatus(viewsQuery) === 'error' && <ReadError what="组织视图列表" query={viewsQuery} compact />}
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="组织视图">
               {views.map((v) => (
                 <Tag key={v.code} tone={v.status === 'ACTIVE' ? 'blue' : 'gray'} className={cn(v.status !== 'ACTIVE' && 'opacity-60')}>
@@ -896,11 +1036,23 @@ export function DepartmentDetailPage() {
               title="部门职务"
               action={can('person.change') ? <InlineAction onClick={() => setDutyDialog({ kind: 'assign' })}>任命职务</InlineAction> : null}
             >
-              <DepartmentDuties rows={duties} onAction={can('person.change') ? (kind, duty) => setDutyDialog({ kind, duty }) : undefined} />
+              {dutiesStatus === 'ready' ? (
+                <DepartmentDuties rows={duties} onAction={can('person.change') ? (kind, duty) => setDutyDialog({ kind, duty }) : undefined} />
+              ) : dutiesStatus === 'error' ? (
+                <ReadError what="部门职务" query={dutiesQuery} compact />
+              ) : (
+                <ReadLoading label={permsKnown ? '正在读取部门职务…' : '正在确认查看人员的权限…'} rows={2} />
+              )}
               <p className="text-fg-muted text-caption">负责人由职务按日期带出，不写在部门上；代管者可以不归属本部门；职务不等于系统权限。</p>
             </Section>
             <Section title={`人员归属（${asOf}）`}>
-              <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
+              {personsStatus === 'ready' ? (
+                <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
+              ) : personsStatus === 'error' ? (
+                <ReadError what="人员归属" query={personsQuery} compact />
+              ) : (
+                <ReadLoading label={permsKnown ? '正在读取人员归属…' : '正在确认查看人员的权限…'} rows={3} />
+              )}
             </Section>
           </div>
         )}
@@ -1043,7 +1195,7 @@ function RelationsTable({
               {r.to_department ? dept(r.to_department) : <span className="text-fg-muted">整个院区</span>}
               {r.campus_name && <span className="text-fg-muted ml-1.5 text-caption">@ {r.campus_name}</span>}
             </DbCell>
-            <DbCell className="py-2 whitespace-normal">{r.scope}</DbCell>
+            <DbCell className="whitespace-normal">{r.scope}</DbCell>
             <DbCell className="whitespace-nowrap">{period(r.valid_from, r.valid_to)}</DbCell>
             <DbCell className="text-right">
               {onClose && r.valid_to === null && (

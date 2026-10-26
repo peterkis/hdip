@@ -66,5 +66,6 @@ ERROR_RESPONSES: dict[int | str, dict] = {
     403: {"model": Problem},
     404: {"model": Problem},
     409: {"model": Problem},
+    412: {"model": Problem},
     422: {"model": Problem},
 }

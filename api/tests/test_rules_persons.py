@@ -72,6 +72,16 @@ def test_transfer_with_stale_expected_end_is_rejected(api):
     assert "与发起时看到的不同" in api.submit(stale["id"]).json()["problems"][0]["message"]
 
 
+def test_stale_end_message_without_change_id(api):
+    """归属结束日随任用一起登记、没有单独的结束申请时，提示不写“申请 #None”（U3R-09，R08-2）。"""
+    _base(api)
+    api.apply(*register("P000001", "张伟", "A", "2020-01-01", valid_to="2030-12-31"))
+    [(aid, _, _, _)] = assignment_ids(person(api, "P000001"))
+    [p] = _submit_problem(api, assignment_end(aid, "2029-12-31", expected=None))
+    assert "#None" not in p["message"]
+    assert "这条归属现在是最后有效日 2030-12-31，与发起时看到的不同" == p["message"]
+
+
 def test_transfer_day_must_be_after_start_once_effective(api):
     _base(api)
     api.apply(*register("P000001", "张伟", "A", "2020-01-01"))

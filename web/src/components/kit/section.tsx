@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 export function Section({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
   const spec = useFrame() !== 'legacy'
   return (
-    <section className={cn('grid min-w-0', spec ? 'gap-3' : 'gap-2')}>
+    <section className={cn('grid min-w-0 grid-cols-1', spec ? 'gap-3' : 'gap-2')}>
       <h2 className={cn('text-fg-strong flex flex-wrap items-center gap-2 font-semibold', spec ? 'text-section' : 'text-sm')}>
         {title}
         {action && <span className="ml-auto flex flex-wrap items-center gap-1 text-xs font-normal">{action}</span>}
@@ -20,7 +20,7 @@ export function Section({ title, action, children }: { title: ReactNode; action?
 }
 
 const INLINE =
-  'hover:bg-surface-hover focus-visible:ring-ring/30 -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none focus-visible:ring-2'
+  'hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring) -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none'
 
 /** 属性值旁、区块标题旁的轻量操作；danger 用于低频且后果重的动作（如永久退出），仍只打开原表单 */
 export function InlineAction({
@@ -28,17 +28,21 @@ export function InlineAction({
   children,
   danger,
   className,
+  label,
 }: {
   onClick: () => void
   children: ReactNode
   danger?: boolean
   /** 单独成行时用 -ml-2 让文字与所在列对齐 */
   className?: string
+  /** 同名按钮重复出现时（如名单里每行的“取消选择”）给读屏一个完整名称 */
+  label?: string
 }) {
   const spec = useFrame() !== 'legacy'
   return (
     <button
       type="button"
+      aria-label={label}
       className={cn(
         spec
           ? cn(INLINE, danger ? 'text-danger-text' : 'text-fg-secondary hover:text-fg')

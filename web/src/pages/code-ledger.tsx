@@ -3,8 +3,8 @@
 // 状态按查看日期计算：当天没有任何解释的代码即“待裁决”，不单独存状态。
 import { Add01Icon, Download01Icon, ServerStack01Icon } from '@hugeicons/core-free-icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useDeferredValue, useState, type FormEvent } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useDeferredValue, useEffect, useRef, useState, type FormEvent } from 'react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router'
 import { useCreateCodeNamespace, useCreateSourceSystem, useUpdateCodeNamespace } from '@/api/generated/dictionary/dictionary'
 import { useGetExternalCode, useListExternalCodes, useListSourceSystems } from '@/api/generated/master/master'
 import type { AssignmentOut, ExternalCodeRow, SourceSystemOut } from '@/api/generated/model'
@@ -21,13 +21,17 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useApp } from '@/lib/app-context'
 import { downloadCsv } from '@/lib/download'
-import { CODE_STATUS, SOURCE_KIND, stamp, type CodeStatus } from '@/lib/format'
+import { CODE_STATUS, period, SOURCE_KIND, stamp, type CodeStatus } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { CODE_STATUS_TONE } from '@/lib/tones'
+import { isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
+import { readFailure, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 
 const PAGE = 100
+const isShown = (v: unknown): v is { scope: string; limit: number } =>
+  !!v && typeof v === 'object' && isString((v as { scope?: unknown }).scope) && Number.isInteger((v as { limit?: unknown }).limit) && (v as { limit: number }).limit >= PAGE
 
 export function CodeLedgerPage() {
   usePageFrame('work')
@@ -39,29 +43,83 @@ export function CodeLedgerPage() {
   const status = (params.get('status') ?? '') as CodeStatus | ''
   const openId = Number(params.get('code')) || null
   const batch = params.get('batch') === '1'
-  const [query, setQuery] = useState('')
+  // 检索词与已显示条数是本页状态：从部门、单元详情返回时取回（U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const q = useDeferredValue(query.trim())
-  const [limit, setLimit] = useState(PAGE)
+  // 已显示条数只属于一个集合范围（查看日期 + 字典 + 状态 + 检索词）；范围变了从头显示，打开 / 关闭代码详情不改它
+  const scope = `${asOf}|${ns}|${status}|${q}`
+  const [shown, setShown] = useReturnState('shown', { scope, limit: PAGE }, isShown)
+  if (shown.scope !== scope) setShown({ scope, limit: PAGE })
+  const limit = shown.scope === scope ? shown.limit : PAGE
+  const setLimit = (n: number) => setShown({ scope, limit: n })
   const [dialog, setDialog] = useState<'register' | 'assign' | 'systems' | null>(null)
+  // 改筛选：替换当前历史记录（不为每次筛选留一条“后退”）
   const set = (k: string, v: string) => {
     const next = new URLSearchParams(params)
     if (v) next.set(k, v)
     else next.delete(k)
     setParams(next, { replace: true })
-    setLimit(PAGE)
   }
+  // 代码详情：从台账里打开时新增一条历史记录，浏览器后退即关闭；关闭时回到来源那条记录。
+  // 直接打开带 ?code= 的地址（没有来源）时，关闭只去掉 code，留在台账
+  const location = useLocation()
+  const navigate = useNavigate()
+  const openCode = (id: number) => {
+    const next = new URLSearchParams(params)
+    next.set('code', String(id))
+    setParams(next, { state: { codeFrom: 'ledger' } })
+  }
+  const closeCode = () => {
+    if ((location.state as { codeFrom?: string } | null)?.codeFrom === 'ledger') navigate(-1)
+    else set('code', '')
+  }
+  // 关闭详情（含浏览器后退）后焦点回到打开它的那一行；那一行已不在当前结果里就不抢焦点
+  const lastCode = useRef<number | null>(null)
+  useEffect(() => {
+    if (openId) {
+      lastCode.current = openId
+      return
+    }
+    if (!lastCode.current) return
+    const id = lastCode.current
+    const frame = requestAnimationFrame(() => {
+      lastCode.current = null
+      const button = document.querySelector<HTMLElement>(`[data-return-id="${id}"] button`)
+      if (!button) return
+      button.focus({ preventScroll: true })
+      button.scrollIntoView({ block: 'nearest' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [openId])
 
-  const { data: systems = [], isSuccess: systemsLoaded } = useListSourceSystems({ as_of: asOf })
-  const { data: page, isPending } = useListExternalCodes({
+  // 读取状态（U3R-03）：计数、空态、“还没有来源系统”只由读取成功的数据得出
+  const systemsQuery = useListSourceSystems({ as_of: asOf })
+  const systems = systemsQuery.data ?? []
+  const systemsStatus = readStatus(systemsQuery)
+  const codesParams = {
     as_of: asOf,
     limit,
     ...(ns && { namespace_id: Number(ns) }),
     ...(status && { status }),
     ...(q && { q }),
+  }
+  const codesQuery = useListExternalCodes(codesParams, {
+    query: {
+      // 只多显示几条（limit 变了、其余条件相同）时沿用已显示的结果，不闪回读取中；换日期、筛选、搜索不沿用
+      placeholderData: (prev, prevQuery) => {
+        const before = prevQuery?.queryKey[1] as typeof codesParams | undefined
+        return before && JSON.stringify({ ...before, limit: 0 }) === JSON.stringify({ ...codesParams, limit: 0 }) ? prev : undefined
+      },
+    },
   })
+  const page = codesQuery.data
+  const codesStatus = readStatus(codesQuery)
   const rows = page?.rows ?? []
-  const counts = page?.counts ?? { pending: 0, mapped: 0, unmodeled: 0 }
-  const all = counts.pending + counts.mapped + counts.unmodeled
+  const counts = page?.counts
+  const all = counts ? counts.pending + counts.mapped + counts.unmodeled : undefined
+
+  // 返回上下文：从行里的部门、单元链接离开再回来时，回到原范围、已显示条数、位置与原行
+  const back = useListReturn({ scope: `${scope}|${batch}`, ready: codesStatus === 'ready', local: { q: query, shown: { scope, limit } } })
 
   const exporting = useMutation({
     mutationFn: () => downloadCsv('external-codes', asOf),
@@ -81,7 +139,12 @@ export function CodeLedgerPage() {
               导出 CSV
             </Button>
             {canConfig && (
-              <Button variant="outline" onClick={() => setDialog('systems')}>
+              <Button
+                variant="outline"
+                disabled={systemsStatus !== 'ready'}
+                title={systemsStatus === 'ready' ? undefined : '来源系统尚未读取成功'}
+                onClick={() => setDialog('systems')}
+              >
                 <Icon icon={ServerStack01Icon} inline="start" />
                 来源系统
               </Button>
@@ -101,9 +164,14 @@ export function CodeLedgerPage() {
         }
       />
 
-      <LedgerGuide empty={!isPending && all === 0 && !q && !status && !ns} />
+      <LedgerGuide empty={codesStatus === 'ready' && all === 0 && !q && !status && !ns} />
 
-      {systemsLoaded && systems.length === 0 && (
+      {systemsStatus === 'error' && (
+        <div className="mb-4">
+          <ReadError what="来源系统与字典" query={systemsQuery} compact />
+        </div>
+      )}
+      {systemsStatus === 'ready' && systems.length === 0 && (
         <Callout className="mb-4" title="还没有登记来源系统">
           先登记来源系统实例（如某 HIS 实例、病案系统）及其字典，再登记字典里的代码。来源系统与字典是配置，维护人直接维护；代码与解释是业务数据，经变更申请确认。
         </Callout>
@@ -126,6 +194,7 @@ export function CodeLedgerPage() {
           value={ns}
           onChange={(v) => set('ns', v)}
           options={systems.flatMap((s) => s.namespaces.map((n) => ({ value: String(n.id), label: `${s.name} · ${n.name}` })))}
+          optionsStatus={systemsStatus}
         />
         {!batch && (
           <Segmented
@@ -134,7 +203,7 @@ export function CodeLedgerPage() {
             onChange={(v) => set('status', v === 'all' ? '' : v)}
             options={[
               { value: 'all', label: '全部', count: all },
-              ...(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => ({ value: k, label: CODE_STATUS[k], count: counts[k] })),
+              ...(Object.keys(CODE_STATUS) as CodeStatus[]).map((k) => ({ value: k, label: CODE_STATUS[k], count: counts?.[k] })),
             ]}
           />
         )}
@@ -147,12 +216,33 @@ export function CodeLedgerPage() {
 
       {batch ? (
         <BatchAdjudicate namespaceId={ns ? Number(ns) : undefined} q={q || undefined} />
-      ) : !isPending && rows.length === 0 ? (
+      ) : codesStatus === 'loading' ? (
+        <ReadLoading label="正在读取编码…" />
+      ) : codesStatus === 'error' ? (
+        <ReadError what="编码" query={codesQuery} />
+      ) : rows.length === 0 ? (
         <DbEmpty
           title={all === 0 && !q ? '台账里还没有代码' : '没有符合条件的代码'}
-          hint={all === 0 && !q ? '登记代码后经提交、确认才会出现在这里。' : '换个筛选条件或搜索词试试。'}
+          hint={all === 0 && !q ? '登记代码后经提交、确认才会出现在这里。' : '查看日期不变；换个筛选条件或搜索词试试。'}
+          action={
+            (q || status || ns) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setQuery('')
+                  const next = new URLSearchParams(params)
+                  for (const k of ['ns', 'status']) next.delete(k)
+                  setParams(next, { replace: true })
+                }}
+              >
+                清除搜索与筛选
+              </Button>
+            )
+          }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           // SC-11：源代码 + 源名称 / 来源系统与字典 / 解释状态 / 当前解释（多条按院区条件的解释逐条列出）
           columns={[
@@ -163,18 +253,28 @@ export function CodeLedgerPage() {
           ]}
         >
           {rows.map((r) => (
-            <CodeRow key={r.id} row={r} onOpen={() => set('code', String(r.id))} />
+            <CodeRow key={r.id} row={r} onOpen={() => openCode(r.id)} />
           ))}
         </DbTable>
+        </div>
       )}
 
+      {!batch && <StaleNotice what="编码" query={codesQuery} />}
       {!batch && (
         <DbFooter>
           <span>
-            显示 <span className="text-fg-secondary">{rows.length}</span> / {page?.total ?? 0} 条
+            {codesStatus === 'ready' && page ? (
+              <>
+                显示 <span className="text-fg-secondary">{rows.length}</span> / {page.total} 条
+              </>
+            ) : (
+              <>
+                显示 <Unknown reason="编码尚未读取成功" /> 条
+              </>
+            )}
           </span>
-          {page && rows.length < page.total && (
-            <Button variant="ghost" size="sm" onClick={() => setLimit(limit + PAGE)}>
+          {codesStatus === 'ready' && page && rows.length < page.total && (
+            <Button variant="ghost" size="sm" disabled={codesQuery.isFetching} onClick={() => setLimit(limit + PAGE)}>
               再显示 {Math.min(PAGE, page.total - rows.length)} 条
             </Button>
           )}
@@ -183,7 +283,7 @@ export function CodeLedgerPage() {
         </DbFooter>
       )}
 
-      {openId && <CodeDetailDialog id={openId} onClose={() => set('code', '')} />}
+      {openId && <CodeDetailDialog id={openId} onClose={closeCode} />}
       {dialog === 'register' && (
         <ExternalCodeRegisterDialog open onOpenChange={(o) => !o && setDialog(null)} namespace={nsKey(systems, ns)} />
       )}
@@ -225,7 +325,7 @@ function TargetCell({ a }: { a: AssignmentOut }) {
 
 function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void }) {
   return (
-    <DbRow>
+    <DbRow returnId={r.id}>
       <DbCell>
         {/* 源代码是本场景的主识别值，与源名称一起作为详情入口 */}
         <button type="button" onClick={onOpen} className="group/code flex items-baseline gap-2 text-left">
@@ -239,7 +339,7 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
       <DbCell className="whitespace-nowrap">
         <Tag tone={CODE_STATUS_TONE[r.status]}>{CODE_STATUS[r.status as CodeStatus]}</Tag>
       </DbCell>
-      <DbCell className="py-1.5">
+      <DbCell>
         {r.current.length ? (
           <span className="grid gap-1">
             {r.current.map((a) => (
@@ -258,10 +358,37 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
 function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const { data } = useGetExternalCode(id, { as_of: asOf })
+  const query = useGetExternalCode(id, { as_of: asOf })
+  const detailStatus = readStatus(query)
+  const data = detailStatus === 'ready' ? query.data : undefined
   const [assigning, setAssigning] = useState(false)
   const [closing, setClosing] = useState<AssignmentOut | null>(null)
-  if (!data) return null
+  // 点代码后立即出现弹层：读取中、失败都在弹层里说明，始终可以关闭；读取成功前不出现新增 / 结束解释（U3R-03）
+  if (!data)
+    return (
+      <Dialog open onOpenChange={(o) => !o && onClose()}>
+        <DialogContent className="sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{detailStatus === 'loading' ? '正在读取代码详情' : '代码详情'}</DialogTitle>
+            <DialogDescription>台账的筛选与位置保持不变。</DialogDescription>
+          </DialogHeader>
+          {detailStatus === 'loading' ? (
+            <ReadLoading label="正在读取代码详情…" rows={3} />
+          ) : readFailure(query.error) === 'missing' || readFailure(query.error) === 'invalid' ? (
+            <Callout tone="neutral" title="找不到这个代码">
+              链接里的代码可能已不存在或地址不完整，请从台账重新打开。
+            </Callout>
+          ) : (
+            <ReadError what="这个代码" query={query} compact />
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={onClose}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
   if (assigning) return <ExternalCodeAssignDialog open onOpenChange={(o) => !o && setAssigning(false)} code={data} />
   if (closing) return <AssignmentCloseDialog open onOpenChange={(o) => !o && setClosing(null)} assignment={closing} code={data} />
   return (
@@ -290,13 +417,13 @@ function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) 
               const current = a.valid_from <= asOf && (a.valid_to === null || a.valid_to >= asOf)
               return (
                 <DbRow key={a.id} className={cn(!current && 'text-fg-muted')}>
-                  <DbCell className="py-1.5">
+                  <DbCell>
                     <TargetCell a={a} />
                   </DbCell>
                   <DbCell className="whitespace-nowrap">
-                    {a.valid_from} → {a.valid_to ?? '长期'}
+                    {period(a.valid_from, a.valid_to)}
                   </DbCell>
-                  <DbCell className="py-1.5">{a.evidence_note ?? '—'}</DbCell>
+                  <DbCell>{a.evidence_note ?? '—'}</DbCell>
                   <DbCell className="whitespace-nowrap">
                     <Link to={`/changes/${a.change_id}`} className="text-fg-secondary hover:underline">
                       #{a.change_id}

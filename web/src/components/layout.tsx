@@ -26,6 +26,7 @@ import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
 import { useMe } from '@/lib/use-me'
+import { useListHref } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 
 const NARROW = '(max-width: 767px)'
@@ -55,6 +56,11 @@ const FrameValueContext = createContext<PageFrame>('legacy')
 /** 当前页面的外框：公共件（表格、工具栏、计数）据此在规范样式与旧样式之间切换，未迁移的页面不受影响（U2） */
 export function useFrame(): PageFrame {
   return useContext(FrameValueContext)
+}
+
+/** 规范页（/design 不在外壳里）展示公共件的规范样式用：让里面的公共件按指定外框渲染 */
+export function FrameSample({ frame, children }: { frame: Exclude<PageFrame, 'legacy'>; children: ReactNode }) {
+  return <FrameValueContext.Provider value={frame}>{children}</FrameValueContext.Provider>
 }
 
 export function usePageFrame(frame: PageFrame) {
@@ -103,8 +109,14 @@ export function Layout() {
           ) : (
             <Sidebar onCollapse={() => setCollapsed(true)} />
           ))}
+        {/* 桌面收起侧栏后留一条控制轨道放“展开侧栏”：它占真实宽度，顶栏与正文一起右移，内容槽仍共用左边线（R-LAY，U3R-07） */}
+        {collapsed && !narrow && (
+          <div className="bg-surface-sidebar border-line-subtle flex w-(--hd-shell-rail-width) shrink-0 justify-center border-r pt-2">
+            <ExpandButton onExpand={() => setCollapsed(false)} />
+          </div>
+        )}
         <div className="flex min-w-0 flex-1 flex-col">
-          <Topbar collapsed={collapsed || narrow} onExpand={() => setCollapsed(false)} frame={frame} />
+          <Topbar collapsed={narrow} onExpand={() => setCollapsed(false)} frame={frame} />
           <main className="flex-1 overflow-y-auto">
             <FrameContext.Provider value={setFrame}>
               <FrameValueContext.Provider value={frame}>
@@ -289,7 +301,9 @@ function UserSwitcher() {
         value={username}
         onChange={(e) => {
           setCurrentUsername(e.target.value)
-          qc.invalidateQueries()
+          // 换身份 = 新的读取范围（U3R-03）：等界面按新身份渲染后再重置缓存——旧身份读到的数据不再显示，
+          // 只重取此时仍启用的查询；新身份的权限没读到前，按权限启用的查询（如人员）不会带新身份提前发出
+          setTimeout(() => qc.resetQueries(), 0)
           const name = users.find((u) => u.username === e.target.value)?.display_name
           notify.info(`已切换为“${name ?? e.target.value}”`)
         }}
@@ -304,23 +318,21 @@ function UserSwitcher() {
   )
 }
 
+function ExpandButton({ onExpand }: { onExpand: () => void }) {
+  return (
+    <Button variant="ghost" size="icon" aria-label="展开侧栏" className="text-fg-muted" onClick={onExpand}>
+      <Icon icon={SidebarLeftIcon} />
+    </Button>
+  )
+}
+
 // ================================================================== 顶栏
 function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: () => void; frame: PageFrame }) {
   const { pathname } = useLocation()
   const crumb = useCurrentCrumb()
   const found = findNav(pathname)
-  const expand = collapsed && (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label="展开侧栏"
-      // 有外框时，展开按钮属于外壳控制，不把面包屑往右推（R-LAY：内容槽共用左边线）
-      className={cn('text-fg-muted', frame !== 'legacy' && 'md:absolute md:left-2')}
-      onClick={onExpand}
-    >
-      <Icon icon={SidebarLeftIcon} />
-    </Button>
-  )
+  // 窄屏（侧栏浮在正文上）时展开按钮在顶栏行内；桌面收起时它在控制轨道里（见 Layout）
+  const expand = collapsed && <ExpandButton onExpand={onExpand} />
   if (frame !== 'legacy') {
     return (
       <header className="relative flex h-(--hd-topbar-height) shrink-0 items-center px-(--hd-layout-gutter-narrow) text-xs md:px-(--hd-layout-gutter)">
@@ -346,6 +358,9 @@ function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: 
 }
 
 function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: ReactNode }) {
+  // 详情页的上一级：这次详情是从该列表打开的就回到原筛选与位置（U3R-05），否则是默认列表
+  const path = found?.item ? itemPath(found.item) : ''
+  const listHref = useListHref(path)
   return (
     <>
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
@@ -357,7 +372,7 @@ function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: Re
               <Sep />
             </span>
             <Link
-              to={itemPath(found.item)}
+              to={crumb ? listHref : path}
               className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
             >
               <Icon icon={found.item.icon} />
@@ -393,7 +408,7 @@ function AsOfPicker() {
       )}
       <label
         className={cn(
-          'hover:bg-surface-hover flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
+          'hover:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
           // 不是今天时用黄色高亮（Notion 的标注色），提醒正在看另一天的数据
           !isToday && 'bg-tag-yellow-bg text-tag-yellow-text hover:bg-tag-yellow-bg',
         )}
@@ -418,11 +433,15 @@ function AsOfPicker() {
 export function PageHeader({
   title,
   description,
+  meta,
   actions,
   icon,
 }: {
   title: ReactNode
+  /** 业务范围、对象说明：正文 14/20 */
   description?: ReactNode
+  /** 代码、版本、时间、来源等元信息：辅助 12/16（R-TYP，U3R-07） */
+  meta?: ReactNode
   actions?: ReactNode
   icon?: AppIcon
 }) {
@@ -431,8 +450,11 @@ export function PageHeader({
   const frame = useFrame()
   const role = frame === 'legacy' ? 'legacy' : frame === 'document' ? 'document' : 'work'
   return (
-    <div className={cn('flex flex-wrap items-start justify-between gap-3', role === 'work' ? 'mb-4' : 'mb-6')}>
-      <div className="min-w-0">
+    // 动作组规则（U3R-07，R-ACT）：宽处标题占弹性列、动作组靠右成一列；容器窄于 48rem 时动作组整组换到标题下方一行，
+    // 按钮顺序不变、按钮内文字不折行。容器查询按页头自身宽度判断（侧栏展开 / 收起都适用）
+    <div className={cn('@container', role === 'work' ? 'mb-4' : 'mb-6')}>
+    <div className="flex flex-col gap-3 @3xl:flex-row @3xl:items-start @3xl:justify-between">
+      <div className="min-w-0 @3xl:flex-1">
         <h1
           className={cn(
             'text-fg-strong flex items-center gap-3',
@@ -445,8 +467,14 @@ export function PageHeader({
           {title}
         </h1>
         {description && <p className={cn('text-fg-secondary text-xs', role === 'document' ? 'mt-2' : 'mt-1')}>{description}</p>}
+        {meta && <p className="text-fg-muted mt-1 text-caption">{meta}</p>}
       </div>
-      {actions && <div className={cn('flex flex-wrap items-center gap-2', role === 'document' ? 'pt-1' : 'pt-1.5')}>{actions}</div>}
+      {actions && (
+        <div className={cn('flex flex-wrap items-center gap-2 *:shrink-0 *:whitespace-nowrap @3xl:max-w-3/5 @3xl:justify-end', role === 'document' ? '@3xl:pt-1' : '@3xl:pt-1.5')}>
+          {actions}
+        </div>
+      )}
+    </div>
     </div>
   )
 }

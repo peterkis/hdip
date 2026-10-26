@@ -11,6 +11,11 @@ const twMerge = extendTailwindMerge({
   },
 })
 
+/** 滚动方式：用户要求减少动效时直接跳到位，否则平滑滚动（每次调用时读取，偏好改了立即生效） */
+export function scrollBehavior(): ScrollBehavior {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+}
+
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }

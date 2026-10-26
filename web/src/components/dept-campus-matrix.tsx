@@ -62,7 +62,7 @@ export function DeptCampusMatrix({
                   return (
                     <td
                       key={c.id}
-                      className="border-line-subtle text-fg-disabled border-l px-3 py-2"
+                      className="border-line-subtle text-fg-muted border-l px-3 py-2"
                       title="当前日期下未登记符合条件的服务单元，实际开展情况待核实"
                     >
                       —

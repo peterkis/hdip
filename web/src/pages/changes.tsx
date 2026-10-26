@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 import {
   cancelChangeRequest,
@@ -8,6 +8,7 @@ import {
   returnChangeRequest,
   submitChangeRequest,
   updateChangeRequest,
+  getGetChangeRequestQueryKey,
   useGetChangeRequest,
   useListChangeRequests,
 } from '@/api/generated/changes/changes'
@@ -20,8 +21,9 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, SearchBox } from '@/components/kit/database'
 import { Segmented } from '@/components/kit/segmented'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, readStatus, StaleNotice } from '@/components/kit/read-state'
 import { ProblemCard } from '@/components/problem-card'
-import { groupItems, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks } from '@/components/change-review'
+import { groupItems, locateItem, REVIEW_PAGE, ReorgExtras, ReviewGroupSection, ReviewNav, useReviewChecks, type FocusRequest } from '@/components/change-review'
 import { InlineAction, Section } from '@/components/kit/section'
 import { Steps, type StepItem } from '@/components/kit/steps'
 import { QuoteDownIcon } from '@hugeicons/core-free-icons'
@@ -40,8 +42,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import { useApp } from '@/lib/app-context'
 import { CHANGE_STATUS, FIELD_LABELS, formatValue, relStamp, SENSITIVE_FIELD, stamp } from '@/lib/format'
-import { useScrollMemory } from '@/lib/scroll-memory'
-import { cn } from '@/lib/utils'
+import { useListReturn } from '@/lib/scroll-memory'
+import { cn, scrollBehavior } from '@/lib/utils'
 import { notify } from '@/lib/notify'
 
 // ------------------------------------------------------------------ 列表
@@ -65,7 +67,6 @@ const VIEWS: { value: View; label: string; test: (r: ChangeRequestSummary) => bo
 ]
 
 const MASKED = '（已隐去）'
-const LAST_OPENED = 'hdip.changes.last-opened'
 
 /** 说明能不能显示：空的、只剩遮蔽提示的不显示 */
 function usableNote(note: string | null | undefined): string | null {
@@ -99,7 +100,11 @@ export function ChangesPage() {
       { replace: true },
     )
   // 一次取全部：各状态的计数是完整口径；筛选在页面里做，不逐行取详情
-  const { data: rows = [], isPending, isError, refetch, isFetching } = useListChangeRequests()
+  // 读取状态（U3R-03）：首次读取、失败时计数不写 0；同一范围刷新失败时照常显示上次结果并标出
+  const list = useListChangeRequests()
+  const listStatus = readStatus(list)
+  const isPending = listStatus === 'loading'
+  const rows = useMemo(() => list.data ?? [], [list.data])
   const counts = useMemo(() => Object.fromEntries(VIEWS.map((v) => [v.value, rows.filter(v.test).length])), [rows])
   const current = VIEWS.find((v) => v.value === view)!
   const shown = useMemo(() => {
@@ -114,36 +119,9 @@ export function ChangesPage() {
           ),
       )
   }, [rows, current, query])
-  useScrollMemory(`changes?${params.toString()}`, !isPending)
-
-  // 从详情返回：焦点回到刚才打开的那一行（它已不在当前范围时不抢焦点）
-  useEffect(() => {
-    if (isPending) return
-    let id: string | null = null
-    try {
-      id = sessionStorage.getItem(LAST_OPENED)
-    } catch {
-      /* 忽略 */
-    }
-    if (!id) return
-    // 用过才清除：开发模式下 effect 会先跑一遍再清理，提前清除会让第二遍找不到
-    const frame = requestAnimationFrame(() => {
-      document.querySelector<HTMLAnchorElement>(`a[data-change-id="${id}"]`)?.focus({ preventScroll: true })
-      try {
-        sessionStorage.removeItem(LAST_OPENED)
-      } catch {
-        /* 忽略 */
-      }
-    })
-    return () => cancelAnimationFrame(frame)
-  }, [isPending])
-  const remember = (id: number) => {
-    try {
-      sessionStorage.setItem(LAST_OPENED, String(id))
-    } catch {
-      /* 忽略 */
-    }
-  }
+  // 返回上下文（lib/scroll-memory.ts）：从详情返回时回到原范围、位置与刚才打开的那一行
+  const back = useListReturn({ scope: params.toString(), ready: !isPending && listStatus !== 'error' })
+  const remember = (id: number) => back.leave(id, `/changes/${id}`)
 
   return (
     <>
@@ -153,21 +131,15 @@ export function ChangesPage() {
           label="申请范围"
           value={view}
           onChange={(v) => setParam('view', v)}
-          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: isPending ? undefined : counts[v.value], accent: v.accent, divider: v.divider }))}
+          options={VIEWS.map((v) => ({ value: v.value, label: v.label, count: listStatus === 'ready' ? counts[v.value] : undefined, accent: v.accent, divider: v.divider }))}
         />
         <span className="flex-1" />
         <SearchBox value={query} onChange={(v) => setParam('q', v)} placeholder="对象名称、编号、说明或申请人" />
       </div>
 
-      {isError ? (
-        <Callout tone="danger" title="没有取到变更申请">
-          <span className="flex flex-wrap items-center gap-3">
-            筛选条件已保留，可以重试。
-            <Button size="sm" variant="outline" onClick={() => refetch()} disabled={isFetching}>
-              重试
-            </Button>
-          </span>
-        </Callout>
+      <StaleNotice what="变更申请" query={list} />
+      {listStatus === 'error' ? (
+        <ReadError what="变更申请" query={list} />
       ) : (
         <div className="overflow-x-auto" aria-busy={isPending || undefined}>
           <div className="min-w-2xl">
@@ -208,13 +180,12 @@ export function ChangesPage() {
           </div>
         </div>
       )}
-      {!isPending && !isError && (
+      {listStatus === 'ready' && (
         <DbFooter>
           <span>
             {shown.length} 份申请 · 当前范围：{current.label}
             {query && <> · 检索“{query}”</>}
           </span>
-          <span>状态与检索写在网址里；从详情返回时保留范围、位置与焦点</span>
         </DbFooter>
       )}
     </>
@@ -247,6 +218,7 @@ function WorkRow({ r, onOpen, onRowClick }: { r: ChangeRequestSummary; onOpen: (
         <Link
           to={`/changes/${r.id}`}
           data-change-id={r.id}
+          data-return-id={r.id}
           onClick={onOpen}
           className={cn(
             'line-clamp-2 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)',
@@ -319,30 +291,48 @@ export function ChangeDetailPage() {
   const navigate = useNavigate()
   const [returning, setReturning] = useState(false)
   const [reorgEditing, setReorgEditing] = useState(false)
-  // 大批量申请（如初始导入上千项）分批显示，避免一次渲染全部
-  const [itemLimit, setItemLimit] = useState(50)
   const groups = useMemo(() => (cr ? groupItems(cr) : []), [cr])
   const checks = useReviewChecks(cr ? `${cr.id}-${cr.updated_at}` : null, groups)
-  // 从顶部问题清单跳到对应的变更项（必要时先把它显示出来）；焦点移过去，底色闪一下作为定位反馈
+  // 大批量申请（如初始导入上千项）每组先显示 REVIEW_PAGE 行；可见行数按组记在这里，换一张申请时重置
+  const [view, setView] = useState<{ id: number; limits: Record<string, number>; focus: FocusRequest | null }>({ id, limits: {}, focus: null })
+  if (view.id !== id) setView({ id, limits: {}, focus: null })
+  const limitOf = (g: string) => view.limits[g] ?? REVIEW_PAGE
+  // 从顶部问题清单跳到对应的显示行：只把目标所在组展开到目标为止（其他组不动），行挂载后由该行滚动、聚焦并闪一下
+  const jumpSeq = useRef(0)
   const jumpTo = (index: number) => {
-    if (index >= itemLimit) setItemLimit(index + 1)
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`item-${index}`)
-      if (!el) return
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      el.focus({ preventScroll: true })
-      el.classList.remove('hd-flash')
-      void el.offsetWidth
-      el.classList.add('hd-flash')
-    })
+    if (!cr) return
+    const loc = locateItem(cr, groups, index)
+    if (!loc) return
+    const seq = ++jumpSeq.current
+    setView((v) => ({
+      ...v,
+      limits: loc.position >= (v.limits[loc.group] ?? REVIEW_PAGE) ? { ...v.limits, [loc.group]: loc.position + 1 } : v.limits,
+      focus: { owner: loc.owner, seq, key: `${cr.id}-${cr.updated_at}` },
+    }))
   }
+  const clearFocus = () => setView((v) => (v.focus ? { ...v, focus: null } : v))
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
-  const [noteFor, setNoteFor] = useState<number | null>(null)
-  if (cr && noteFor !== cr.id) {
-    // 换到另一张申请时，用它保存的说明重置输入框
-    setNoteFor(cr.id)
-    setNote(cr.note ?? '')
+  // 说明输入框的基准：载入它时的申请、说明与版本。保存说明以这个版本为前提（PR #1 评审）——
+  // 页面刷新会带来新版本号，但输入框里是基于旧版本的编辑，不能用新版本号放行。
+  // 换到另一张申请时重置；没改过说明时跟随刷新同步到最新内容与版本
+  const [noteBase, setNoteBase] = useState<{ id: number; note: string; version: string } | null>(null)
+  if (cr && (noteBase?.id !== cr.id || (note === noteBase.note && cr.updated_at !== noteBase.version))) {
+    const text = cr.note ?? ''
+    setNoteBase({ id: cr.id, note: text, version: cr.updated_at })
+    setNote(text)
+  }
+
+  /** 说明写入成功：立刻把服务端返回的草稿写进详情缓存，并把说明基准前移到这次写入（PR #1 评审）。
+   *  不等之后的整体刷新——刷新前旧缓存会把基准“回退”成保存前的版本；提交前自动保存后提交失败时，
+   *  也不会走到刷新。两种情况下一次保存都会带着旧版本被自己挡成 412 */
+  // sent：发出请求时输入框里的说明。请求返回前用户可能还在输入（慢网络）：缓存与基准照常更新，
+  // 输入框只在仍等于发出时的内容才换成服务端保存的文本；之后又改过的保留，作为未保存的修改
+  const adoptNoteWrite = (next: ChangeRequestOut, sent: string) => {
+    qc.setQueryData(getGetChangeRequestQueryKey(next.id), next)
+    const text = next.note ?? ''
+    setNoteBase({ id: next.id, note: text, version: next.updated_at })
+    setNote((current) => (current === sent ? text : current))
   }
 
   const action = useMutation({
@@ -353,7 +343,7 @@ export function ChangeDetailPage() {
     },
   })
 
-  if (!cr)
+  if (!cr || isDenial(query.error))
     return <DetailFallback what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} query={query} invalid={!Number.isInteger(id)} />
   const p = cr.permissions
   /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
@@ -374,7 +364,13 @@ export function ChangeDetailPage() {
       onClick={() =>
         run(async () => {
           // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null })
+          if (noteDirty) {
+            const sent = note
+            adoptNoteWrite(
+              await updateChangeRequest(id, { items: cr.items, note: sent.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at }),
+              sent,
+            )
+          }
           return submitChangeRequest(id)
         }, `申请 #${id} 已提交，等待确认`)
       }
@@ -392,7 +388,14 @@ export function ChangeDetailPage() {
     </Button>
   ) : null
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
-  const saveNote = () => run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null }), '变更说明已保存')
+  // 带读取时的 updated_at：草稿此后在别处被改过，服务端拒绝（412），不用页面上的旧变更项覆盖
+  const saveNote = () =>
+    run(async () => {
+      const sent = note
+      const next = await updateChangeRequest(id, { items: cr.items, note: sent.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
+      adoptNoteWrite(next, sent)
+      return next
+    }, '变更说明已保存')
 
   // 统一规范 SC-03：页头（编号、状态、动作）→ 处理步骤 → 阻塞信息（问题、权限、隐去说明）→ 变更说明 → 逐组核对 + 目录 → 结束提醒。
   // 净内容宽 ≥1040 时目录在右侧（200px），更窄时在上方并可展开
@@ -404,7 +407,8 @@ export function ChangeDetailPage() {
             变更申请 #{cr.id} <ChangeStatusBadge status={cr.status} />
           </span>
         }
-        description={
+        description="本页不按查看日期筛选；申请里的各项按各自的业务日期生效。"
+        meta={
           <>
             {cr.created_by.display_name} 起草 · {cr.items.length} 项变更
             {cr.copied_from_id && (
@@ -466,20 +470,30 @@ export function ChangeDetailPage() {
         )}
         <div className="@container">
           <div className="grid items-start gap-6 @review:grid-cols-(--hd-review-columns)">
-            <div className="grid min-w-0 gap-9">
+            <div className="grid min-w-0 gap-8">
               {cr.problems.length > 0 && (
                 <section className="grid gap-2" aria-label="需要处理的问题">
                   <h2 className="text-danger-text text-section font-semibold">
                     还有 {cr.problems.length} 个问题，{cr.status === 'draft' ? '处理后才能提交' : '处理后才能确认'}
                   </h2>
-                  {cr.problems.map((pr, k) => (
-                    <ProblemCard
-                      key={k}
-                      problem={pr}
-                      title={pr.item_index != null ? `第 ${pr.item_index + 1} 项 · ${cr.item_summaries?.[pr.item_index] ?? cr.item_labels[pr.item_index]}` : undefined}
-                      onJump={pr.item_index != null ? () => jumpTo(pr.item_index!) : undefined}
-                    />
-                  ))}
+                  {cr.problems.map((pr, k) => {
+                    // 没有对应项的问题（整张申请的）只留在这里；有序号但找不到显示行时写明，不猜一个对象
+                    const at = pr.item_index
+                    const located = at != null && locateItem(cr, groups, at) !== null
+                    const label = at != null ? (cr.item_summaries?.[at] ?? cr.item_labels[at]) : undefined
+                    return (
+                      <ProblemCard
+                        key={k}
+                        problem={pr}
+                        title={
+                          at == null
+                            ? '整张申请'
+                            : `第 ${at + 1} 项 · ${label ?? '（未找到这一项）'}${located ? '' : '（无法定位到下方的行）'}`
+                        }
+                        onJump={located ? () => jumpTo(at!) : undefined}
+                      />
+                    )
+                  })}
                 </section>
               )}
 
@@ -529,6 +543,10 @@ export function ChangeDetailPage() {
                   checkable={checkable}
                   checked={checks.checked.has(g.key)}
                   onCheck={() => checks.toggle(g.key)}
+                  limit={limitOf(g.key)}
+                  onShowAll={() => setView((v) => ({ ...v, limits: { ...v.limits, [g.key]: g.indices.length } }))}
+                  focus={view.focus}
+                  onFocused={clearFocus}
                   renderDiff={(o) => <OutcomeDiff outcome={o} />}
                 />
               ))}
@@ -549,7 +567,7 @@ export function ChangeDetailPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      document.querySelector('main')?.scrollTo({ top: 0, behavior: 'smooth' })
+                      document.querySelector('main')?.scrollTo({ top: 0, behavior: scrollBehavior() })
                       document.getElementById('change-primary-action')?.focus({ preventScroll: true })
                     }}
                   >
@@ -602,7 +620,7 @@ function ReorgEditor({ cr, sourceCode, onClose }: { cr: ChangeRequestOut; source
         parentCode: row.parent?.code ?? null,
         mainClass: row.main_class?.code ?? null,
       }}
-      draft={{ id: cr.id, note: cr.note ?? null, items: cr.items }}
+      draft={{ id: cr.id, note: cr.note ?? null, items: cr.items, updated_at: cr.updated_at }}
     />
   )
 }

@@ -51,7 +51,7 @@ erDiagram
 | 分组 | 表 | 说明 |
 | --- | --- | --- |
 | 配置 | `app_user`、`option_item`、`approval_rule` | 用户与角色、选项码值、确认规则。只由迁移维护，不经变更申请 |
-| 申请 | `change_request` | 唯一写入入口 |
+| 申请 | `change_request`、`change_request_write` | 唯一写入入口；带请求键的草稿写入登记（只追加，迁移 0022，见第 3.2 节） |
 | 代码分配 | `code_reservation`；序列 `campus_code_seq`、`department_code_seq`、`service_unit_code_seq`、`person_code_seq` | 系统发出的院区 / 部门 / 服务单元 / 人员代码，只追加、不可修改（迁移 0015、0016，见第 3.1 节） |
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
@@ -147,6 +147,15 @@ stateDiagram-v2
 - 预留只登记“这个号已经发出”，不改主数据，所以不经变更申请；对象本身仍经申请新建。
 - 脚本数据（走查库、样例导入）先用可读的临时代码，写入前由 `codes.issue_for_script` 按固定请求键换成系统代码，重跑拿回同一批号。
 
+### 3.2 草稿写入的请求键（迁移 0022）
+
+- 新建草稿 `POST /api/change-requests`、更新草稿 `PUT /api/change-requests/{id}` 的请求体可带 `request_key`（8–100 字符，选填）。前端每打开一次表单 / 组织变更向导生成一个，重试时不变（与取号用同一个键）。
+- 成功写入时在 `change_request_write` 登记一行（用户、请求键、`create` / `update`、申请、提交内容摘要 `payload_hash`、时间），只追加、不可修改（`hdip_guard_update`）；同一用户同一请求键只能登记一次（`change_request_write_key_uniq`）。`payload_hash` 是变更项（按存库的规范化形式）+ 说明的 SHA-256。
+- 同一用户用同一请求键再次新建或更新：提交内容摘要相同 = 重试，不再执行写入，原样返回那张申请当前的内容；摘要不同 = 上次保存其实已写入、之后又改过，返回 409 并写明已写入哪张申请、之后的修改没有保存（不把旧结果当成新内容已保存）。网络中断、响应丢失后的重试因此不会再建第二张草稿，也不会把变更项重复追加进已有草稿。前端在同一次打开的表单里记住已发出的请求体，内容没改的重试原样重发（“加入已有草稿”不重新读取草稿），服务端才能认出是同一次保存。
+- 同一请求键已用于另一种操作或另一张申请时返回 409，提示关闭表单后重新打开再保存。校验未通过、整体回滚的写入不登记，改好后用同一个键再保存照常写入。
+- **更新草稿的版本前提**：`PUT` 的请求体可带 `expected_updated_at`（发起时读到的 `change_request.updated_at`）。草稿此后被改过（如另一个标签页追加了变更项、改了说明），返回 412，不用旧的整份内容覆盖中间的修改。检查放在同键重试判断之后：已写入过的重试照常认出、原样返回。前端“加入已有草稿”遇到 412 时说明这次保存从未写入（键未登记），按最新草稿重新组装再保存一次；申请页“保存说明”、回到组织变更向导整体替换也带此前提，遇到 412 提示重新打开草稿核对。前提必须与被编辑的内容出自同一次读取：向导取打开时的草稿快照（之后页面刷新不更新它），申请页说明框取开始编辑时的版本（没改过时随刷新同步）；说明写入成功（含提交前自动保存）后立刻把返回的草稿写进详情缓存并前移基准，不等整体刷新或提交成功；输入框只在仍等于发出请求时的内容才换成保存后的文本，请求期间继续输入的保留为未保存的修改。不带此字段时不检查（与以前一致）。
+- 同一键的并发请求在事务级咨询锁（`hashtext('change_request_write:用户:键')`）上排队。不带请求键时行为与以前一致。
+
 | 对象 | 变更项 kind | 写入的表 |
 | --- | --- | --- |
 | 主体 | `institution.create`、`institution.revise` | `institution`、`institution_version` |
@@ -200,6 +209,7 @@ stateDiagram-v2
 | 0018 | 人员模块 P1.3：确认规则 `person.engagement_set_end`（表结构不变） |
 | 0019 | 人员模块 P3：`person_assignment` 加附加归属 `ADDITIONAL`（同一任用同一部门附加归属不重叠）；`person_duty` 部门职务（部长 / 副部长 × 正式 / 主持工作 / 代管；同一部门同一天正式部长、主持工作者各最多一位，可并存）；选项与确认规则 |
 | 0020 | 人员状态中文名改为“有效任用 / 计划中 / 无效任用”（`option_item.person_relation_status`，码值不变；导出 `relation_status_name` 随之变化） |
+| 0022 | 草稿写入的请求键：`change_request_write`（只追加；用户 + 请求键唯一；`payload_hash` 区分重试与改过之后再保存），新建 / 更新草稿可安全重试（U3.1 遗留 R01-1） |
 | 0021 | A1：`person_duty.basis_note` 任职依据（可空，1–500 字，`person_duty_basis_note_check`）；任命、交接必填由应用层检查，之前的记录为空 |
 
 ### 新增一类对象或变更的检查单

@@ -53,4 +53,6 @@ import type { ServiceUnitSplit } from './serviceUnitSplit';
 export interface ChangeRequestWrite {
   items: (InstitutionCreate | InstitutionRevise | CampusCreate | CampusRevise | CampusChangeStatus | OperatorRelationCreate | OperatorRelationClose | DepartmentCreate | DepartmentRevise | DepartmentChangeLifecycle | DepartmentClassify | DepartmentAffiliate | DepartmentAliasAdd | DepartmentAliasClose | DepartmentSetParent | DepartmentRelationCreate | DepartmentRelationClose | DepartmentReorganize | DepartmentRename | DepartmentChangeStatus | ServiceUnitCreate | ServiceUnitRevise | ServiceUnitRebind | ServiceUnitChangeDepartment | ServiceUnitChangeStatus | ServiceUnitRetire | ServiceUnitSplit | ServiceUnitMerge | ServiceUnitClassify | DepartmentClassificationClose | ServiceUnitClassificationClose | ExternalCodeRegister | ExternalCodeAssign | ExternalCodeAssignmentClose | PersonCreate | PersonEngage | PersonRevise | PersonChangeWorkNo | PersonAssign | PersonTransfer | PersonDutyAssign | PersonDutySetEnd | PersonDutyHandover | PersonEngagementSetEnd | PersonAssignmentSetEnd)[];
   note?: string | null;
+  request_key?: string | null;
+  expected_updated_at?: string | null;
 }

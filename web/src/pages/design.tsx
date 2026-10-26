@@ -32,7 +32,13 @@ import { Link } from 'react-router'
 import { Callout } from '@/components/kit/callout'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag, TONES, type Tone } from '@/components/kit/tag'
+import { DbCell, DbRow, DbTable, DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
+import { Segmented } from '@/components/kit/segmented'
+import { FrameSample } from '@/components/layout'
+import { TagInput } from '@/components/kit/tag-input'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -58,7 +64,7 @@ import {
   OPERATING_STATUS_TONE,
   UNIT_STATUS_TONE,
 } from '@/lib/tones'
-import { cn } from '@/lib/utils'
+import { cn, scrollBehavior } from '@/lib/utils'
 
 const SECTIONS: { id: string; label: string; icon: AppIcon }[] = [
   { id: 'overview', label: '概览', icon: BookOpen01Icon },
@@ -132,7 +138,7 @@ function Sidebar({ active }: { active: string }) {
         {SECTIONS.map((s) => (
           <button
             key={s.id}
-            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: scrollBehavior() })}
             className={cn(
               'flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-(--hd-duration-fast)',
               active === s.id
@@ -344,6 +350,19 @@ const STAGE: Record<Stage, { label: string; tone: Tone }> = {
   todo: { label: '待实施', tone: 'gray' },
 }
 
+/** U3.1 九个阶段的真实验收状态：只写执行过的检查，环境做不了的写未验 */
+const U31_ROWS: { phase: string; behavior: string; visual: string; open: string }[] = [
+  { phase: 'R01 公共表单', behavior: '通过', visual: '1024×768 / 1366×800 浅色；长表单弹窗高度复测', open: '读屏未验' },
+  { phase: 'R02 核对定位与批量', behavior: '通过', visual: '浅 / 深，1366 / 1440 / 1920 / 800', open: '—' },
+  { phase: 'R03 读取状态', behavior: '通过', visual: '浅色；真实 403（无角色身份）', open: '深色下读取状态外观只抽查' },
+  { phase: 'R04 组织变更向导', behavior: '通过', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
+  { phase: 'R05 返回上下文', behavior: '通过', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
+  { phase: 'R06 配色', behavior: '通过', visual: '6 组合计算值 + 截图；真实悬停取样', open: '任意多层叠加、图表渐变未测' },
+  { phase: 'R07 尺度与键盘', behavior: '部分', visual: '1366 / 1920 / 768 / 767；reduce 用规则模拟', open: '系统真实 reduce、原生日历弹层、Windows 缩放' },
+  { phase: 'R08 场景模板', behavior: '通过', visual: '浅色，默认宽度', open: '—' },
+  { phase: 'R09 综合验收', behavior: '部分', visual: '14 页 × 1366 / 1920 × 展开 / 折叠，768 / 767，1040 阈值', open: 'Windows 实机、读屏、手机（范围外）' },
+]
+
 /** 规范里的每条目标在源码中走到了哪一步：只写真实状态，未迁移的页面不算完成 */
 const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sample?: ReactNode }[] = [
   {
@@ -431,13 +450,25 @@ const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sam
     rule: 'R-ACT 表单校验与离开',
     target: '错误一次全部标出、聚焦第一个，改到通过才清除；有输入时关闭先确认一次',
     stage: 'done',
-    note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮',
+    note: 'U3：ItemDialog 改动后按 build() 重新检查；“继续填写 / 放弃并关闭”；关闭后焦点回到触发按钮。U3R-01：build() 为纯函数、提交未通过才 reveal 定位；标签 ×、选项胶囊、增删后继也算改动；保存中不关闭、不重复保存，失败保留输入与请求键',
   },
   {
-    rule: 'R-STATE 详情三态',
-    target: '加载骨架 / 找不到 / 读取失败可重试 分开',
+    rule: 'R-STATE 读取状态',
+    target: '首次读取不写 0；失败不说成空；403 / 401 / 404 / 临时故障分开；同键刷新失败保留并标出；部分失败只影响所在区块',
     stage: 'done',
-    note: 'U3：kit/missing 的 DetailFallback，六个详情页共用',
+    note: 'U3：DetailFallback 六个详情页共用。U3R-03：kit/read-state 接入八个列表、编码明细与批量、组织总览、详情附属区；走查用受控响应。向导读取留 U3R-04',
+  },
+  {
+    rule: 'R-ACT 7.4 核对定位与组尾核对',
+    target: '问题按显示行归属（covered_by）计数与跳转；跳转只展开目标所在组；“我已核对”在组尾',
+    stage: 'done',
+    note: 'U3R-02：51 行与并入项用受控样本、门槛用真实草稿走查；减少动效偏好只按代码核对',
+  },
+  {
+    rule: 'C-04 批量选择范围',
+    target: '同一查看日期跨搜索、筛选、表 / 树保留所选部门；名单可查看与逐条取消；改日期或身份即清空',
+    stage: 'done',
+    note: 'U3R-02：部门列表；选择条、名单、两个批量表单用同一集合。其他页面的选择未改',
   },
 ]
 
@@ -465,6 +496,25 @@ function SpecV1Section() {
           </Row>
         ))}
       </Rows>
+      <SubTitle>U3.1 收尾验收状态（2026-10-26，走查库，内置浏览器）</SubTitle>
+      <Rows head={['阶段', '实现', '行为验证', '视觉 / 环境', '未验与原因']}>
+        {U31_ROWS.map((r) => (
+          <Row key={r.phase}>
+            <Cell className="text-fg-strong font-medium whitespace-nowrap">{r.phase}</Cell>
+            <Cell>
+              <Tag tone="green">已实现</Tag>
+            </Cell>
+            <Cell>
+              <Tag tone={r.behavior === '通过' ? 'green' : 'yellow'}>{r.behavior}</Tag>
+            </Cell>
+            <Cell className="text-fg-secondary">{r.visual}</Cell>
+            <Cell className="text-fg-muted text-caption">{r.open}</Cell>
+          </Row>
+        ))}
+      </Rows>
+      <p className="text-fg-muted text-caption">
+        证据见 docs/剧本走查记录.md 与 docs/design/ui-implementation-plan.md 的 U3R-01～09。375 手机与 44 触控本期不做；Windows 缩放、读屏、系统“减少动效”开关在当前环境无法执行，记为未验，不写通过。
+      </p>
     </Section>
   )
 }
@@ -478,7 +528,8 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-text-primary', cls: 'text-fg', use: '正文（默认）', text: true },
       { token: '--hd-text-secondary', cls: 'text-fg-secondary', use: '说明、侧栏', text: true },
       { token: '--hd-text-muted', cls: 'text-fg-muted', use: '属性名、表头、提示', text: true },
-      { token: '--hd-text-disabled', cls: 'text-fg-disabled', use: '禁用、占位', text: true },
+      { token: '--hd-text-placeholder', cls: 'placeholder:text-fg-placeholder', use: '输入与搜索的占位提示（同 muted 的值，独立角色）', text: true },
+      { token: '--hd-text-disabled', cls: 'text-fg-disabled', use: '只给真正禁用的控件；占位、空态、事实文字不用它', text: true },
     ],
   },
   {
@@ -490,13 +541,15 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-surface-subtle', cls: 'bg-surface-subtle', use: '次级块、代码、只读区' },
       { token: '--hd-surface-hover', cls: 'bg-surface-hover', use: '悬停（叠加）' },
       { token: '--hd-surface-selected', cls: 'bg-surface-selected', use: '选中的导航项' },
+      { token: '--hd-surface-input', cls: 'bg-input-bg', use: '输入、选择、标签输入的底色' },
     ],
   },
   {
     title: '边框',
     items: [
       { token: '--hd-border-subtle', cls: 'border-line-subtle', use: '分隔线、表格线' },
-      { token: '--hd-border-default', cls: 'border-line', use: '输入框、卡片' },
+      { token: '--hd-border-default', cls: 'border-line', use: '卡片、容器、次级按钮' },
+      { token: '--hd-border-input', cls: 'border-input', use: '可填写区域的边界（对输入底 ≥3:1）' },
       { token: '--hd-border-strong', cls: 'border-line-strong', use: '强调的分隔' },
     ],
   },
@@ -508,14 +561,16 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-accent-soft', cls: 'bg-brand-soft', use: '选中底色' },
       { token: '--hd-accent-muted', cls: 'bg-brand-muted', use: '极浅强调底色' },
       { token: '--hd-accent-text', cls: 'text-brand-text', use: '链接', text: true },
-      { token: '--hd-focus-ring', cls: 'ring-ring', use: '焦点环' },
+      { token: '--hd-focus-ring', cls: 'outline-(--hd-focus-ring)', use: '键盘焦点：2px 实色轮廓、外移 2px' },
     ],
   },
   {
     title: '反馈',
     items: [
       { token: '--hd-danger', cls: 'bg-danger', use: '危险操作' },
-      { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底' },
+      { token: '--hd-danger-text', cls: 'text-danger-text', use: '错误说明、危险按钮文字', text: true },
+      { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底、危险按钮底' },
+      { token: '--hd-warning-text', cls: 'text-warning-text', use: '提醒文字', text: true },
       { token: '--hd-warning-soft', cls: 'bg-warning-soft', use: '警告提示底' },
       { token: '--hd-success-soft', cls: 'bg-success-soft', use: '成功提示底' },
       { token: '--hd-info-soft', cls: 'bg-info-soft', use: '说明提示底' },
@@ -562,6 +617,40 @@ function ColorSection() {
         </div>
       ))}
     </Section>
+  )
+}
+
+function DesignToolbar() {
+  const [pill, setPill] = useState('ACTIVE')
+  const [chip, setChip] = useState(true)
+  const [q, setQ] = useState('')
+  const [tags, setTags] = useState<string[]>(['门诊'])
+  const [view, setView] = useState<'table' | 'tree' | 'flow'>('table')
+  return (
+    <div className="grid gap-3">
+      <DbToolbar right={<SearchBox value={q} onChange={setQ} placeholder="名称、拼音码或代码" />}>
+        <Segmented
+          label="视图"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'table', label: '表格' },
+            { value: 'tree', label: '层级树' },
+            { value: 'flow', label: '关系图' },
+          ]}
+        />
+        <FilterPill
+          label="生命周期"
+          value={pill}
+          onChange={setPill}
+          options={Object.entries(DEPARTMENT_LIFECYCLE).map(([value, label]) => ({ value, label }))}
+        />
+        <ToggleChip label="含计划中" checked={chip} onChange={setChip} />
+      </DbToolbar>
+      <div className="max-w-sm">
+        <TagInput label="承担职责" value={tags} onChange={setTags} />
+      </div>
+    </div>
   )
 }
 
@@ -809,6 +898,50 @@ function ControlsSection() {
         </Field>
       </div>
       <div className="grid gap-2">
+        <SubTitle>工具栏控件（键盘 Tab 进入看焦点轮廓；分段单选用方向键切换）</SubTitle>
+        <FrameSample frame="work">
+          <DesignToolbar />
+        </FrameSample>
+        <p className="text-fg-muted text-caption">
+          占位提示用 placeholder 角色，不借 disabled；透明的筛选胶囊、搜索框、标签输入在可见外层显示焦点。
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>危险操作与错误</SubTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="destructive">放弃并关闭</Button>
+          <Badge variant="destructive">2 处问题</Badge>
+          {/* 菜单里的危险项：文字与图标 danger-text，键盘高亮 danger-soft（R-COL 4.5） */}
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button variant="outline" />}>更多</DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem>复制为新草稿</DropdownMenuItem>
+              <DropdownMenuItem variant="destructive">撤销申请</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <Alert variant="destructive">
+          <AlertTitle>退回申请需要写明原因</AlertTitle>
+          <AlertDescription>说明不再额外淡化，与标题同为危险文字色。</AlertDescription>
+        </Alert>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>辅助文字在不同表面上</SubTitle>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            ['bg-surface-page', '页面'],
+            ['bg-surface-subtle', '表头、只读区'],
+            ['bg-surface-raised', '弹窗、关系图节点'],
+          ].map(([bg, name]) => (
+            <div key={bg} className={cn('border-line-subtle grid gap-0.5 rounded-md border px-3 py-2', bg)}>
+              <span className="text-fg text-xs">{name}</span>
+              <span className="text-fg-secondary text-caption">次要说明 secondary</span>
+              <span className="text-fg-muted font-mono text-caption">D000012 · muted</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-2">
         <SubTitle>选项卡</SubTitle>
         <Tabs defaultValue="all">
           <TabsList>
@@ -926,6 +1059,23 @@ const SAMPLE_UNITS = [
   { code: 'XNK-BY-OPD', name: '心血管内科门诊', type: '门诊单元', dept: '心血管内科', campus: '本部院区', status: 'RETIRED', period: '2020-01-01 ~ 2026-12-31' },
 ]
 
+const LONG_ROWS = [
+  { id: 1, name: '心内科', code: 'D000001', note: '正式履职' },
+  { id: 2, name: '呼吸与危重症医学科', code: 'D000002', note: '自 2020-01-01 起；上级：内科（行政视图）' },
+  {
+    id: 3,
+    name: '成都市第三人民医院高新院区心血管内科与呼吸与危重症医学科联合门诊（2027 年起筹备，名称以院发〔2026〕31 号文件为准）',
+    code: 'D000003',
+    note: '依据：院发〔2026〕31 号；长名称自然换行，不截断、不省略，代码单独一行',
+  },
+]
+
+const ENGAGEMENT_ROWS: { inst: string; type: string; dept: string; no: string | null; from: string; to: string | null; planned?: boolean }[] = [
+  { inst: '成都市第三人民医院医疗集团', type: '外聘专家', dept: '临床研究与医学伦理委员会办公室', no: 'G0912', from: '2025-03-01', to: null },
+  { inst: '成都市第三人民医院', type: '合同（人事代理）', dept: '心血管疾病与胸痛急救多学科诊疗中心', no: null, from: '2026-10-01', to: '2026-12-31' },
+  { inst: '成都市第三人民医院', type: '在编', dept: '呼吸内科', no: '0731', from: '2027-01-01', to: null, planned: true },
+]
+
 function TableSection() {
   return (
     <Section
@@ -933,6 +1083,51 @@ function TableSection() {
       title="表格"
       description="Notion 数据库式：无外框、横线分隔、表头灰色常规字重、行悬停底色；代码用等宽字体，状态用标签。"
     >
+      <SubTitle>标准行（真实 DbTable：单元格上下 8、左右 12，最小 44；多行内容自然增高）</SubTitle>
+      <FrameSample frame="work">
+        <DbTable columns={[{ label: '名称', className: 'w-1/2', sortKey: 'name' }, { label: '说明' }]} sort={null} onSort={() => {}}>
+          {LONG_ROWS.map((r) => (
+            <DbRow key={r.id}>
+              <DbCell>
+                <span className="grid min-w-0 gap-0.5">
+                  <span className="text-fg-strong font-medium">{r.name}</span>
+                  <span className="text-fg-muted font-mono text-caption">{r.code}</span>
+                </span>
+              </DbCell>
+              <DbCell className="text-fg-secondary">{r.note}</DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
+      </FrameSample>
+      <SubTitle>一人多项任用：一项任用一条共享子行（姓名跨行，缺值占位）</SubTitle>
+      <FrameSample frame="work">
+        <DbTable columns={[{ label: '姓名' }, { label: '任用' }, { label: '主部门' }, { label: '业务工号' }, { label: '任用期间' }]}>
+          {ENGAGEMENT_ROWS.map((e, i) => (
+            <DbRow key={e.inst + e.from} className={cn(i < ENGAGEMENT_ROWS.length - 1 && 'border-b-0')}>
+              {i === 0 && (
+                <td rowSpan={ENGAGEMENT_ROWS.length} className="border-line-subtle border-b px-(--hd-cell-padding-x) py-(--hd-cell-padding-y) align-top">
+                  <span className="grid gap-0.5">
+                    <span className="text-fg-strong font-medium">欧阳文珺</span>
+                    <span className="text-fg-muted text-caption">
+                      <span className="font-mono">P000019</span> · 3 项任用
+                    </span>
+                  </span>
+                </td>
+              )}
+              <DbCell>
+                <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                  <span className="text-fg-secondary">{e.inst}</span>
+                  <Tag tone="gray">{e.type}</Tag>
+                  {e.planned && <Tag tone="yellow">计划</Tag>}
+                </span>
+              </DbCell>
+              <DbCell className="text-fg-secondary">{e.dept}</DbCell>
+              <DbCell className="font-mono text-caption whitespace-nowrap">{e.no ?? <span className="text-fg-muted font-sans">未登记</span>}</DbCell>
+              <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{e.from} 至 {e.to ?? '长期'}</DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
+      </FrameSample>
       <Rows head={['代码', '名称', '类型', '所属部门', '院区', '状态', '期间']}>
         {SAMPLE_UNITS.map((u) => (
           <Row key={u.code}>

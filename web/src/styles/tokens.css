@@ -153,9 +153,11 @@
   /* 文字 */
   --hd-text-strong: var(--hd-alpha-black-900);
   --hd-text-primary: var(--hd-alpha-black-800);
-  --hd-text-secondary: var(--hd-alpha-black-600);
-  --hd-text-muted: var(--hd-alpha-black-500);
-  --hd-text-disabled: var(--hd-alpha-black-400);
+  /* U3R-06：secondary 改实色 gray-600、muted 加深到 alpha-black-600，在 page / raised / subtle 上都 ≥4.5:1 */
+  --hd-text-secondary: var(--hd-gray-600);
+  --hd-text-muted: var(--hd-alpha-black-600);
+  --hd-text-disabled: var(--hd-alpha-black-400);     /* 只给真正禁用的控件，不给占位提示、空态与事实文字 */
+  --hd-text-placeholder: var(--hd-text-muted);       /* 输入与搜索的占位提示：独立角色，初值同 muted */
   --hd-text-on-accent: var(--hd-white);
 
   /* 表面（底色） */
@@ -170,8 +172,10 @@
 
   /* 边框 */
   --hd-border-subtle: var(--hd-alpha-black-150); /* 分隔线、表格线 */
-  --hd-border-default: var(--hd-alpha-black-200); /* 输入框、卡片 */
+  --hd-border-default: var(--hd-alpha-black-200); /* 卡片、容器、次级按钮 */
   --hd-border-strong: var(--hd-alpha-black-300);
+  --hd-border-input: #7f7b75;                     /* 可填写区域（输入、选择、标签输入）的边界：对输入底 ≥3:1；装饰线不用它 */
+  --hd-surface-input: var(--hd-white);            /* 输入底色：独立角色，不再取边框色的透明度 */
   --hd-flow-edge: var(--hd-gray-400);            /* 关系图连线：不透明，多条线叠在同一段上颜色不加深 */
   --hd-flow-edge-soft: var(--hd-gray-300);       /* 竖向关系图（部门隶属）的连线：更浅，降低重心 */
   --hd-flow-card-foot: var(--hd-gray-50);        /* 竖向关系图卡片下半部的底色 */
@@ -196,14 +200,14 @@
   --hd-accent-pressed: var(--hd-blue-800);
   --hd-accent-soft: var(--hd-blue-200);
   --hd-accent-muted: var(--hd-blue-100);
-  --hd-accent-text: var(--hd-blue-600);
+  --hd-accent-text: var(--hd-blue-700);   /* U3R-06：600 在 accent-soft 上不足 4.5:1 */
   --hd-focus-ring: var(--hd-blue-600);
 
   /* 反馈 */
   --hd-danger: var(--hd-red-500);
-  --hd-danger-text: var(--hd-red-600);
+  --hd-danger-text: var(--hd-red-700);    /* U3R-06：错误文字、危险按钮文字 */
   --hd-danger-soft: var(--hd-red-100);
-  --hd-warning-text: var(--hd-orange-600);
+  --hd-warning-text: var(--hd-orange-700);
   --hd-warning-soft: var(--hd-orange-100);
   --hd-success-text: var(--hd-green-600);
   --hd-success-soft: var(--hd-green-100);
@@ -276,6 +280,8 @@
      共享水平 gutter 24（<768 为 16）；work / document 的最大宽度都指内容净宽（不含 gutter）；canvas 不设上限 */
   --hd-layout-gutter: var(--hd-space-24);
   --hd-layout-gutter-narrow: var(--hd-space-16);
+  --hd-shell-rail-width: var(--hd-space-40);     /* 桌面侧栏收起后的控制轨道：展开按钮有真实占位，顶栏与正文同一偏移（U3R-07） */
+  --hd-dialog-max-height: calc(100svh - 2rem);    /* 弹窗整体不超过视口，长表单在弹窗内滚动、标题不被推出（U3R-07） */
   --hd-page-work-max: 90rem;          /* 1440 */
   --hd-page-document-max: 56.25rem;   /* 900 */
   --hd-page-top-gap: var(--hd-space-24);
@@ -292,6 +298,7 @@
   --hd-work-row-min-height: 4rem;
   --hd-work-row-padding-y: var(--hd-space-12);
   --hd-cell-padding-x: var(--hd-space-12);
+  --hd-cell-padding-y: var(--hd-space-8);        /* 标准单元格上下留白（U3R-07）：多行内容增高后不贴分隔线 */
   --hd-control-height-touch: 2.75rem; /* 44：触控主要控件 */
   /* 申请工作列表（统一规范 v1.0 R-ROW 5.2，U1）：变更概要（弹性，至少占一半）| 状态 | 最近处理 */
   --hd-work-list-columns: minmax(0, 1fr) 5.5rem 9.5rem;
@@ -312,8 +319,9 @@
   --hd-text-strong: var(--hd-alpha-white-900);
   --hd-text-primary: var(--hd-alpha-white-800);
   --hd-text-secondary: var(--hd-alpha-white-700);
-  --hd-text-muted: var(--hd-alpha-white-500);
+  --hd-text-muted: #ffffff99;   /* U3R-06：60% 白，表头（subtle）与弹窗（raised）上也 ≥4.5:1 */
   --hd-text-disabled: var(--hd-alpha-white-400);
+  --hd-text-placeholder: var(--hd-text-muted);
 
   --hd-surface-page: var(--hd-gray-900);
   --hd-surface-sidebar: var(--hd-gray-850);
@@ -327,6 +335,8 @@
   --hd-border-subtle: var(--hd-alpha-white-100);
   --hd-border-default: var(--hd-alpha-white-150);
   --hd-border-strong: var(--hd-alpha-white-200);
+  --hd-border-input: #99958f;
+  --hd-surface-input: var(--hd-gray-850);
   --hd-flow-edge: var(--hd-gray-600);
   --hd-flow-edge-soft: var(--hd-gray-700);
   --hd-flow-card-foot: var(--hd-gray-850);
@@ -396,7 +406,7 @@
   --hd-accent-pressed: var(--hd-teal-800);
   --hd-accent-soft: var(--hd-teal-200);
   --hd-accent-muted: var(--hd-teal-100);
-  --hd-accent-text: var(--hd-teal-600);
+  --hd-accent-text: var(--hd-teal-700);   /* U3R-06：600 在 teal-soft 上不足 4.5:1 */
   --hd-focus-ring: var(--hd-teal-600);
 }
 .dark[data-accent="purple"] {

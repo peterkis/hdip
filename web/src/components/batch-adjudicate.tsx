@@ -11,6 +11,7 @@ import { requireFields, SelectField, TextField } from '@/components/forms/fields
 import { ItemDialog, type ChangeItemInput } from '@/components/forms/item-dialog'
 import { DepartmentSelect, UnitSelect } from '@/components/forms/ref-selects'
 import { Callout } from '@/components/kit/callout'
+import { ReadError, ReadLoading, readStatus, StaleNotice } from '@/components/kit/read-state'
 import { DbCell, DbEmpty, DbRow, DbTable, ToggleChip } from '@/components/kit/database'
 import { Tag, type Tone } from '@/components/kit/tag'
 import { Button } from '@/components/ui/button'
@@ -33,15 +34,26 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
   const { asOf } = useApp()
   const [limit, setLimit] = useState(200)
   const [only, setOnly] = useState<'all' | 'suggested' | 'preselected'>('suggested')
-  const { data: page, isPending } = useListExternalCodes({
+  // 读取状态（U3R-03）：候选数、空态只由读取成功的数据得出；“再载入”只多取几条时沿用已显示的行
+  const params = {
     as_of: asOf,
-    status: 'pending',
+    status: 'pending' as const,
     suggest: true,
     limit,
     ...(namespaceId && { namespace_id: namespaceId }),
     ...(q && { q }),
+  }
+  const query = useListExternalCodes(params, {
+    query: {
+      placeholderData: (prev, prevQuery) => {
+        const before = prevQuery?.queryKey[1] as typeof params | undefined
+        return before && JSON.stringify({ ...before, limit: 0 }) === JSON.stringify({ ...params, limit: 0 }) ? prev : undefined
+      },
+    },
   })
-  const all = page?.rows ?? []
+  const page = query.data
+  const status = readStatus(query)
+  const all = useMemo(() => page?.rows ?? [], [page])
   const [chosen, setChosen] = useState<Chosen>({})
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [dialog, setDialog] = useState<'chosen' | 'uniform' | null>(null)
@@ -74,6 +86,11 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
         “名称相同、别名、曾用名”已预先选中候选；“包含、相近”只作提示，点一下候选才算选定。勾选要处理的行后，可以按各行选定的对象生成申请，
         也可以把所选各行统一解释为同一个对象（如同一个门诊单元、或“对象未建模”）。生成的是草稿，提交、确认后才生效。
       </Callout>
+      <StaleNotice what="待裁决代码" query={query} />
+      {status !== 'ready' ? (
+        status === 'loading' ? <ReadLoading label="正在读取待裁决代码与候选…" /> : <ReadError what="待裁决代码" query={query} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-2">
         <ToggleChip label={`有候选 ${all.filter((r) => (r.suggestions ?? []).length).length}`} checked={only === 'suggested'} onChange={() => setOnly('suggested')} />
         <ToggleChip
@@ -83,14 +100,17 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
         />
         <ToggleChip label={`全部待裁决 ${all.length}`} checked={only === 'all'} onChange={() => setOnly('all')} />
         {page && all.length < page.total && (
-          <Button variant="ghost" size="sm" onClick={() => setLimit(limit + 300)}>
+          <Button variant="ghost" size="sm" disabled={query.isFetching} onClick={() => setLimit(limit + 300)}>
             再载入 {Math.min(300, page.total - all.length)} 条（共 {page.total}）
           </Button>
         )}
       </div>
 
-      {!isPending && rows.length === 0 ? (
-        <DbEmpty title="没有符合条件的待裁决代码" hint="换个筛选试试，或切到“全部待裁决”。" />
+      {rows.length === 0 ? (
+        <DbEmpty
+          title={all.length === 0 ? '没有待裁决的代码' : '没有符合条件的待裁决代码'}
+          hint={all.length === 0 ? '当前字典与搜索下，所有代码都已有解释或未建模。' : '换个筛选试试，或切到“全部待裁决”。'}
+        />
       ) : (
         <DbTable
           columns={[
@@ -123,9 +143,9 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
                 </DbCell>
                 <DbCell className="font-mono whitespace-nowrap">{r.code}</DbCell>
                 <DbCell>{r.source_name ?? <span className="text-fg-disabled">—</span>}</DbCell>
-                <DbCell className="py-1.5">
+                <DbCell>
                   {(r.suggestions ?? []).length === 0 ? (
-                    <span className="text-fg-disabled">没有候选，可用“统一解释”处理</span>
+                    <span className="text-fg-muted">没有候选，可用“统一解释”处理</span>
                   ) : (
                     <span className="flex flex-wrap items-center gap-1.5">
                       {(r.suggestions ?? []).map((s) => {
@@ -157,6 +177,8 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
             )
           })}
         </DbTable>
+      )}
+      </>
       )}
 
       {/* 选中后出现的操作条：贴在视口底部，移动端也可点 */}

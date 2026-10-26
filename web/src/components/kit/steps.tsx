@@ -22,7 +22,7 @@ const DOT: Record<StepState, string> = {
   current: 'bg-brand-soft text-brand-text ring-2 ring-brand',
   upcoming: 'bg-surface-subtle text-fg-muted ring-1 ring-line',
   stopped: 'bg-danger-soft text-danger-text ring-1 ring-danger',
-  skipped: 'bg-surface-subtle text-fg-disabled',
+  skipped: 'bg-surface-subtle text-fg-muted',
 }
 
 const LABEL: Record<StepState, string> = {
@@ -30,7 +30,7 @@ const LABEL: Record<StepState, string> = {
   current: 'text-brand-text font-semibold',
   upcoming: 'text-fg-muted font-medium',
   stopped: 'text-danger-text font-semibold',
-  skipped: 'text-fg-disabled font-medium',
+  skipped: 'text-fg-muted font-medium',
 }
 
 export function Steps({ steps, className }: { steps: StepItem[]; className?: string }) {

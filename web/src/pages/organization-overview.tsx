@@ -49,6 +49,7 @@ import {
 } from '@/lib/org-overview'
 import { UNIT_STATUS_TONE, PLANNED_TONE } from '@/lib/tones'
 import { cn } from '@/lib/utils'
+import { combineStatus, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 
 type TabKey = 'layout' | 'matrix' | 'codes'
 type Lens = 'class' | 'campus'
@@ -120,11 +121,23 @@ export function OrganizationOverviewPage() {
   const p = useOverviewParams()
   const [sel, setSel] = useState<Selection | null>(null)
 
-  const { data: units = [], isPending } = useListServiceUnits({ as_of: asOf, include_future: true })
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
-  const { data: campuses = [] } = useListCampuses({ as_of: asOf })
-  const { data: institutions = [] } = useListInstitutions({ as_of: asOf })
-  const { data: systems = [] } = useListSourceSystems({ as_of: asOf })
+  // 读取状态（U3R-03）：五个读取各自有状态，每块只看它真正依赖的那几个——
+  // 概况：部门数←部门；在用 / 暂停 / 计划←单元；跨院区、无单元部门←单元 + 部门。
+  // 服务布局←单元 + 部门（按院区再加院区）；矩阵←单元 + 部门 + 院区；编码治理←来源系统；主体只供筛选选项。
+  // 依赖没读到时不出图、不写 0、不归“未分类”。
+  const unitQuery = useListServiceUnits({ as_of: asOf, include_future: true })
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const campusQuery = useListCampuses({ as_of: asOf })
+  const instQuery = useListInstitutions({ as_of: asOf })
+  const sysQuery = useListSourceSystems({ as_of: asOf })
+  const [uS, dS, cS, iS, sS] = [unitQuery, deptQuery, campusQuery, instQuery, sysQuery].map(readStatus)
+  const units = useMemo(() => unitQuery.data ?? [], [unitQuery.data])
+  const departments = useMemo(() => deptQuery.data ?? [], [deptQuery.data])
+  const campuses = useMemo(() => campusQuery.data ?? [], [campusQuery.data])
+  const institutions = instQuery.data ?? []
+  const systems = useMemo(() => sysQuery.data ?? [], [sysQuery.data])
+  const coreStatus = combineStatus(uS, dS)
+  const areaStatus = p.tab === 'codes' ? sS : combineStatus(uS, dS, p.tab === 'matrix' || p.lens === 'campus' ? cS : 'ready')
 
   const idx = useMemo(() => indexDepartments(departments), [departments])
   const summary = useMemo(() => summarize(units, departments), [units, departments])
@@ -285,25 +298,35 @@ export function OrganizationOverviewPage() {
       />
 
       <SummaryStrip
-        loading={isPending}
         items={[
-          { label: '正式履职部门', value: summary.activeDepts },
-          { label: '在用服务单元', value: summary.active },
-          { label: '暂停', value: summary.suspended },
-          { label: '计划中', value: summary.planned, hint: '查看日期之后才开始' },
+          { label: '正式履职部门', value: summary.activeDepts, status: dS },
+          { label: '在用服务单元', value: summary.active, status: uS },
+          { label: '暂停', value: summary.suspended, status: uS },
+          { label: '计划中', value: summary.planned, hint: '查看日期之后才开始', status: uS },
           {
             label: '跨院区部门',
             value: summary.crossCampus.length,
+            status: coreStatus,
             onClick: () => setSel({ key: 'cross', title: '跨院区部门', note: '当天在两个及以上院区有在运营单元（含暂停）', depts: summary.crossCampus }),
           },
           {
             label: '没有在运营单元的部门',
             value: summary.idle.length,
+            status: coreStatus,
             onClick: () =>
               setSel({ key: 'idle', title: '没有在运营单元的部门', note: '正式履职、当天没有在运营的服务单元。行政、职能部门多半如此，不表示遗漏。', depts: summary.idle }),
           },
         ]}
       />
+
+      {/* 单元、部门是多数区块的共同依赖：失败时在概况下说一次，各区不再重复 */}
+      {(uS === 'error' || dS === 'error') && (
+        <div className="mt-3 grid gap-2">
+          {uS === 'error' && <ReadError what="服务单元" query={unitQuery} compact />}
+          {dS === 'error' && <ReadError what="部门" query={deptQuery} compact />}
+        </div>
+      )}
+      <StaleNotice what="服务单元" query={unitQuery} />
 
       <Tabs value={p.tab} onValueChange={(v) => p.set({ tab: v === 'layout' ? '' : String(v) })} className="mt-6">
         <TabsList variant="line">
@@ -322,6 +345,7 @@ export function OrganizationOverviewPage() {
               value={p.scope.inst}
               onChange={(v) => p.set({ inst: v })}
               options={institutions.map((i) => ({ value: String(i.id), label: i.version.name }))}
+              optionsStatus={iS}
             />
             <FilterPill
               label="院区"
@@ -329,6 +353,7 @@ export function OrganizationOverviewPage() {
               value={p.scope.campus}
               onChange={(v) => p.set({ campus: v })}
               options={[...campuses].sort((a, b) => a.code.localeCompare(b.code)).map((c) => ({ value: String(c.id), label: c.version.name }))}
+              optionsStatus={cS}
             />
             <FilterPill
               label="主分类"
@@ -336,6 +361,7 @@ export function OrganizationOverviewPage() {
               value={p.scope.cls}
               onChange={(v) => p.set({ cls: v })}
               options={[...classNames].map(([value, label]) => ({ value, label }))}
+              optionsStatus={dS}
             />
             <FilterPill
               label="部门"
@@ -345,6 +371,7 @@ export function OrganizationOverviewPage() {
               options={[...departments]
                 .sort((a, b) => (idx.order.get(a.id) ?? 0) - (idx.order.get(b.id) ?? 0))
                 .map((d) => ({ value: String(d.id), label: `${'　'.repeat(d.level - 1)}${d.version.name}` }))}
+              optionsStatus={dS}
             />
             <FilterPill
               label="类型"
@@ -362,8 +389,9 @@ export function OrganizationOverviewPage() {
             )}
           </DbToolbar>
           <p className="text-fg-muted mt-2 text-caption">
-            当前范围：<span className="text-fg-secondary">{scoped.length}</span> 个服务单元，分属{' '}
-            <span className="text-fg-secondary">{deptCount}</span> 个部门
+            当前范围：
+            <span className="text-fg-secondary">{coreStatus === 'ready' ? scoped.length : <Unknown reason="服务单元或部门尚未读取成功" />}</span>{' '}
+            个服务单元，分属 <span className="text-fg-secondary">{coreStatus === 'ready' ? deptCount : <Unknown reason="服务单元或部门尚未读取成功" />}</span> 个部门
             {p.scope.dept && '（所选部门及其下级部门）'}
           </p>
         </div>
@@ -374,19 +402,30 @@ export function OrganizationOverviewPage() {
       <div className="@container mt-4">
         <div className={cn('grid items-start gap-4', sel && '@5xl:grid-cols-(--hd-overview-columns)')}>
           <div className="min-w-0">
-            {p.tab === 'layout' && (
+            {areaStatus === 'loading' && <ReadLoading label="正在读取生成图所需的数据…" rows={6} />}
+            {areaStatus === 'error' &&
+              (p.tab === 'codes' ? (
+                <ReadError what="来源系统与字典" query={sysQuery} compact />
+              ) : cS === 'error' && coreStatus !== 'error' ? (
+                <ReadError what="院区（列与按院区视角要用）" query={campusQuery} compact />
+              ) : (
+                <p className="text-fg-muted border-line-subtle rounded-md border px-4 py-10 text-center text-xs">
+                  服务单元或部门没有读取成功（见上方），这里暂不出图，也不按 0 计。
+                </p>
+              ))}
+            {areaStatus === 'ready' && p.tab === 'layout' && (
               <LayoutView
                 lens={p.lens}
                 onLens={(v) => p.set({ lens: v === 'class' ? '' : v })}
                 flow={flow}
-                empty={!isPending && scoped.length === 0}
+                empty={scoped.length === 0}
                 onSelect={selectLayout}
                 onMatrix={() => p.set({ tab: 'matrix' })}
               />
             )}
-            {p.tab === 'matrix' &&
+            {areaStatus === 'ready' && p.tab === 'matrix' &&
               (rows.length === 0 ? (
-                !isPending && <EmptyScope />
+                <EmptyScope />
               ) : (
                 <>
                   <DeptCampusMatrix
@@ -416,7 +455,7 @@ export function OrganizationOverviewPage() {
                   </Footnote>
                 </>
               ))}
-            {p.tab === 'codes' && <CodesView gov={gov} systems={systems} onSelect={selectCodes} />}
+            {areaStatus === 'ready' && p.tab === 'codes' && <CodesView gov={gov} systems={systems} onSelect={selectCodes} />}
           </div>
           <SelectionPanel sel={sel} onClose={() => setSel(null)} />
         </div>
@@ -435,10 +474,9 @@ const SELECT_HINT: Record<TabKey, string> = {
 
 function SummaryStrip({
   items,
-  loading,
 }: {
-  items: { label: string; value: number; hint?: string; onClick?: () => void }[]
-  loading: boolean
+  /** 每格自带读取状态：未成功的格写“—”并说明原因，也不能点开名单 */
+  items: { label: string; value: number; hint?: string; onClick?: () => void; status: 'loading' | 'error' | 'ready' }[]
 }) {
   return (
     <div className="border-line-subtle grid grid-cols-2 overflow-hidden rounded-md border sm:grid-cols-3 lg:grid-cols-6">
@@ -446,11 +484,13 @@ function SummaryStrip({
         const body = (
           <>
             <span className="text-fg-muted text-caption">{it.label}</span>
-            <span className="text-fg-strong text-xl font-semibold tabular-nums">{loading ? '—' : it.value}</span>
+            <span className="text-fg-strong text-xl font-semibold tabular-nums">
+              {it.status === 'ready' ? it.value : <Unknown reason={it.status === 'loading' ? '正在读取' : '依赖的数据没有读取成功'} />}
+            </span>
           </>
         )
         const cls = 'border-line-subtle -mt-px -ml-px flex flex-col items-start gap-1 border-t border-l px-4 py-3 text-left'
-        return it.onClick ? (
+        return it.onClick && it.status === 'ready' ? (
           <button key={it.label} type="button" className={cn(cls, 'hover:bg-surface-hover transition-colors duration-(--hd-duration-fast)')} onClick={it.onClick} title="点击查看名单">
             {body}
           </button>
@@ -603,7 +643,7 @@ function CodesView({
                               {n}
                             </Link>
                           ) : (
-                            <span className="text-fg-disabled">0</span>
+                            <span className="text-fg-muted">0</span>
                           )}
                         </td>
                       )

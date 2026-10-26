@@ -5,6 +5,10 @@
 - 谁能确认由 approval_rule 决定（按 对象类型 × 动作）；一张申请含多类变更时须同时满足。
 """
 
+import hashlib
+import json
+from datetime import datetime
+
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
@@ -15,7 +19,7 @@ from hdip_api.core.permissions import (
     can_see_items,
     require_permission,
 )
-from hdip_api.models import ApprovalRule, AppUser, ChangeRequest
+from hdip_api.models import ApprovalRule, AppUser, ChangeRequest, ChangeRequestWrite
 from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
 from hdip_api.services.masking import hidden_fields, sensitive_values
@@ -135,23 +139,123 @@ def _check_code_holders(s: Session, items: list[dict], self_id: int | None) -> N
 
 
 # ------------------------------------------------------------------ 动作
+def _payload_hash(items: list[dict], note: str | None) -> str:
+    body = json.dumps(
+        {"items": items, "note": note}, ensure_ascii=False, sort_keys=True, default=str
+    )
+    return hashlib.sha256(body.encode()).hexdigest()
+
+
+def _written_with_key(
+    s: Session,
+    user: AppUser,
+    request_key: str | None,
+    action: str,
+    payload_hash: str,
+    change_id: int | None = None,
+) -> int | None:
+    """同一用户的这个请求键已成功写入过、且这次提交的内容相同（重试）：
+    返回那张申请的 id，调用方不再写入。
+
+    内容不同说明上次那次保存其实已写入、之后又改过：拒绝并说明，不把旧结果当成新内容已保存。
+    同一键的并发请求在事务级咨询锁上排队，后到的看到先到的登记。键已用于另一种操作或另一张申请时拒绝。
+    """
+    if not request_key:
+        return None
+    s.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+        {"k": f"change_request_write:{user.id}:{request_key}"},
+    )
+    row = s.scalar(
+        select(ChangeRequestWrite).where(
+            ChangeRequestWrite.user_id == user.id, ChangeRequestWrite.request_key == request_key
+        )
+    )
+    if row is None:
+        return None
+    if row.action != action or (action == "update" and row.change_request_id != change_id):
+        raise BusinessError(
+            f"这次保存的请求键已用于申请 #{row.change_request_id} 的另一次保存，不能再用于这里。"
+            "请关闭表单后重新打开再保存。",
+            409,
+        )
+    if row.payload_hash != payload_hash:
+        raise BusinessError(
+            f"上一次保存其实已写入申请 #{row.change_request_id}，之后改过的内容没有保存。"
+            f"请先打开申请 #{row.change_request_id} 核对；"
+            "还要改，请在申请页修改或关闭表单后重新打开再保存。",
+            409,
+        )
+    return row.change_request_id
+
+
+def _record_write(
+    s: Session,
+    user: AppUser,
+    request_key: str | None,
+    action: str,
+    change_id: int,
+    payload_hash: str,
+) -> None:
+    if request_key:
+        s.add(
+            ChangeRequestWrite(
+                user_id=user.id,
+                request_key=request_key,
+                action=action,
+                change_request_id=change_id,
+                payload_hash=payload_hash,
+            )
+        )
+        s.flush()
+
+
 def create_draft(
-    s: Session, user: AppUser, items: list[ChangeItem], note: str | None
+    s: Session,
+    user: AppUser,
+    items: list[ChangeItem],
+    note: str | None,
+    request_key: str | None = None,
 ) -> ChangeRequest:
     require_permission(user, CHANGE_CREATE)
     dumped = dump_items(items)
+    digest = _payload_hash(dumped, _clean(note))
+    # 带请求键的重试：上次已建好，原样返回那张草稿，不再建第二张
+    done = _written_with_key(s, user, request_key, "create", digest)
+    if done is not None:
+        return s.get(ChangeRequest, done)
     _require_item_permissions(user, dumped)
     _check_code_holders(s, dumped, None)
     cr = ChangeRequest(items=dumped, note=_clean(note), created_by=user.id)
     s.add(cr)
     s.flush()
+    _record_write(s, user, request_key, "create", cr.id, digest)
     return cr
 
 
 def update_draft(
-    s: Session, user: AppUser, change_id: int, items: list[ChangeItem], note: str | None
+    s: Session,
+    user: AppUser,
+    change_id: int,
+    items: list[ChangeItem],
+    note: str | None,
+    request_key: str | None = None,
+    expected_updated_at: datetime | None = None,
 ) -> ChangeRequest:
     cr = get_for_update(s, change_id, user)
+    digest = _payload_hash(dump_items(items), _clean(note))
+    # 带请求键的重试：上次已写入（如已追加变更项），内容相同就不再写第二次
+    if _written_with_key(s, user, request_key, "update", digest, change_id) is not None:
+        return cr
+    # 版本前提：请求体是按发起时读到的草稿组装的整份内容；
+    # 草稿此后又被改过（如另一个标签页追加了变更项），
+    # 照写会把中间的修改覆盖掉，所以拒绝。放在同键重试判断之后：已写入过的重试照常认出
+    if expected_updated_at is not None and cr.updated_at != expected_updated_at:
+        raise BusinessError(
+            f"草稿 #{cr.id} 在你读取之后又被修改过，这次保存没有写入，以免覆盖那些修改。"
+            "请重新打开草稿核对后再保存。",
+            412,
+        )
     _require_status(cr, "draft")
     _require_creator(cr, user)
     # 组织变更是一个整体：含组织变更事件的草稿，不能只留下它的部分变更项（会拆散原子变更）
@@ -173,6 +277,7 @@ def update_draft(
     cr.note = _clean(note)
     cr.updated_at = _now(s)
     s.flush()
+    _record_write(s, user, request_key, "update", cr.id, digest)
     return cr
 
 

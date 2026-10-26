@@ -20,6 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { ChangeLink, InlineAction, InlineLink, Section } from '@/components/kit/section'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial } from '@/components/kit/read-state'
 import { MoreActions } from '@/components/kit/more-actions'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
@@ -54,8 +55,8 @@ export function ServiceUnitDetailPage() {
   const { data } = query
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
   const [closing, setClosing] = useState<DepartmentClassificationOut | null>(null)
-  useCrumb(data && `${data.code} ${data.versions[0].name}`)
-  if (!data)
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.versions[0].name}` : null)
+  if (!data || isDenial(query.error))
     return (
       <DetailFallback what="服务单元" back={{ to: '/service-units', label: '返回服务单元列表' }} query={query} invalid={!Number.isInteger(id)} />
     )
@@ -79,7 +80,7 @@ export function ServiceUnitDetailPage() {
     <>
       <PageHeader
         title={shown.name}
-        description={
+        meta={
           <>
             单元代码 <span className="font-mono">{data.code}</span> · {versionNote(data.versions, asOf)}
           </>
@@ -254,6 +255,22 @@ export function ServiceUnitDetailPage() {
               title: '开设',
               detail: (v) => `${formatValue('unit_type', data.unit_type, optionLabels)} · ${v.department_name} · ${v.campus_name}`,
             }}
+            // 退出写进时间线，与演变图、页头结论同一事实（U3R-09）：拆分 / 合并退出写后继与来源申请；无后继的是永久退出
+            extra={
+              data.retired_after
+                ? [
+                    data.successors.length
+                      ? {
+                          key: 'retired',
+                          date: data.retired_after,
+                          title: `退出（${data.successors[0].lineage_type === 'MERGE' ? '合并' : '拆分'}）`,
+                          detail: `${data.successors[0].lineage_type === 'MERGE' ? '合并为' : '拆分为'} ${data.successors.map((r) => r.successor_name).join('、')}，后继自 ${data.successors[0].effective_date} 起`,
+                          changeId: data.successors[0].change_id,
+                        }
+                      : { key: 'retired', date: data.retired_after, title: '永久退出', detail: '最后有效日当天仍有效，之后不再有新版本' },
+                  ]
+                : []
+            }
           />
           <p className="text-fg-secondary text-caption">
             登记于 {stamp(data.created_at)}（<ChangeLink id={data.created_change_id} />）。

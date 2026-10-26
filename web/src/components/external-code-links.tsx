@@ -3,6 +3,7 @@ import { Link } from 'react-router'
 import type { ExternalCodeLink } from '@/api/generated/model'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { Tag } from '@/components/kit/tag'
+import { period } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 export function ExternalCodeLinks({
@@ -16,7 +17,7 @@ export function ExternalCodeLinks({
   empty: string
   showUnit?: boolean
 }) {
-  if (rows.length === 0) return <p className="text-fg-disabled text-xs">{empty}</p>
+  if (rows.length === 0) return <p className="text-fg-muted text-xs">{empty}</p>
   return (
     <DbTable
       columns={[
@@ -53,7 +54,7 @@ export function ExternalCodeLinks({
             )}
             <DbCell className="whitespace-nowrap">{r.campus_name ? <Tag tone="purple">{r.campus_name}</Tag> : '不区分'}</DbCell>
             <DbCell className="whitespace-nowrap">
-              {r.valid_from} → {r.valid_to ?? '长期'}
+              {period(r.valid_from, r.valid_to)}
             </DbCell>
             <DbCell>
               <Link to={`/changes/${r.change_id}`} className="text-fg-secondary hover:underline">

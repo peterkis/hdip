@@ -13,7 +13,8 @@ import { useListClassificationSchemes } from '@/api/generated/master/master'
 import type { ClassificationCodeOut, ClassificationSchemeOut } from '@/api/generated/model'
 import { FormErrorsContext, requireFields, SelectField, TextField, useFocusFirstInvalid } from '@/components/forms/fields'
 import { Callout } from '@/components/kit/callout'
-import { DbCell, DbRow, DbTable } from '@/components/kit/database'
+import { DbCell, DbEmpty, DbRow, DbTable } from '@/components/kit/database'
+import { ReadError, ReadLoading, readStatus, StaleNotice } from '@/components/kit/read-state'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
 import { PageHeader, usePageFrame } from '@/components/layout'
@@ -30,7 +31,10 @@ const FOLD = 12
 
 export function DictionaryPage() {
   usePageFrame('work')
-  const { data: schemes = [] } = useListClassificationSchemes()
+  // 读取状态（U3R-03）：读取中、失败、真的没有方案分开说
+  const list = useListClassificationSchemes()
+  const status = readStatus(list)
+  const schemes = list.data ?? []
   const { me } = useMe()
   const canEdit = me?.permissions.includes('dictionary.maintain') ?? false
   const [creating, setCreating] = useState(false)
@@ -46,16 +50,28 @@ export function DictionaryPage() {
             </Button>
           )
         }
-        title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。" />
+        title="分类方案" description="部门管理主分类，以及登记的外部分类体系（如病案科室分类）。每个方案写明用在部门、服务单元上各表示什么；代码以正式代码表为准。本页不按查看日期筛选：配置用于定义规则。" />
       {/* SC-12：轻量说明配置的保存语义；对象的分类赋值仍在对象页经变更申请 */}
       <Callout className="mb-6" title="配置字典：保存即生效，不经变更申请">
         维护人直接修改并记下维护人与时间；代码一经使用不可改、不删除，只能停用。给部门或服务单元设置分类请到各自的页面，那是业务数据，照常经变更申请。
       </Callout>
-      <div className="grid gap-8">
-        {schemes.map((s) => (
-          <SchemeSection key={s.id} scheme={s} canEdit={canEdit} />
-        ))}
-      </div>
+      <StaleNotice what="分类方案" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取分类方案…" />
+      ) : status === 'error' ? (
+        <ReadError what="分类方案" query={list} />
+      ) : schemes.length === 0 ? (
+        <DbEmpty
+          title="还没有登记分类方案"
+          hint={canEdit ? '用右上角“登记分类方案”登记第一个方案。' : '有“维护字典”权限的人登记后会出现在这里。'}
+        />
+      ) : (
+        <div className="grid gap-8">
+          {schemes.map((s) => (
+            <SchemeSection key={s.id} scheme={s} canEdit={canEdit} />
+          ))}
+        </div>
+      )}
     </>
   )
 }
@@ -111,8 +127,8 @@ function SchemeSection({ scheme, canEdit }: { scheme: ClassificationSchemeOut; c
                 <span className="text-fg-muted font-mono text-caption select-all">{c.code}</span>
               </span>
             </DbCell>
-            <DbCell className="py-2 whitespace-normal">{c.criterion ?? '—'}</DbCell>
-            <DbCell className="text-fg-secondary py-2 whitespace-normal">{c.caution ?? '—'}</DbCell>
+            <DbCell className="whitespace-normal">{c.criterion ?? '—'}</DbCell>
+            <DbCell className="text-fg-secondary whitespace-normal">{c.caution ?? '—'}</DbCell>
             <DbCell className="text-fg-muted text-caption whitespace-nowrap">
               {c.updated_by ? `${c.updated_by.display_name} · ${stamp(c.updated_at)}` : '初始配置'}
             </DbCell>

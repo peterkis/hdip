@@ -1,8 +1,11 @@
 // 表单小件：带标签的输入、日期、下拉。值统一用字符串，空串表示未填。
 // 校验：表单 build() 返回 FieldErrors 时，对应字段（按 name 对应）同时标红、说明写在字段下方，
 // 焦点落到第一个出错字段；改动后由 item-dialog.tsx 重新检查，通过了才消除该字段的标记。
+// build() 必须是纯函数（不切换面板、不改状态），提交失败后的定位写在 ItemDialog 的 reveal 里（U3R-01）。
+// 字段改动通过 kit/form-edit 的 markDirty() 告诉表单外壳“有改动”，关闭前据此确认。
 // 生效日期（name="effective_date"）未给提示时说明它的含义：从这天起，原来的到前一天为止（修订在 D 生效）。
 import { DateInput } from '@/components/kit/date-input'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
@@ -39,10 +42,14 @@ export const FormErrorsContext = createContext<ErrorsCtx>({ errors: {}, clear: (
 function useField(name: string | undefined) {
   const auto = useId()
   const { errors, clear } = useContext(FormErrorsContext)
+  const markDirty = useMarkDirty()
   return {
     id: name ? `field-${name}` : auto,
     error: name ? errors[name] : undefined,
-    touch: () => name && errors[name] && clear(name),
+    touch: () => {
+      markDirty()
+      if (name && errors[name]) clear(name)
+    },
   }
 }
 
@@ -58,9 +65,10 @@ function Label({ htmlFor, label, required }: { htmlFor: string; label: string; r
   )
 }
 
-function Help({ error, hint }: { error?: string; hint?: ReactNode }) {
-  if (error) return <FieldDescription className="text-danger-text">{error}</FieldDescription>
-  return hint ? <FieldDescription>{hint}</FieldDescription> : null
+// 说明与错误用同一个 id，经 aria-describedby 关联到字段（没有说明时该 id 不存在，读屏忽略）
+function Help({ id, error, hint }: { id: string; error?: string; hint?: ReactNode }) {
+  if (error) return <FieldDescription id={id} className="text-danger-text text-xs">{error}</FieldDescription>
+  return hint ? <FieldDescription id={id}>{hint}</FieldDescription> : null
 }
 
 // ------------------------------------------------------------------ 字段
@@ -97,6 +105,7 @@ export function TextField({
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
           className={invalidFill}
           onChange={(v) => {
             f.touch()
@@ -111,6 +120,7 @@ export function TextField({
           placeholder={placeholder}
           disabled={disabled}
           aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
           className={invalidFill}
           onChange={(e) => {
             f.touch()
@@ -118,7 +128,7 @@ export function TextField({
           }}
         />
       )}
-      <Help error={f.error} hint={hint ?? (type === 'date' && name === 'effective_date' ? EFFECTIVE_DATE_HINT : undefined)} />
+      <Help id={`${f.id}-help`} error={f.error} hint={hint ?? (type === 'date' && name === 'effective_date' ? EFFECTIVE_DATE_HINT : undefined)} />
     </Field>
   )
 }
@@ -162,6 +172,7 @@ export function SelectField({
         value={value}
         disabled={disabled}
         aria-invalid={!!f.error || undefined}
+          aria-describedby={`${f.id}-help`}
         onChange={(e) => {
           f.touch()
           onChange(e.target.value)
@@ -174,8 +185,25 @@ export function SelectField({
           </NativeSelectOption>
         ))}
       </NativeSelect>
-      <Help error={f.error} hint={hint} />
+      <Help id={`${f.id}-help`} error={f.error} hint={hint} />
     </Field>
+  )
+}
+
+/** 表单里的行内编辑动作（如“移除”）：不提交表单，点了算作改动（关闭前会确认）。纯浏览的切换不要用它。 */
+export function EditButton({ onClick, className, children }: { onClick: () => void; className?: string; children: ReactNode }) {
+  const markDirty = useMarkDirty()
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={() => {
+        markDirty()
+        onClick()
+      }}
+    >
+      {children}
+    </button>
   )
 }
 

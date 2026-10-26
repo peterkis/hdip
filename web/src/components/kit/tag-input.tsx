@@ -1,6 +1,7 @@
 // 自由标签输入（Notion 多选属性的样子）：回车或逗号添加，退格删除最后一个，点 × 移除。
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 import { useId, useState, type KeyboardEvent } from 'react'
+import { useMarkDirty } from '@/components/kit/form-edit'
 import { Icon } from '@/components/kit/icon'
 import { Tag } from '@/components/kit/tag'
 import { Field, FieldDescription, FieldLabel } from '@/components/ui/field'
@@ -23,10 +24,16 @@ export function TagInput({
 }) {
   const id = useId()
   const [text, setText] = useState('')
+  // 增删标签不一定产生原生输入事件（点 ×、退格删整个标签），所以显式通知表单“有改动”
+  const markDirty = useMarkDirty()
+  const change = (tags: string[]) => {
+    markDirty()
+    onChange(tags)
+  }
 
   function add(raw: string) {
     const tag = raw.trim()
-    if (tag && !value.includes(tag)) onChange([...value, tag])
+    if (tag && !value.includes(tag)) change([...value, tag])
     setText('')
   }
 
@@ -35,31 +42,38 @@ export function TagInput({
       e.preventDefault()
       add(text)
     } else if (e.key === 'Backspace' && !text && value.length) {
-      onChange(value.slice(0, -1))
+      change(value.slice(0, -1))
     }
   }
 
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <div className="border-input bg-input/20 focus-within:border-ring focus-within:ring-ring/30 flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 focus-within:ring-2">
+      <div className="border-input bg-input-bg focus-within:outline-2 focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-(--hd-focus-ring) flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 ">
         {value.map((t) => (
-          <Tag key={t} tone="gray" className="gap-1 pr-0.5">
+          <Tag
+            key={t}
+            tone="gray"
+            className="gap-0.5 pr-0"
+            after={
+              // 命中区 24×24（U3R-07），上下负外边距不撑高 20px 的标签
+              <button
+                type="button"
+                aria-label={`移除 ${t}`}
+                className="hover:bg-surface-hover -my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-sm"
+                onClick={() => change(value.filter((x) => x !== t))}
+              >
+                <Icon icon={Cancel01Icon} className="size-3" />
+              </button>
+            }
+          >
             {t}
-            <button
-              type="button"
-              aria-label={`移除 ${t}`}
-              className="hover:bg-surface-hover ml-0.5 rounded-sm p-0.5"
-              onClick={() => onChange(value.filter((x) => x !== t))}
-            >
-              <Icon icon={Cancel01Icon} className="size-3" />
-            </button>
           </Tag>
         ))}
         <input
           id={id}
           list={suggestions.length ? `${id}-list` : undefined}
-          className="placeholder:text-fg-disabled min-w-24 flex-1 bg-transparent text-xs outline-none"
+          className="placeholder:text-fg-placeholder min-w-24 flex-1 bg-transparent text-xs outline-none"
           placeholder={value.length ? '' : placeholder}
           value={text}
           onChange={(e) => setText(e.target.value)}

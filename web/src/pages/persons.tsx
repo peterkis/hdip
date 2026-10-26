@@ -42,6 +42,7 @@ import { Callout } from '@/components/kit/callout'
 import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, nextSort, SearchBox, ToggleChip, type DbSort } from '@/components/kit/database'
 import { Icon } from '@/components/kit/icon'
 import { DetailFallback } from '@/components/kit/missing'
+import { isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
 import { PropertyList } from '@/components/kit/property-list'
 import { ChangeLink, InlineAction, Section } from '@/components/kit/section'
 import { Tag } from '@/components/kit/tag'
@@ -58,6 +59,7 @@ import { NAME_REASON, PERSON_STATUS, PERSON_STATUS_TONE, primaryOn, WORK_NO_REAS
 import { DEPARTMENT_LIFECYCLE_TONE, PLANNED_TONE } from '@/lib/tones'
 import { EngagementTypeTag } from '@/components/engagement-type-tag'
 import { DutyBasis } from '@/components/department-persons'
+import { isSort, isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 import { useMe } from '@/lib/use-me'
 import { cn } from '@/lib/utils'
 
@@ -85,8 +87,18 @@ function useRosterFilters() {
     // 全部人员：含已离开、未来入职、无有效任用的人（查重、回查用）
     all: get('scope') === 'all',
     set,
-    active: ['dept', 'status', 'future', 'scope'].some((k) => params.has(k)),
-    clear: () => setParams(new URLSearchParams(), { replace: true }),
+    key: params.toString(),
+    // 视角（按日期名册 / 全部人员）是阅读视角，不是筛选：“清除筛选”不改它（U3R-05）
+    active: ['dept', 'status', 'future'].some((k) => params.has(k)),
+    clear: () =>
+      setParams(
+        (prev) => {
+          const next = new URLSearchParams()
+          if (prev.get('scope')) next.set('scope', prev.get('scope')!)
+          return next
+        },
+        { replace: true },
+      ),
   }
 }
 
@@ -95,9 +107,11 @@ export function PersonsPage() {
   const { asOf, optionLabels } = useApp()
   const { can } = useMe()
   const f = useRosterFilters()
-  const [query, setQuery] = useState('')
+  // 检索词与排序是本页状态：从详情返回时取回，不写进网址（姓名检索不进地址栏，U3R-05）
+  const [query, setQuery] = useReturnState('q', '', isString)
   const [registering, setRegistering] = useState(false)
-  const { data: departments = [] } = useListDepartments({ as_of: asOf })
+  const deptQuery = useListDepartments({ as_of: asOf })
+  const departments = deptQuery.data ?? []
   // 名册与导出用同一组筛选：导出的行与页面一致
   const filters = {
     q: query.trim() || undefined,
@@ -105,10 +119,15 @@ export function PersonsPage() {
     ...(f.status && { status: f.status as PersonRow['status'] }),
     ...(f.dept && { department_id: Number(f.dept) }),
   }
-  const { data: rows = [], isPending } = useListPersons({ as_of: asOf, scope: f.all ? 'all' : 'as_of', ...filters })
+  // 读取状态（U3R-03）：人数、空态只由当前视角与筛选读取成功的数据得出；无人员权限时接口拒绝，说“无权”不说“没有人”
+  const list = useListPersons({ as_of: asOf, scope: f.all ? 'all' : 'as_of', ...filters })
+  const status = readStatus(list)
+  const rows = useMemo(() => list.data ?? [], [list.data])
   const types = optionLabels.engagement_type ?? {}
-  const [sort, setSort] = useState<DbSort | null>(null)
+  const [sort, setSort] = useReturnState<DbSort | null>('sort', null, isSort)
   const sorted = useMemo(() => sortRows(rows, sort, types), [rows, sort, types])
+  // 返回上下文：集合范围 = 查看日期 + 视角与筛选 + 检索词
+  const back = useListReturn({ scope: `${asOf}|${f.key}|${query.trim()}`, ready: status === 'ready', local: { q: query, sort } })
 
   const exporting = useMutation({
     mutationFn: async (dataset: 'persons' | 'person-relations') => downloadCsv(dataset, asOf, filters),
@@ -127,7 +146,7 @@ export function PersonsPage() {
               <>
                 <Button
                   variant="ghost"
-                  disabled={exporting.isPending || f.all}
+                  disabled={exporting.isPending || f.all || status !== 'ready'}
                   onClick={() => exporting.mutate('persons')}
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出，与页面同一批人，一人一行'}
                 >
@@ -136,7 +155,7 @@ export function PersonsPage() {
                 </Button>
                 <Button
                   variant="ghost"
-                  disabled={exporting.isPending || f.all}
+                  disabled={exporting.isPending || f.all || status !== 'ready'}
                   onClick={() => exporting.mutate('person-relations')}
                   title={f.all ? ALL_NO_EXPORT : '按当前筛选导出页面上的任用与主部门，一行一项任用'}
                 >
@@ -173,6 +192,7 @@ export function PersonsPage() {
           value={f.dept}
           onChange={(v) => f.set('dept', v)}
           options={departments.map((d) => ({ value: String(d.id), label: d.version.name }))}
+          optionsStatus={readStatus(deptQuery)}
         />
         {!f.all && (
           <FilterPill
@@ -191,7 +211,12 @@ export function PersonsPage() {
         )}
       </DbToolbar>
 
-      {!isPending && rows.length === 0 ? (
+      <StaleNotice what="人员" query={list} />
+      {status === 'loading' ? (
+        <ReadLoading label="正在读取人员…" />
+      ) : status === 'error' ? (
+        <ReadError what="人员名册" query={list} />
+      ) : rows.length === 0 ? (
         <DbEmpty
           title={query || f.active ? '没有符合条件的人员' : `${asOf} 没有有效任用的人员`}
           hint={
@@ -205,6 +230,7 @@ export function PersonsPage() {
           }
         />
       ) : (
+        <div onClickCapture={back.onClickCapture}>
         <DbTable
           columns={[
             // SC-13：姓名（人员代码在辅助行）/ 任用 / 主部门 / 业务工号 / 任用期间；多项任用在各列逐项对齐
@@ -217,44 +243,70 @@ export function PersonsPage() {
           sort={sort}
           onSort={(key) => setSort(nextSort(sort, key))}
         >
-          {sorted.map((r) => (
-            <DbRow key={r.id}>
-              <DbCell>
-                <span className="grid gap-0.5">
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
-                      {r.name}
-                    </Link>
-                    {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
-                  </span>
-                  <span className="text-fg-muted text-caption">
-                    <span className="font-mono select-all">{r.code}</span>
-                    {r.matched && <> · 命中 {r.matched}</>}
-                  </span>
-                </span>
-              </DbCell>
-              <Stacked rows={r} render={(e) => <EngagementTypeTag code={e.engagement_type} />} />
-              <Stacked
-                rows={r}
-                render={(e) =>
-                  e.department ? (
-                    <Link className="hover:underline" to={`/departments/${e.department.id}`}>
-                      {e.department.name}
-                    </Link>
-                  ) : (
-                    <Tag tone="yellow">暂未分配</Tag>
-                  )
-                }
-              />
-              <Stacked rows={r} mono render={(e) => e.work_no ?? <span className="text-fg-muted font-sans">未登记</span>} />
-              <Stacked rows={r} render={(e) => period(e.valid_from, e.valid_to)} />
-            </DbRow>
-          ))}
+          {/* V6（U3R-08）：一项任用一条共享子行，主体与类型、主部门、工号、期间在同一水平线上；
+              姓名按人跨行（rowSpan），人数仍按人计。缺工号、暂未分配都占位写明，不删掉以免错配 */}
+          {sorted.map((r) => {
+            const items = r.engagements.length ? r.engagements : [null]
+            return items.map((e, i) => (
+              <DbRow
+                key={`${r.id}-${e?.id ?? 'none'}`}
+                returnId={i === 0 ? r.id : undefined}
+                className={cn(i < items.length - 1 && 'border-b-0', e?.not_yet_effective && 'text-fg-muted')}
+              >
+                {i === 0 && (
+                  <td rowSpan={items.length} className="border-line-subtle h-(--hd-row-height) border-b px-(--hd-cell-padding-x) py-(--hd-cell-padding-y) align-top">
+                    <span className="grid gap-0.5">
+                      <span className="flex flex-wrap items-center gap-1.5">
+                        <Link className="text-fg-strong decoration-line-strong font-medium underline-offset-4 hover:underline" to={`/persons/${r.id}`}>
+                          {r.name}
+                        </Link>
+                        {r.status !== 'ENGAGED' && <Tag tone={PERSON_STATUS_TONE[r.status]}>{PERSON_STATUS[r.status]}</Tag>}
+                      </span>
+                      <span className="text-fg-muted text-caption">
+                        <span className="font-mono select-all">{r.code}</span>
+                        {r.matched && <> · 命中 {r.matched}</>}
+                        {items.length > 1 && <> · {items.length} 项任用</>}
+                      </span>
+                    </span>
+                  </td>
+                )}
+                {e ? (
+                  <>
+                    <DbCell>
+                      <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                        <span className="text-fg-secondary">{e.institution_name}</span>
+                        <EngagementTypeTag code={e.engagement_type} />
+                        {e.not_yet_effective && <Tag tone={PLANNED_TONE}>计划</Tag>}
+                      </span>
+                    </DbCell>
+                    <DbCell className="text-fg-secondary">
+                      {e.department ? (
+                        <Link className="hover:underline" to={`/departments/${e.department.id}`}>
+                          {e.department.name}
+                        </Link>
+                      ) : (
+                        <Tag tone="yellow">暂未分配</Tag>
+                      )}
+                    </DbCell>
+                    <DbCell className="font-mono text-caption whitespace-nowrap">
+                      {e.work_no ?? <span className="text-fg-muted font-sans">未登记</span>}
+                    </DbCell>
+                    <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(e.valid_from, e.valid_to)}</DbCell>
+                  </>
+                ) : (
+                  <DbCell className="text-fg-muted" colSpan={4}>
+                    没有任用记录
+                  </DbCell>
+                )}
+              </DbRow>
+            ))
+          })}
         </DbTable>
+        </div>
       )}
       <DbFooter>
         <span>
-          共 <span className="text-fg-secondary">{rows.length}</span> 人
+          共 <span className="text-fg-secondary">{status === 'ready' ? rows.length : <Unknown reason="人员尚未读取成功" />}</span> 人
         </span>
         <span>
           {f.all ? '全部人员，不看日期，不能导出' : `${asOf} 当天有效任用的人${f.future ? '，含计划中' : ''}`}；一人多项任用仍算一人
@@ -289,30 +341,6 @@ function sortRows(rows: PersonRow[], sort: DbSort | null, types: Record<string, 
   })
 }
 
-/** 一人多项任用时，在同一格里上下排列 */
-function Stacked({
-  rows,
-  render,
-  mono,
-}: {
-  rows: PersonRow
-  render: (e: PersonRow['engagements'][number]) => React.ReactNode
-  mono?: boolean
-}) {
-  if (rows.engagements.length === 0) return <DbCell className="text-fg-disabled">—</DbCell>
-  return (
-    <DbCell className={cn('text-fg-secondary whitespace-nowrap', mono && 'font-mono text-caption')}>
-      <span className="grid gap-1">
-        {rows.engagements.map((e) => (
-          <span key={e.id} className={cn(e.not_yet_effective && 'text-fg-muted')}>
-            {render(e)}
-          </span>
-        ))}
-      </span>
-    </DbCell>
-  )
-}
-
 // ================================================================== 详情
 const covers = (from: string, to: string | null | undefined, day: string) => from <= day && (!to || to >= day)
 
@@ -325,16 +353,27 @@ export function PersonDetailPage() {
   const { data } = query
   const [engaging, setEngaging] = useState(false)
   const [dialog, setDialog] = useState<PersonDialog | null>(null)
-  useCrumb(data && `${data.code} ${data.name}`)
-  if (!data) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
+  useCrumb(data && !isDenial(query.error) ? `${data.code} ${data.name}` : null)
+  if (!data || isDenial(query.error)) return <DetailFallback what="人员" back={{ to: '/persons', label: '返回人员名册' }} query={query} invalid={!Number.isInteger(id)} />
 
   const close = (o: boolean) => !o && setDialog(null)
-  const live = data.engagements.filter((e) => !e.void)
+  // 任用事实分开判断（U3R-05，统一规范 SC-14）：有没有记录看全部任用；当天有效看未撤销且覆盖查看日期的；
+  // 撤销、已结束、计划中的记录都还在下方各自的分区里，摘要不说成“没有记录”
+  const all = data.engagements
+  const live = all.filter((e) => !e.void)
+  const voided = all.length - live.length
   const current = live.filter((e) => covers(e.valid_from, e.valid_to, asOf))
+  const planned = live.filter((e) => e.valid_from > asOf).sort((a, b) => a.valid_from.localeCompare(b.valid_from))
   const formerNames = data.versions.filter((v, i) => !v.void && i > 0 && data.versions[i - 1].revise_reason === 'RENAME')
-  // 没有任用记录与查看日期当天没有有效任用分开说（统一规范 SC-14）
-  const noCurrent = (
-    <span className="text-fg-muted">{live.length ? '查看日期当天没有有效任用' : '没有任用记录'}</span>
+  const noCurrent = <span className="text-fg-muted">{all.length ? '查看日期当天没有有效任用' : '没有任用记录'}</span>
+  const noCurrentDetail = all.length ? (
+    <span className="text-fg-muted">
+      查看日期当天没有有效任用
+      {planned.length > 0 && `；有计划任用（${planned[0].valid_from} 起）`}
+      {voided > 0 && (voided === all.length ? '；现有任用记录均已撤销' : `；另有 ${voided} 项已撤销`)}
+    </span>
+  ) : (
+    noCurrent
   )
 
   // 统一规范 SC-14：姓名 / 人员代码 → 当前身份与关系摘要 → 每项任用一个分区 → 姓名历史。
@@ -343,7 +382,7 @@ export function PersonDetailPage() {
     <>
       <PageHeader
         title={data.name}
-        description={
+        meta={
           <>
             人员代码 <span className="font-mono">{data.code}</span>（系统分配、永不改变，与业务工号无关）· 按查看日期 {asOf} 显示
           </>
@@ -365,49 +404,40 @@ export function PersonDetailPage() {
         items={[
           { label: '状态', value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },
           {
+            // V6（U3R-08）：一项当前任用一行，“主体 · 类型 — 主部门 — 工号”同一行读完；缺工号写“未登记工号”，不删项错配
             label: '当前任用',
             value: current.length ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
-                {current.map((e) => (
-                  <span key={e.id} className="inline-flex items-center gap-1.5">
-                    {e.institution_name}
-                    <EngagementTypeTag code={e.engagement_type} />
-                  </span>
-                ))}
-              </span>
-            ) : (
-              noCurrent
-            ),
-          },
-          {
-            label: '当前主部门',
-            value: current.length ? (
-              <span className="flex flex-wrap gap-x-3 gap-y-1">
+              <span className="grid gap-1.5">
                 {current.map((e) => {
                   const a = primaryOn(e.assignments, asOf)
-                  return a ? (
-                    <Link key={e.id} className="hover:underline" to={`/departments/${a.department.id}`}>
-                      {a.department.name}
-                    </Link>
-                  ) : (
-                    <Tag key={e.id} tone="yellow">
-                      暂未分配
-                    </Tag>
+                  const no = e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no
+                  return (
+                    <span key={e.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <Link className="hover:underline" to={`/institutions/${e.institution_id}`}>
+                        {e.institution_name}
+                      </Link>
+                      <EngagementTypeTag code={e.engagement_type} />
+                      <span aria-hidden className="text-fg-disabled">·</span>
+                      {a ? (
+                        <Link className="hover:underline" to={`/departments/${a.department.id}`}>
+                          {a.department.name}
+                        </Link>
+                      ) : (
+                        <Tag tone="yellow">暂未分配</Tag>
+                      )}
+                      <span aria-hidden className="text-fg-disabled">·</span>
+                      {no ? (
+                        <span className="font-mono">工号 {no}</span>
+                      ) : (
+                        <span className="text-fg-muted">未登记工号</span>
+                      )}
+                    </span>
                   )
                 })}
               </span>
             ) : (
-              noCurrent
+              noCurrentDetail
             ),
-          },
-          {
-            label: '当前业务工号',
-            value: current.length
-              ? current
-                  .map((e) => e.work_nos.find((n) => !n.void && covers(n.valid_from, n.valid_to, asOf))?.work_no)
-                  .filter(Boolean)
-                  .join('、') || null
-              : noCurrent,
           },
           { label: '曾用名', value: formerNames.map((v) => v.name).join('、') || null },
           { label: '拼音码', value: data.pinyin && <span className="font-mono">{data.pinyin}</span> },
@@ -422,7 +452,7 @@ export function PersonDetailPage() {
       )}
 
       <div className="mt-8 grid gap-8">
-        <Section title={`任用与部门归属（${live.length}）`}>
+        <Section title={`任用与部门归属（${voided ? `共 ${all.length} 项，其中已撤销 ${voided} 项` : all.length}）`}>
           {data.engagements.length === 0 ? (
             <p className="text-fg-secondary text-xs">没有任用记录。人员身份保留；建立任用后再登记部门归属与工号。</p>
           ) : (
@@ -478,7 +508,9 @@ function EngagementCard({ e, asOf, onAction }: { e: PersonEngagementOut; asOf: s
       <header className="border-line-subtle flex flex-wrap items-start gap-x-3 gap-y-2 border-b px-4 py-3">
         <div className="grid min-w-0 gap-1">
           <span className="flex flex-wrap items-center gap-2 text-xs">
-            <span className={cn('font-semibold', e.void ? 'text-fg-secondary' : 'text-fg-strong')}>{e.institution_name}</span>
+            <Link className={cn('font-semibold hover:underline', e.void ? 'text-fg-secondary' : 'text-fg-strong')} to={`/institutions/${e.institution_id}`}>
+              {e.institution_name}
+            </Link>
             <EngagementTypeTag code={e.engagement_type} />
             <Tag tone={state.tone}>{state.label}</Tag>
           </span>
