@@ -8,6 +8,7 @@ import {
   returnChangeRequest,
   submitChangeRequest,
   updateChangeRequest,
+  getGetChangeRequestQueryKey,
   useGetChangeRequest,
   useListChangeRequests,
 } from '@/api/generated/changes/changes'
@@ -322,6 +323,16 @@ export function ChangeDetailPage() {
     setNote(text)
   }
 
+  /** 说明写入成功：立刻把服务端返回的草稿写进详情缓存，并把说明基准前移到这次写入（PR #1 评审）。
+   *  不等之后的整体刷新——刷新前旧缓存会把基准“回退”成保存前的版本；提交前自动保存后提交失败时，
+   *  也不会走到刷新。两种情况下一次保存都会带着旧版本被自己挡成 412 */
+  const adoptNoteWrite = (next: ChangeRequestOut) => {
+    qc.setQueryData(getGetChangeRequestQueryKey(next.id), next)
+    const text = next.note ?? ''
+    setNoteBase({ id: next.id, note: text, version: next.updated_at })
+    setNote(text)
+  }
+
   const action = useMutation({
     mutationFn: (fn: () => Promise<ChangeRequestOut>) => fn(),
     onSuccess: async (next) => {
@@ -351,7 +362,8 @@ export function ChangeDetailPage() {
       onClick={() =>
         run(async () => {
           // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
+          if (noteDirty)
+            adoptNoteWrite(await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at }))
           return submitChangeRequest(id)
         }, `申请 #${id} 已提交，等待确认`)
       }
@@ -373,8 +385,7 @@ export function ChangeDetailPage() {
   const saveNote = () =>
     run(async () => {
       const next = await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
-      // 自己保存成功后，基准前移到这次写入的版本，下一次保存不被自己的修改挡住
-      setNoteBase({ id, note, version: next.updated_at })
+      adoptNoteWrite(next)
       return next
     }, '变更说明已保存')
 
