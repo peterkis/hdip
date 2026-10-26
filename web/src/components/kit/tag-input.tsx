@@ -51,16 +51,23 @@ export function TagInput({
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <div className="border-input bg-input-bg focus-within:outline-2 focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-(--hd-focus-ring) flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 ">
         {value.map((t) => (
-          <Tag key={t} tone="gray" className="gap-1 pr-0.5">
+          <Tag
+            key={t}
+            tone="gray"
+            className="gap-0.5 pr-0"
+            after={
+              // 命中区 24×24（U3R-07），上下负外边距不撑高 20px 的标签
+              <button
+                type="button"
+                aria-label={`移除 ${t}`}
+                className="hover:bg-surface-hover -my-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-sm"
+                onClick={() => change(value.filter((x) => x !== t))}
+              >
+                <Icon icon={Cancel01Icon} className="size-3" />
+              </button>
+            }
+          >
             {t}
-            <button
-              type="button"
-              aria-label={`移除 ${t}`}
-              className="hover:bg-surface-hover -my-1 -mr-1 flex size-6 items-center justify-center rounded-sm"
-              onClick={() => change(value.filter((x) => x !== t))}
-            >
-              <Icon icon={Cancel01Icon} className="size-3" />
-            </button>
           </Tag>
         ))}
         <input

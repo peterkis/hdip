@@ -20,7 +20,18 @@ const TONE_CLASS: Record<Tone, string> = {
   red: 'bg-tag-red-bg text-tag-red-text',
 }
 
-export function Tag({ tone = 'gray', className, children }: { tone?: Tone; className?: string; children: ReactNode }) {
+export function Tag({
+  tone = 'gray',
+  className,
+  children,
+  after,
+}: {
+  tone?: Tone
+  className?: string
+  children: ReactNode
+  /** 放在截断文字之外的行内控件（如标签输入的“移除”），不随长文字被裁掉或挤到下一行 */
+  after?: ReactNode
+}) {
   return (
     <span
       className={cn(
@@ -30,6 +41,7 @@ export function Tag({ tone = 'gray', className, children }: { tone?: Tone; class
       )}
     >
       <span className="truncate">{children}</span>
+      {after}
     </span>
   )
 }
