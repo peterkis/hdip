@@ -1,9 +1,9 @@
 """只读查询与变更申请的响应结构。"""
 
 from datetime import date, datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from hdip_api.core.errors import ProblemItem
 from hdip_api.schemas.items import ChangeItem
@@ -418,6 +418,10 @@ class OrgViewOut(BaseModel):
 class ChangeRequestWrite(BaseModel):
     items: list[ChangeItem]
     note: str | None = None
+    # 请求键（选填，8–100 字符）：同一用户用同一个键再次新建 / 更新时，
+    # 不重复写入，原样返回那张申请。
+    # 前端每打开一次表单生成一个，重试时不变（迁移 0022）
+    request_key: Annotated[str, StringConstraints(min_length=8, max_length=100)] | None = None
 
 
 class ReturnBody(BaseModel):

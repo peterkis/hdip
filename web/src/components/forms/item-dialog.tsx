@@ -66,14 +66,16 @@ export function useAddItem() {
       item: ChangeItemInput | ChangeItemInput[]
       target: number | 'new'
       note?: string
-      /** 表单里有新建对象时，按它预留代码（同一次打开的表单不变，重试拿回同一批号） */
+      /** 本次打开表单的请求键：预留代码按它取号，写草稿也带上它——同一次打开里重试拿回同一批号，
+       *  且服务端已写入过的（响应丢失）不再新建第二张、不再重复追加（迁移 0022） */
       requestKey?: string
     }) => {
       const raw = Array.isArray(item) ? item : [item]
       const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
-      if (target === 'new') return createChangeRequest({ items, note: note ?? null })
+      const request_key = requestKey ?? null
+      if (target === 'new') return createChangeRequest({ items, note: note ?? null, request_key })
       const cr = await getChangeRequest(target)
-      return updateChangeRequest(target, { items: [...cr.items, ...items], note: cr.note })
+      return updateChangeRequest(target, { items: [...cr.items, ...items], note: cr.note, request_key })
     },
     onSuccess: async (cr, { target, item }) => {
       const n = Array.isArray(item) ? `（${item.length} 项）` : ''

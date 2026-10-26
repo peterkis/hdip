@@ -6101,6 +6101,19 @@
               }
             ],
             "title": "Note"
+          },
+          "request_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 8
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Key"
           }
         },
         "type": "object",

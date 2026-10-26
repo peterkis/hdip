@@ -433,8 +433,8 @@ export function DepartmentReorgWizard({
       const items = await fillNewCodes(buildItems(), requestKey)
       // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
       return draft
-        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note })
-        : createChangeRequest({ items, note })
+        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note, request_key: requestKey })
+        : createChangeRequest({ items, note, request_key: requestKey })
     },
     onSuccess: async (cr) => {
       notify.success(draft ? `草稿 #${cr.id} 已按向导内容更新，请核对后提交` : `已生成草稿 #${cr.id}，请核对后提交`)

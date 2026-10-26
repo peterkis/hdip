@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0021**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0022**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
+- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -827,6 +827,28 @@
 
 ## 其他（未登记说明）
 
+### change_request_write
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `user_id` | bigint | 是 |  | → `app_user` |
+| `request_key` | text | 是 |  |  |
+| `action` | text | 是 |  |  |
+| `change_request_id` | bigint | 是 |  | → `change_request` |
+| `written_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `change_request_write_pkey`（主键）：`PRIMARY KEY (id)`
+- `change_request_write_key_uniq`（唯一）：`UNIQUE (user_id, request_key)`
+- `change_request_write_action_check`（检查）：`CHECK ((action = ANY (ARRAY['create'::text, 'update'::text])))`
+- `change_request_write_key_check`（检查）：`CHECK (((length(request_key) >= 8) AND (length(request_key) <= 100)))`
+
+触发器：
+
+- `change_request_write_guard`：`CREATE TRIGGER change_request_write_guard BEFORE UPDATE ON public.change_request_write FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ### code_reservation
 
 | 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
@@ -1190,6 +1212,7 @@ $function$
 | `campus` | INSERT、SELECT、UPDATE |
 | `campus_version` | INSERT、SELECT、UPDATE |
 | `change_request` | INSERT、SELECT、UPDATE |
+| `change_request_write` | INSERT、SELECT、UPDATE |
 | `classification_code` | INSERT、SELECT、UPDATE |
 | `classification_scheme` | INSERT、SELECT、UPDATE |
 | `code_namespace` | INSERT、SELECT、UPDATE |

@@ -484,6 +484,20 @@ class CodeReservation(Base):
     reserved_by: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
 
 
+class ChangeRequestWrite(Base):
+    """带请求键的草稿写入登记（迁移 0022）；只追加。同一用户同一请求键只登记一次。"""
+
+    __tablename__ = "change_request_write"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("app_user.id"))
+    request_key: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(Text)
+    change_request_id: Mapped[int] = mapped_column(ForeignKey("change_request.id"))
+    written_at: Mapped[datetime] = mapped_column(server_default=NOW)
+
+
 # ------------------------------------------------------------------ 人员（迁移 0016）
 class Person(_Identity, Base):
     """人员身份：代码 P + 6 位数字，系统分配、永不复用。姓名在 PersonVersion。"""

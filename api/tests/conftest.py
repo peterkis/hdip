@@ -35,7 +35,8 @@ BUSINESS_TABLES = (
     "department_hierarchy, department_relation, "
     "department_alias, department_classification, department_institution, department_version, "
     "department, "
-    "operator_relation, campus_version, campus, institution_version, institution, change_request, "
+    "operator_relation, campus_version, campus, institution_version, institution, "
+    "change_request_write, change_request, "
     "code_reservation"
 )
 CODE_SEQUENCES = (

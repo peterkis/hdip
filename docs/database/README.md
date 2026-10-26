@@ -51,7 +51,7 @@ erDiagram
 | 分组 | 表 | 说明 |
 | --- | --- | --- |
 | 配置 | `app_user`、`option_item`、`approval_rule` | 用户与角色、选项码值、确认规则。只由迁移维护，不经变更申请 |
-| 申请 | `change_request` | 唯一写入入口 |
+| 申请 | `change_request`、`change_request_write` | 唯一写入入口；带请求键的草稿写入登记（只追加，迁移 0022，见第 3.2 节） |
 | 代码分配 | `code_reservation`；序列 `campus_code_seq`、`department_code_seq`、`service_unit_code_seq`、`person_code_seq` | 系统发出的院区 / 部门 / 服务单元 / 人员代码，只追加、不可修改（迁移 0015、0016，见第 3.1 节） |
 | 主体与院区 | `institution` / `institution_version`、`campus` / `campus_version`、`operator_relation` | 身份 + 版本；关系自带期间 |
 | 部门 | `department` / `department_version`、`department_alias`、`department_classification`、`department_institution` | 身份 + 属性版本；别名、分类赋值、主体归属自带期间（D1，迁移 0006） |
@@ -147,6 +147,14 @@ stateDiagram-v2
 - 预留只登记“这个号已经发出”，不改主数据，所以不经变更申请；对象本身仍经申请新建。
 - 脚本数据（走查库、样例导入）先用可读的临时代码，写入前由 `codes.issue_for_script` 按固定请求键换成系统代码，重跑拿回同一批号。
 
+### 3.2 草稿写入的请求键（迁移 0022）
+
+- 新建草稿 `POST /api/change-requests`、更新草稿 `PUT /api/change-requests/{id}` 的请求体可带 `request_key`（8–100 字符，选填）。前端每打开一次表单 / 组织变更向导生成一个，重试时不变（与取号用同一个键）。
+- 成功写入时在 `change_request_write` 登记一行（用户、请求键、`create` / `update`、申请、时间），只追加、不可修改（`hdip_guard_update`）；同一用户同一请求键只能登记一次（`change_request_write_key_uniq`）。
+- 同一用户用同一请求键再次新建或更新：不再执行写入，原样返回那张申请当前的内容。网络中断、响应丢失后的重试因此不会再建第二张草稿，也不会把变更项重复追加进已有草稿（“加入已有草稿”是前端读取草稿后整体 PUT，重试时会按已更新的草稿再追加一遍，必须由服务端认键）。
+- 同一请求键已用于另一种操作或另一张申请时返回 409，提示关闭表单后重新打开再保存。校验未通过、整体回滚的写入不登记，改好后用同一个键再保存照常写入。
+- 同一键的并发请求在事务级咨询锁（`hashtext('change_request_write:用户:键')`）上排队。不带请求键时行为与以前一致。
+
 | 对象 | 变更项 kind | 写入的表 |
 | --- | --- | --- |
 | 主体 | `institution.create`、`institution.revise` | `institution`、`institution_version` |
@@ -200,6 +208,7 @@ stateDiagram-v2
 | 0018 | 人员模块 P1.3：确认规则 `person.engagement_set_end`（表结构不变） |
 | 0019 | 人员模块 P3：`person_assignment` 加附加归属 `ADDITIONAL`（同一任用同一部门附加归属不重叠）；`person_duty` 部门职务（部长 / 副部长 × 正式 / 主持工作 / 代管；同一部门同一天正式部长、主持工作者各最多一位，可并存）；选项与确认规则 |
 | 0020 | 人员状态中文名改为“有效任用 / 计划中 / 无效任用”（`option_item.person_relation_status`，码值不变；导出 `relation_status_name` 随之变化） |
+| 0022 | 草稿写入的请求键：`change_request_write`（只追加；用户 + 请求键唯一），新建 / 更新草稿可安全重试（U3.1 遗留 R01-1） |
 | 0021 | A1：`person_duty.basis_note` 任职依据（可空，1–500 字，`person_duty_basis_note_check`）；任命、交接必填由应用层检查，之前的记录为空 |
 
 ### 新增一类对象或变更的检查单

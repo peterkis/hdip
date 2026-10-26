@@ -15,7 +15,7 @@ from hdip_api.core.permissions import (
     can_see_items,
     require_permission,
 )
-from hdip_api.models import ApprovalRule, AppUser, ChangeRequest
+from hdip_api.models import ApprovalRule, AppUser, ChangeRequest, ChangeRequestWrite
 from hdip_api.schemas.items import ITEMS_ADAPTER, ChangeItem, dump_items
 from hdip_api.services.apply import apply_items, dry_run
 from hdip_api.services.masking import hidden_fields, sensitive_values
@@ -135,23 +135,82 @@ def _check_code_holders(s: Session, items: list[dict], self_id: int | None) -> N
 
 
 # ------------------------------------------------------------------ 动作
+def _written_with_key(
+    s: Session, user: AppUser, request_key: str | None, action: str, change_id: int | None = None
+) -> int | None:
+    """同一用户的这个请求键已成功写入过：返回那张申请的 id，调用方不再写入（迁移 0022）。
+
+    同一键的并发请求在事务级咨询锁上排队，后到的看到先到的登记。键已用于另一种操作或另一张申请时拒绝。
+    """
+    if not request_key:
+        return None
+    s.execute(
+        text("SELECT pg_advisory_xact_lock(hashtext(:k))"),
+        {"k": f"change_request_write:{user.id}:{request_key}"},
+    )
+    row = s.scalar(
+        select(ChangeRequestWrite).where(
+            ChangeRequestWrite.user_id == user.id, ChangeRequestWrite.request_key == request_key
+        )
+    )
+    if row is None:
+        return None
+    if row.action != action or (action == "update" and row.change_request_id != change_id):
+        raise BusinessError(
+            f"这次保存的请求键已用于申请 #{row.change_request_id} 的另一次保存，不能再用于这里。"
+            "请关闭表单后重新打开再保存。",
+            409,
+        )
+    return row.change_request_id
+
+
+def _record_write(
+    s: Session, user: AppUser, request_key: str | None, action: str, change_id: int
+) -> None:
+    if request_key:
+        s.add(
+            ChangeRequestWrite(
+                user_id=user.id, request_key=request_key, action=action, change_request_id=change_id
+            )
+        )
+        s.flush()
+
+
 def create_draft(
-    s: Session, user: AppUser, items: list[ChangeItem], note: str | None
+    s: Session,
+    user: AppUser,
+    items: list[ChangeItem],
+    note: str | None,
+    request_key: str | None = None,
 ) -> ChangeRequest:
     require_permission(user, CHANGE_CREATE)
+    # 带请求键的重试：上次已建好，原样返回那张草稿，不再建第二张
+    done = _written_with_key(s, user, request_key, "create")
+    if done is not None:
+        return s.get(ChangeRequest, done)
     dumped = dump_items(items)
     _require_item_permissions(user, dumped)
     _check_code_holders(s, dumped, None)
     cr = ChangeRequest(items=dumped, note=_clean(note), created_by=user.id)
     s.add(cr)
     s.flush()
+    _record_write(s, user, request_key, "create", cr.id)
     return cr
 
 
 def update_draft(
-    s: Session, user: AppUser, change_id: int, items: list[ChangeItem], note: str | None
+    s: Session,
+    user: AppUser,
+    change_id: int,
+    items: list[ChangeItem],
+    note: str | None,
+    request_key: str | None = None,
 ) -> ChangeRequest:
     cr = get_for_update(s, change_id, user)
+    # 带请求键的重试：上次已写入（如已追加变更项），不再写第二次——
+    # 前端重试时可能按已更新的草稿再追加一遍
+    if _written_with_key(s, user, request_key, "update", change_id) is not None:
+        return cr
     _require_status(cr, "draft")
     _require_creator(cr, user)
     # 组织变更是一个整体：含组织变更事件的草稿，不能只留下它的部分变更项（会拆散原子变更）
@@ -173,6 +232,7 @@ def update_draft(
     cr.note = _clean(note)
     cr.updated_at = _now(s)
     s.flush()
+    _record_write(s, user, request_key, "update", cr.id)
     return cr
 
 

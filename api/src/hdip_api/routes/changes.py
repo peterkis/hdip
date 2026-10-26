@@ -77,7 +77,7 @@ def list_changes(
 
 @router.post("", response_model=ChangeRequestOut, operation_id="createChangeRequest")
 def create_change(session: SessionDep, user: CurrentUser, body: ChangeRequestWrite):
-    cr = workflow.create_draft(session, user, body.items, body.note)
+    cr = workflow.create_draft(session, user, body.items, body.note, body.request_key)
     return _done(session, cr.id, user)
 
 
@@ -89,7 +89,7 @@ def get_change(session: SessionDep, user: CurrentUser, change_id: int):
 @router.put("/{change_id}", response_model=ChangeRequestOut, operation_id="updateChangeRequest")
 def update_change(session: SessionDep, user: CurrentUser, change_id: int, body: ChangeRequestWrite):
     with _masked_errors(session, user, change_id):
-        workflow.update_draft(session, user, change_id, body.items, body.note)
+        workflow.update_draft(session, user, change_id, body.items, body.note, body.request_key)
     return _done(session, change_id, user)
 
 
