@@ -258,7 +258,7 @@ export function ItemDialog({
                 <NativeSelectOption value="new">新建一张变更申请</NativeSelectOption>
                 {mine.map((d) => (
                   <NativeSelectOption key={d.id} value={String(d.id)}>
-                    草稿 #{d.id}：{d.item_labels.join('、')}
+                    草稿 #{d.id}：{draftSummary(d.item_labels)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
@@ -294,4 +294,12 @@ export function ItemDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+/** 草稿的变更项概要：同类合并计数（“登记外部代码 ×55”），最多列 3 类，其余写“等 N 类” */
+function draftSummary(labels: string[]): string {
+  const counts = new Map<string, number>()
+  for (const l of labels) counts.set(l, (counts.get(l) ?? 0) + 1)
+  const parts = [...counts].map(([l, n]) => (n > 1 ? `${l} ×${n}` : l))
+  return parts.length > 3 ? `${parts.slice(0, 3).join('、')} 等 ${parts.length} 类` : parts.join('、')
 }

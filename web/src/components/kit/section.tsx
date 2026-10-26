@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 export function Section({ title, action, children }: { title: ReactNode; action?: ReactNode; children: ReactNode }) {
   const spec = useFrame() !== 'legacy'
   return (
-    <section className={cn('grid min-w-0', spec ? 'gap-3' : 'gap-2')}>
+    <section className={cn('grid min-w-0 grid-cols-1', spec ? 'gap-3' : 'gap-2')}>
       <h2 className={cn('text-fg-strong flex flex-wrap items-center gap-2 font-semibold', spec ? 'text-section' : 'text-sm')}>
         {title}
         {action && <span className="ml-auto flex flex-wrap items-center gap-1 text-xs font-normal">{action}</span>}

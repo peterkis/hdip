@@ -350,6 +350,19 @@ const STAGE: Record<Stage, { label: string; tone: Tone }> = {
   todo: { label: '待实施', tone: 'gray' },
 }
 
+/** U3.1 九个阶段的真实验收状态：只写执行过的检查，环境做不了的写未验 */
+const U31_ROWS: { phase: string; behavior: string; visual: string; open: string }[] = [
+  { phase: 'R01 公共表单', behavior: '通过', visual: '1024×768 / 1366×800 浅色；长表单弹窗高度复测', open: '读屏未验' },
+  { phase: 'R02 核对定位与批量', behavior: '通过', visual: '浅 / 深，1366 / 1440 / 1920 / 800', open: '—' },
+  { phase: 'R03 读取状态', behavior: '通过', visual: '浅色；真实 403（无角色身份）', open: '深色下读取状态外观只抽查' },
+  { phase: 'R04 组织变更向导', behavior: '通过', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
+  { phase: 'R05 返回上下文', behavior: '通过', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
+  { phase: 'R06 配色', behavior: '通过', visual: '6 组合计算值 + 截图；真实悬停取样', open: '任意多层叠加、图表渐变未测' },
+  { phase: 'R07 尺度与键盘', behavior: '部分', visual: '1366 / 1920 / 768 / 767；reduce 用规则模拟', open: '系统真实 reduce、原生日历弹层、Windows 缩放' },
+  { phase: 'R08 场景模板', behavior: '通过', visual: '浅色，默认宽度', open: '—' },
+  { phase: 'R09 综合验收', behavior: '部分', visual: '14 页 × 1366 / 1920 × 展开 / 折叠，768 / 767，1040 阈值', open: 'Windows 实机、读屏、手机（范围外）' },
+]
+
 /** 规范里的每条目标在源码中走到了哪一步：只写真实状态，未迁移的页面不算完成 */
 const SPEC_ROWS: { rule: string; target: string; stage: Stage; note: string; sample?: ReactNode }[] = [
   {
@@ -483,6 +496,25 @@ function SpecV1Section() {
           </Row>
         ))}
       </Rows>
+      <SubTitle>U3.1 收尾验收状态（2026-10-26，走查库，内置浏览器）</SubTitle>
+      <Rows head={['阶段', '实现', '行为验证', '视觉 / 环境', '未验与原因']}>
+        {U31_ROWS.map((r) => (
+          <Row key={r.phase}>
+            <Cell className="text-fg-strong font-medium whitespace-nowrap">{r.phase}</Cell>
+            <Cell>
+              <Tag tone="green">已实现</Tag>
+            </Cell>
+            <Cell>
+              <Tag tone={r.behavior === '通过' ? 'green' : 'yellow'}>{r.behavior}</Tag>
+            </Cell>
+            <Cell className="text-fg-secondary">{r.visual}</Cell>
+            <Cell className="text-fg-muted text-caption">{r.open}</Cell>
+          </Row>
+        ))}
+      </Rows>
+      <p className="text-fg-muted text-caption">
+        证据见 docs/剧本走查记录.md 与 docs/design/ui-implementation-plan.md 的 U3R-01～09。375 手机与 44 触控本期不做；Windows 缩放、读屏、系统“减少动效”开关在当前环境无法执行，记为未验，不写通过。
+      </p>
     </Section>
   )
 }
