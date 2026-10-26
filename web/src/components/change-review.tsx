@@ -330,7 +330,7 @@ function ReviewRow({
       ref={ref}
       id={`item-${index}`}
       tabIndex={-1}
-      className="focus:ring-ring/40 grid scroll-mt-6 gap-2 rounded-lg outline-none focus:ring-2"
+      className="focus:outline-(--hd-focus-ring) grid scroll-mt-6 gap-2 rounded-lg outline-none focus:outline-2 focus:outline-solid focus:outline-offset-2"
     >
       <div className={cn('flex flex-wrap items-center gap-x-2.5 gap-y-2 rounded-lg px-3 py-2.5 text-xs', problems.length > 0 && 'bg-danger-soft/50')}>
         {view ? view.parts.map((part, k) => <RowPart key={k} kind={part.kind} text={part.text} tone={part.tone ?? undefined} />) : <span className="text-fg">{cr.item_summaries?.[index]}</span>}

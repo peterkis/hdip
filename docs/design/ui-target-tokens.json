@@ -182,5 +182,55 @@
     "existing_group_review_gate",
     "no_individual_item_removal",
     "no_new_HR_qualification_or_clinical_authorization_scope"
-  ]
+  ],
+  "color_roles": {
+    "status": "已接入（2026-10-26，U3R-06），浏览器实测见 docs/剧本走查记录.md",
+    "source": "执行包 HDIP-U3.1-Prompt-Pack reference/COLOR-DECISION.md；本检查单不在运行时导入",
+    "unchanged": [
+      "原始色阶",
+      "surface-*",
+      "border-subtle/default/strong",
+      "text-strong/primary/disabled",
+      "主按钮 18 组",
+      "标签 20 组",
+      "chart-*",
+      "lib/tones.ts"
+    ],
+    "light": {
+      "--hd-text-secondary": "var(--hd-gray-600) #615d59",
+      "--hd-text-muted": "var(--hd-alpha-black-600) #00000096",
+      "--hd-text-placeholder": "var(--hd-text-muted)",
+      "--hd-border-input": "#7f7b75",
+      "--hd-surface-input": "var(--hd-white)",
+      "--hd-accent-text": "blue-700（蓝）/ purple-600（紫，不变）/ teal-700（青）",
+      "--hd-danger-text": "var(--hd-red-700) #b01601",
+      "--hd-warning-text": "var(--hd-orange-700) #ab4a00"
+    },
+    "dark": {
+      "--hd-text-muted": "#ffffff99",
+      "--hd-text-placeholder": "var(--hd-text-muted)",
+      "--hd-border-input": "#99958f",
+      "--hd-surface-input": "var(--hd-gray-850) #202020",
+      "--hd-accent-text": "不变（blue-400 / purple-300 / teal-300）",
+      "--hd-danger-text": "不变 red-300",
+      "--hd-warning-text": "不变 orange-300"
+    },
+    "bridges": {
+      "--color-fg-placeholder": "var(--hd-text-placeholder)",
+      "--color-input-bg": "var(--hd-surface-input)",
+      "--input": "var(--hd-border-input)"
+    },
+    "focus": {
+      "width_px": 2,
+      "offset_px": 2,
+      "color": "var(--hd-focus-ring)",
+      "note": "实色 outline；复合控件在可见外层（has-focus-visible / focus-within）；带 outline-none 的组件须写 outline-solid"
+    },
+    "min_ratio": {
+      "text": 4.5,
+      "control_boundary": 3,
+      "focus": 3,
+      "decorative_divider": null
+    }
+  }
 }

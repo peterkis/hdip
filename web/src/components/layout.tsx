@@ -399,7 +399,7 @@ function AsOfPicker() {
       )}
       <label
         className={cn(
-          'hover:bg-surface-hover flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
+          'hover:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) flex h-(--hd-control-height) items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast)',
           // 不是今天时用黄色高亮（Notion 的标注色），提醒正在看另一天的数据
           !isToday && 'bg-tag-yellow-bg text-tag-yellow-text hover:bg-tag-yellow-bg',
         )}

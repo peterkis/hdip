@@ -145,7 +145,7 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
                 <DbCell>{r.source_name ?? <span className="text-fg-disabled">—</span>}</DbCell>
                 <DbCell className="py-1.5">
                   {(r.suggestions ?? []).length === 0 ? (
-                    <span className="text-fg-disabled">没有候选，可用“统一解释”处理</span>
+                    <span className="text-fg-muted">没有候选，可用“统一解释”处理</span>
                   ) : (
                     <span className="flex flex-wrap items-center gap-1.5">
                       {(r.suggestions ?? []).map((s) => {

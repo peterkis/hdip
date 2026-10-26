@@ -234,6 +234,30 @@ W3C 中文排版需求作为中文标点和混排的研究依据；具体字号�
 - 弹层与悬浮操作条使用现有轻投影；静态列表不悬浮。
 - 选中、焦点、错误三种状态不能只靠同一种边框深浅区分。
 
+### 4.5 文字、输入、焦点与危险操作的语义角色（2026-10-26，U3R-06 接入）
+
+依据执行包 `COLOR-DECISION.md`（只作审查证据，运行时不导入其 JSON / HTML）。原始色阶、主按钮 18 组、标签 20 组、图表色与 `lib/tones.ts` 不变；营销资料只是参考，**当前语义令牌为准**。
+
+| 角色 | 浅色 | 深色 | 消费 |
+| --- | --- | --- | --- |
+| `--hd-text-secondary` | `gray-600` `#615d59`（原 alpha-black-600） | 不变 `#ffffffbf` | 说明、属性名、范围 |
+| `--hd-text-muted` | `alpha-black-600` `#00000096`（原 500） | `#ffffff99`（原 alpha-white-500） | 表头、代码、时间、辅助说明、关系图副标题 |
+| `--hd-text-placeholder`（新） | 同 muted | 同 muted | `placeholder:text-fg-placeholder`：Input、Textarea、NativeSelect、TagInput、SearchBox |
+| `--hd-text-disabled` | 不变 | 不变 | **只给真正禁用的控件**与纯装饰符号（箭头、分隔符）；占位、空态、指引、未来 / 撤销事件、有含义的 0 与“—”不用它 |
+| `--hd-border-input`（新） | `#7f7b75` | `#99958f` | `--input` 桥接到它：输入、选择、标签输入的边界（对输入底与弹窗 ≥3:1）；装饰分隔线、卡片、次级按钮仍用 line / line-subtle |
+| `--hd-surface-input`（新） | white | `gray-850` `#202020` | `bg-input-bg`：输入填充；不再用 `bg-input/20`（边框色的透明度） |
+| `--hd-accent-text` | 蓝 `blue-700`、青 `teal-700`，紫保持 600 | 三色都不变 | 激活筛选、当前步骤、链接 |
+| `--hd-danger-text` | `red-700` `#b01601` | 不变 | FieldError、字段说明里的错误、危险按钮 / Badge / Alert / 菜单项文字 |
+| `--hd-warning-text` | `orange-700` `#ab4a00` | 不变 | 提醒文字 |
+
+**焦点**：键盘焦点统一为 2px 实色轮廓、外移 2px，颜色取 `--hd-focus-ring`（色值不变）。`index.css` 基础层给 `a[href]`、`button`、`summary`、可 Tab 的元素一条通用规则；组件自己的焦点类优先。基类带 `outline-none` 的组件必须同时写 `outline-solid`（否则 Tailwind 的轮廓样式变量是 none，轮廓不出现）。透明的原生 select / 输入在**可见外层**显示：筛选胶囊、搜索框、顶栏查看日期用 `has-focus-visible:`，标签输入用 `focus-within:`。焦点不替换错误红边（输入的 `focus-visible:border-ring` 已去掉）。滚动容器要给轮廓留出 ≥4px（表单弹窗字段区为 `-m-1 p-1.5`）。2px 是本项目的选择，不宣称为 AA 硬性尺寸。
+
+**危险操作**：Button / Badge `destructive` = `bg-danger-soft text-danger-text`，悬停 / 按下 `bg-tag-red-bg`；Alert `destructive` = danger-soft 底 + danger-text，说明不再 `/90`；菜单 destructive 项文字与图标 danger-text、键盘高亮 danger-soft。`--destructive` 仍是强调红，只用于边界与几何（如错误输入的红边）。
+
+**非输入组件不跟着输入边界变深**：Button outline 透明底、悬停 `bg-surface-hover`；Badge outline 透明；Tabs 深色激活 `bg-surface-subtle border-line`；Field 可选卡片悬停 `bg-surface-hover`；NativeSelect 悬停 `bg-surface-subtle`。
+
+**实测（浏览器计算值，先合成透明度再算）**：浅 / 深表头 muted 5.36 / 6.06；弹窗提示 5.49 / 6.43；关系图卡片副标题 ≥5.38 / 6.43；搜索与输入占位 5.49 / 6.68～6.97；输入边界对输入底 4.21 / 5.47、对弹窗 4.21 / 5.15；错误说明 7.09 / 6.74；危险按钮默认 6.52 / 6.81、悬停按下 5.19 / 5.18；激活筛选 6.41～7.62；当前步骤最低 4.91（深色蓝）；“我已核对” 4.56 / 7.31；焦点轮廓对外侧背景 4.19～9.95。主按钮 18 组与标签（最低 6.30）与改动前相同。
+
 ## 5. R-ROW 连续行与表格
 
 ### 5.1 三类记录布局

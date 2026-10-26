@@ -25,7 +25,7 @@ export function DbToolbar({ children, right }: { children?: ReactNode; right?: R
 }
 
 const pill =
-  'relative inline-flex h-(--hd-control-height) items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast)'
+  'relative inline-flex h-(--hd-control-height) items-center gap-1 rounded-full border px-2.5 text-xs whitespace-nowrap transition-colors duration-(--hd-duration-fast) has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring)'
 const pillIdle = 'border-line text-fg-secondary hover:bg-surface-hover'
 const pillActive = 'border-transparent bg-brand-muted text-brand-text hover:bg-brand-soft'
 
@@ -119,11 +119,11 @@ export function ToggleChip({ label, checked, onChange }: { label: string; checke
 
 export function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label className="hover:bg-surface-hover focus-within:bg-surface-hover flex h-(--hd-control-height) min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
+    <label className="hover:bg-surface-hover focus-within:bg-surface-hover has-focus-visible:outline-2 has-focus-visible:outline-solid has-focus-visible:outline-offset-2 has-focus-visible:outline-(--hd-focus-ring) flex h-(--hd-control-height) min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 transition-colors duration-(--hd-duration-fast) sm:flex-none">
       <Icon icon={Search01Icon} className="text-fg-muted size-4" strokeWidth={1.75} />
       <input
         type="search"
-        className="placeholder:text-fg-disabled w-full min-w-0 bg-transparent text-xs outline-none sm:w-40"
+        className="placeholder:text-fg-placeholder w-full min-w-0 bg-transparent text-xs outline-none sm:w-40"
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}

@@ -104,7 +104,7 @@ export function ReadError({
         </Button>
       )}
       {back && (
-        <Button variant="outline" size="sm" render={<Link to={back.to} />}>
+        <Button variant="outline" size="sm" nativeButton={false} render={<Link to={back.to} />}>
           {back.label}
         </Button>
       )}

@@ -16,7 +16,7 @@ export function ExternalCodeLinks({
   empty: string
   showUnit?: boolean
 }) {
-  if (rows.length === 0) return <p className="text-fg-disabled text-xs">{empty}</p>
+  if (rows.length === 0) return <p className="text-fg-muted text-xs">{empty}</p>
   return (
     <DbTable
       columns={[

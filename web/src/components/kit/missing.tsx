@@ -15,7 +15,7 @@ type Back = { to: string; label: string }
 function BackButton({ back }: { back: Back }) {
   const to = useListHref(back.to)
   return (
-    <Button variant="outline" size="sm" render={<Link to={to} />}>
+    <Button variant="outline" size="sm" nativeButton={false} render={<Link to={to} />}>
       {back.label}
     </Button>
   )

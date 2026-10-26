@@ -62,6 +62,8 @@
   --color-fg-secondary: var(--hd-text-secondary);
   --color-fg-muted: var(--hd-text-muted);
   --color-fg-disabled: var(--hd-text-disabled);
+  --color-fg-placeholder: var(--hd-text-placeholder);
+  --color-input-bg: var(--hd-surface-input);
   --color-fg-on-brand: var(--hd-text-on-accent);
   --color-surface-page: var(--hd-surface-page);
   --color-surface-sidebar: var(--hd-surface-sidebar);
@@ -162,7 +164,7 @@
   --accent-foreground: var(--hd-text-primary);
   --destructive: var(--hd-danger);
   --border: var(--hd-border-subtle);
-  --input: var(--hd-border-default);
+  --input: var(--hd-border-input); /* 只作输入类控件的边界；填充用 bg-input-bg（U3R-06） */
   --ring: var(--hd-focus-ring);
   --chart-1: var(--hd-tag-blue-text);
   --chart-2: var(--hd-tag-green-text);
@@ -183,6 +185,12 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+  }
+  /* 公共键盘焦点（U3R-06）：2px 实色轮廓、外移 2px，颜色取 --hd-focus-ring；
+     组件自己写了焦点样式（工具类优先级更高）时以组件为准，复合控件在可见外层用 has-focus-visible / focus-within */
+  :where(a[href], button, summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--hd-focus-ring);
+    outline-offset: 2px;
   }
   html {
     color-scheme: light;

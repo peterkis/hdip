@@ -496,7 +496,7 @@ export function DepartmentReorgWizard({
             disabled={pending}
             onInput={markDirty}
             onChange={markDirty}
-            className="grid max-h-[58vh] min-w-0 gap-3 overflow-y-auto px-0.5 pb-0.5"
+            className="-m-1 grid max-h-[58vh] min-w-0 gap-3 overflow-y-auto p-1.5"
           >
             {step === 0 && (
               <>

@@ -49,7 +49,7 @@ export function TagInput({
   return (
     <Field>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <div className="border-input bg-input/20 focus-within:border-ring focus-within:ring-ring/30 flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 focus-within:ring-2">
+      <div className="border-input bg-input-bg focus-within:outline-2 focus-within:outline-solid focus-within:outline-offset-2 focus-within:outline-(--hd-focus-ring) flex min-h-(--hd-control-height) flex-wrap items-center gap-1 rounded-md border px-1.5 py-1 ">
         {value.map((t) => (
           <Tag key={t} tone="gray" className="gap-1 pr-0.5">
             {t}
@@ -66,7 +66,7 @@ export function TagInput({
         <input
           id={id}
           list={suggestions.length ? `${id}-list` : undefined}
-          className="placeholder:text-fg-disabled min-w-24 flex-1 bg-transparent text-xs outline-none"
+          className="placeholder:text-fg-placeholder min-w-24 flex-1 bg-transparent text-xs outline-none"
           placeholder={value.length ? '' : placeholder}
           value={text}
           onChange={(e) => setText(e.target.value)}

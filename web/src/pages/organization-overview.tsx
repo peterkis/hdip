@@ -643,7 +643,7 @@ function CodesView({
                               {n}
                             </Link>
                           ) : (
-                            <span className="text-fg-disabled">0</span>
+                            <span className="text-fg-muted">0</span>
                           )}
                         </td>
                       )

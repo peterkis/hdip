@@ -532,3 +532,17 @@ U3.1 收尾的第一阶段（任务包 `docs/refer/HDIP-U3.1-Prompt-Pack-v1.0-20
 8. **走查**：AC-0501～0507 在走查库执行（内置浏览器 1024×768，浅色），详见 `docs/剧本走查记录.md`。为 AC-0503 / 0505 经正常申请流程登记了合成数据（#25 两百条病区代码、#26 / #27 两名合成人员）。
 9. **未执行 / 限制**：走查库部门树只有一级 + 二级，“树展开至少两层”只验到一层子级；主体、院区列表行数少、页面不滚动，只验了焦点；没有“当前 + 已结束 + 撤销”混在一人的样例（验了当前 + 已结束、仅撤销）；深色、其他宽度、Windows 缩放、读屏未执行。内置浏览器面板不绘制时 `requestAnimationFrame` 暂停，恢复动作在下一次绘制时才执行（环境现象，截图后即生效）。
 10. **下一阶段**：U3R-06 配色（未开始）。
+
+### U3R-06 工作台配色：真实背景对比与消费迁移（2026-10-26，main）
+
+任务包 `prompts/U3R-06.md`，对应审查 S7、V9、A21。按执行包 `COLOR-DECISION.md` 的确定表执行，未另提方案。
+
+1. **基线**：开始于 `1fa8405`，工作区干净。开始时问题都还在：`--input` 同时作边框与填充（`bg-input/20`）；搜索与标签输入的占位用 `text-fg-disabled`；危险按钮 / Badge / Alert / 菜单 / FieldError 用强调红 `text-destructive`；浅色蓝 / 青强调文字、危险与提醒文字用 600；深色 muted 在表头、弹窗上不足 4.5；焦点是 `/30` 浅环。
+2. **令牌**（`styles/tokens.css`，原始色阶不动）：浅色 secondary → gray-600，muted → alpha-black-600，accent-text 蓝 / 青 → 700，danger-text、warning-text → 700；深色 muted → `#ffffff99`；新增 `--hd-text-placeholder`、`--hd-border-input`、`--hd-surface-input`（浅 / 深）。`index.css` 新增 `--color-fg-placeholder`、`--color-input-bg`，`--input` 改指输入边界；基础层加通用键盘焦点（2px 实色、外移 2px）。紫色与深色三色的强调覆写保持原值。
+3. **消费迁移（同一批）**：Input / Textarea / NativeSelect / TagInput 填充 `bg-input-bg`、占位 `text-fg-placeholder`、焦点改实色轮廓且不替换错误红边、去掉深色错误边 `/50`；NativeSelect 悬停 subtle；Button outline 透明底 + surface-hover，destructive 改 danger-soft / danger-text / tag-red-bg；Badge outline 去填充、destructive 同按钮；Alert destructive danger-soft + danger-text（说明不再 `/90`）；菜单 destructive 项 danger-text、高亮 danger-soft；Tabs 深色激活 subtle + line；Field 错误与可选卡片；SearchBox、筛选胶囊、顶栏查看日期在可见外层 `has-focus-visible`，TagInput 外层 `focus-within`；行内动作、核对组定位焦点改实色轮廓。事实文字不再借 disabled：时间线未来 / 撤销事件、外部编码空态、批量裁决“没有候选”、矩阵“—”、总览 0、跳过的步骤改 muted；装饰箭头与分隔符保留 disabled。
+4. **走查中发现并修复**：(a) 基类 `outline-none` 让 `outline-2` 不显示（实测 outline-style none），补 `outline-solid`；(b) 行内链接只有浏览器默认 1px 环（约 2.06:1），加通用焦点规则；(c) 表单弹窗字段区只留 2px 边距，焦点轮廓左缘被裁，改为 `-m-1 p-1.5`（内容位置不变）；(d) `missing.tsx` / `read-state.tsx` 的“返回”按钮渲染成链接时缺 `nativeButton={false}`，Base UI 报警告，已补。
+5. **`/design`**：语义颜色表补 placeholder、input 边界与填充、danger / warning 文字，焦点写明 2px 实色；“按钮与输入”补真实的筛选胶囊、开关、搜索框、标签输入、危险按钮与 Badge、危险 Alert、三种表面上的辅助文字。
+6. **计算与实测**：执行包 `tools/check_color_contrast.py` 复算 450 对通过（最低：控件边界 3.07、焦点 3.33、文字 4.54，都在压力背景上）。浏览器实测（先合成透明度再算，6 组合）见 `ui-tokens.md` R-COL 4.5 与走查记录。
+7. **检查**：`npm --prefix web run build` 通过；`make check` 通过。后端未改，未跑 pytest。
+8. **未执行**：Windows 缩放、其他宽度、读屏；DropdownMenu 危险项与 Tabs 在应用页面里没有使用，只在 `/design` 与代码层面核对（菜单项未实测）；hover / pressed 用令牌值替换背景后计算，不是真实鼠标悬停取样；未测任意嵌套叠层与图表渐变。
+9. **下一阶段**：U3R-07 公共尺度与交互（未开始）。

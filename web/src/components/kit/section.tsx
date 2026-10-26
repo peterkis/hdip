@@ -20,7 +20,7 @@ export function Section({ title, action, children }: { title: ReactNode; action?
 }
 
 const INLINE =
-  'hover:bg-surface-hover focus-visible:ring-ring/30 -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none focus-visible:ring-2'
+  'hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-offset-2 focus-visible:outline-(--hd-focus-ring) -my-1 ml-1 inline-flex h-(--hd-control-height-sm) items-center rounded-md px-2 align-middle text-xs outline-none'
 
 /** 属性值旁、区块标题旁的轻量操作；danger 用于低频且后果重的动作（如永久退出），仍只打开原表单 */
 export function InlineAction({

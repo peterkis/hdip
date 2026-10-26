@@ -88,7 +88,7 @@ export function Timeline({ events, asOf, order = 'asc' }: { events: TimelineEven
                 className={cn('absolute top-1 left-0 size-3.5 rounded-full', muted ? 'bg-line-strong' : 'bg-brand')}
               />
               <div className="flex items-baseline gap-3">
-                <span className={cn('text-xs tabular-nums', muted ? 'text-fg-disabled' : 'text-fg-muted')}>{e.date}</span>
+                <span className="text-fg-muted text-xs tabular-nums">{e.date}</span>
                 {e.changeId && (
                   <Link
                     to={`/changes/${e.changeId}`}
@@ -101,7 +101,7 @@ export function Timeline({ events, asOf, order = 'asc' }: { events: TimelineEven
               <div className={cn('text-xs font-semibold', muted ? 'text-fg-muted' : 'text-fg-strong', e.void && 'line-through')}>
                 {e.title}
               </div>
-              {e.detail && <div className={cn('text-caption', muted ? 'text-fg-disabled' : 'text-fg-secondary')}>{e.detail}</div>}
+              {e.detail && <div className={cn('text-caption', muted ? 'text-fg-muted' : 'text-fg-secondary')}>{e.detail}</div>}
             </li>
           )
         })}

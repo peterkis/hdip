@@ -32,6 +32,9 @@ import { Link } from 'react-router'
 import { Callout } from '@/components/kit/callout'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag, TONES, type Tone } from '@/components/kit/tag'
+import { DbToolbar, FilterPill, SearchBox, ToggleChip } from '@/components/kit/database'
+import { TagInput } from '@/components/kit/tag-input'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -490,7 +493,8 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-text-primary', cls: 'text-fg', use: '正文（默认）', text: true },
       { token: '--hd-text-secondary', cls: 'text-fg-secondary', use: '说明、侧栏', text: true },
       { token: '--hd-text-muted', cls: 'text-fg-muted', use: '属性名、表头、提示', text: true },
-      { token: '--hd-text-disabled', cls: 'text-fg-disabled', use: '禁用、占位', text: true },
+      { token: '--hd-text-placeholder', cls: 'placeholder:text-fg-placeholder', use: '输入与搜索的占位提示（同 muted 的值，独立角色）', text: true },
+      { token: '--hd-text-disabled', cls: 'text-fg-disabled', use: '只给真正禁用的控件；占位、空态、事实文字不用它', text: true },
     ],
   },
   {
@@ -502,13 +506,15 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-surface-subtle', cls: 'bg-surface-subtle', use: '次级块、代码、只读区' },
       { token: '--hd-surface-hover', cls: 'bg-surface-hover', use: '悬停（叠加）' },
       { token: '--hd-surface-selected', cls: 'bg-surface-selected', use: '选中的导航项' },
+      { token: '--hd-surface-input', cls: 'bg-input-bg', use: '输入、选择、标签输入的底色' },
     ],
   },
   {
     title: '边框',
     items: [
       { token: '--hd-border-subtle', cls: 'border-line-subtle', use: '分隔线、表格线' },
-      { token: '--hd-border-default', cls: 'border-line', use: '输入框、卡片' },
+      { token: '--hd-border-default', cls: 'border-line', use: '卡片、容器、次级按钮' },
+      { token: '--hd-border-input', cls: 'border-input', use: '可填写区域的边界（对输入底 ≥3:1）' },
       { token: '--hd-border-strong', cls: 'border-line-strong', use: '强调的分隔' },
     ],
   },
@@ -520,14 +526,16 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-accent-soft', cls: 'bg-brand-soft', use: '选中底色' },
       { token: '--hd-accent-muted', cls: 'bg-brand-muted', use: '极浅强调底色' },
       { token: '--hd-accent-text', cls: 'text-brand-text', use: '链接', text: true },
-      { token: '--hd-focus-ring', cls: 'ring-ring', use: '焦点环' },
+      { token: '--hd-focus-ring', cls: 'outline-(--hd-focus-ring)', use: '键盘焦点：2px 实色轮廓、外移 2px' },
     ],
   },
   {
     title: '反馈',
     items: [
       { token: '--hd-danger', cls: 'bg-danger', use: '危险操作' },
-      { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底' },
+      { token: '--hd-danger-text', cls: 'text-danger-text', use: '错误说明、危险按钮文字', text: true },
+      { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底、危险按钮底' },
+      { token: '--hd-warning-text', cls: 'text-warning-text', use: '提醒文字', text: true },
       { token: '--hd-warning-soft', cls: 'bg-warning-soft', use: '警告提示底' },
       { token: '--hd-success-soft', cls: 'bg-success-soft', use: '成功提示底' },
       { token: '--hd-info-soft', cls: 'bg-info-soft', use: '说明提示底' },
@@ -574,6 +582,29 @@ function ColorSection() {
         </div>
       ))}
     </Section>
+  )
+}
+
+function DesignToolbar() {
+  const [pill, setPill] = useState('ACTIVE')
+  const [chip, setChip] = useState(true)
+  const [q, setQ] = useState('')
+  const [tags, setTags] = useState<string[]>(['门诊'])
+  return (
+    <div className="grid gap-3">
+      <DbToolbar right={<SearchBox value={q} onChange={setQ} placeholder="名称、拼音码或代码" />}>
+        <FilterPill
+          label="生命周期"
+          value={pill}
+          onChange={setPill}
+          options={Object.entries(DEPARTMENT_LIFECYCLE).map(([value, label]) => ({ value, label }))}
+        />
+        <ToggleChip label="含计划中" checked={chip} onChange={setChip} />
+      </DbToolbar>
+      <div className="max-w-sm">
+        <TagInput label="承担职责" value={tags} onChange={setTags} />
+      </div>
+    </div>
   )
 }
 
@@ -819,6 +850,40 @@ function ControlsSection() {
           <FieldLabel htmlFor="d-note">变更说明</FieldLabel>
           <Textarea id="d-note" placeholder="为什么做这次变更（可选）" />
         </Field>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>工具栏控件（键盘 Tab 进入看焦点轮廓）</SubTitle>
+        <DesignToolbar />
+        <p className="text-fg-muted text-caption">
+          占位提示用 placeholder 角色，不借 disabled；透明的筛选胶囊、搜索框、标签输入在可见外层显示焦点。
+        </p>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>危险操作与错误</SubTitle>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="destructive">放弃并关闭</Button>
+          <Badge variant="destructive">2 处问题</Badge>
+        </div>
+        <Alert variant="destructive">
+          <AlertTitle>退回申请需要写明原因</AlertTitle>
+          <AlertDescription>说明不再额外淡化，与标题同为危险文字色。</AlertDescription>
+        </Alert>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>辅助文字在不同表面上</SubTitle>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {[
+            ['bg-surface-page', '页面'],
+            ['bg-surface-subtle', '表头、只读区'],
+            ['bg-surface-raised', '弹窗、关系图节点'],
+          ].map(([bg, name]) => (
+            <div key={bg} className={cn('border-line-subtle grid gap-0.5 rounded-md border px-3 py-2', bg)}>
+              <span className="text-fg text-xs">{name}</span>
+              <span className="text-fg-secondary text-caption">次要说明 secondary</span>
+              <span className="text-fg-muted font-mono text-caption">D000012 · muted</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="grid gap-2">
         <SubTitle>选项卡</SubTitle>

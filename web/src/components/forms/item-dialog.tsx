@@ -239,7 +239,7 @@ export function ItemDialog({
             <FormErrorsContext.Provider value={errorsCtx}>
               <DraftItemsContext.Provider value={draftItems}>
                 {/* 保存中整组停用（含自定义按钮），免得改了的内容随成功跳转丢失 */}
-                <fieldset disabled={pending} className="grid max-h-[60vh] min-w-0 gap-3 overflow-y-auto px-0.5 pb-0.5">
+                <fieldset disabled={pending} className="-m-1 grid max-h-[60vh] min-w-0 gap-3 overflow-y-auto p-1.5">
                   {children}
                 </fieldset>
               </DraftItemsContext.Provider>
