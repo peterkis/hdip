@@ -312,11 +312,14 @@ export function ChangeDetailPage() {
   const clearFocus = () => setView((v) => (v.focus ? { ...v, focus: null } : v))
   useCrumb(Number.isInteger(id) ? `#${id}` : '地址无效')
   const [note, setNote] = useState('')
-  const [noteFor, setNoteFor] = useState<number | null>(null)
-  if (cr && noteFor !== cr.id) {
-    // 换到另一张申请时，用它保存的说明重置输入框
-    setNoteFor(cr.id)
-    setNote(cr.note ?? '')
+  // 说明输入框的基准：载入它时的申请、说明与版本。保存说明以这个版本为前提（PR #1 评审）——
+  // 页面刷新会带来新版本号，但输入框里是基于旧版本的编辑，不能用新版本号放行。
+  // 换到另一张申请时重置；没改过说明时跟随刷新同步到最新内容与版本
+  const [noteBase, setNoteBase] = useState<{ id: number; note: string; version: string } | null>(null)
+  if (cr && (noteBase?.id !== cr.id || (note === noteBase.note && cr.updated_at !== noteBase.version))) {
+    const text = cr.note ?? ''
+    setNoteBase({ id: cr.id, note: text, version: cr.updated_at })
+    setNote(text)
   }
 
   const action = useMutation({
@@ -348,7 +351,7 @@ export function ChangeDetailPage() {
       onClick={() =>
         run(async () => {
           // 填了说明却没点“保存说明”就提交时，先把说明存上，免得丢失
-          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: cr.updated_at })
+          if (noteDirty) await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
           return submitChangeRequest(id)
         }, `申请 #${id} 已提交，等待确认`)
       }
@@ -368,7 +371,12 @@ export function ChangeDetailPage() {
   const noteDirty = (note.trim() || null) !== (cr.note ?? null)
   // 带读取时的 updated_at：草稿此后在别处被改过，服务端拒绝（412），不用页面上的旧变更项覆盖
   const saveNote = () =>
-    run(() => updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: cr.updated_at }), '变更说明已保存')
+    run(async () => {
+      const next = await updateChangeRequest(id, { items: cr.items, note: note.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
+      // 自己保存成功后，基准前移到这次写入的版本，下一次保存不被自己的修改挡住
+      setNoteBase({ id, note, version: next.updated_at })
+      return next
+    }, '变更说明已保存')
 
   // 统一规范 SC-03：页头（编号、状态、动作）→ 处理步骤 → 阻塞信息（问题、权限、隐去说明）→ 变更说明 → 逐组核对 + 目录 → 结束提醒。
   // 净内容宽 ≥1040 时目录在右侧（200px），更窄时在上方并可展开

@@ -149,6 +149,10 @@ export function DepartmentReorgWizard({
   draft?: ReorgDraft
 }) {
   const [init] = useState(() => fromDraft(draft, source))
+  // 本次打开时的草稿快照：编辑内容由它初始化，保存时的版本前提与说明也只取它（PR #1 评审）。
+  // 申请页会把刷新后的草稿继续传进来，但向导不会重新载入内容，若改用刷新后的版本号，
+  // 旧内容就能带着新版本通过 412 检查、覆盖另一标签页的修改
+  const [base] = useState(() => (draft ? { id: draft.id, note: draft.note, updated_at: draft.updated_at } : null))
   const { asOf } = useApp()
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -435,8 +439,8 @@ export function DepartmentReorgWizard({
       const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
       const items = await fillNewCodes(buildItems(), requestKey)
       // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
-      return draft
-        ? updateChangeRequest(draft.id, { items, note: draft.note ?? note, request_key: requestKey, expected_updated_at: draft.updated_at })
+      return base
+        ? updateChangeRequest(base.id, { items, note: base.note ?? note, request_key: requestKey, expected_updated_at: base.updated_at })
         : createChangeRequest({ items, note, request_key: requestKey })
     },
     onSuccess: async (cr) => {
