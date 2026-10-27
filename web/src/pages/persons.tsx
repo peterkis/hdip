@@ -250,7 +250,9 @@ export function PersonsPage() {
             return items.map((e, i) => (
               <DbRow
                 key={`${r.id}-${e?.id ?? 'none'}`}
-                returnId={i === 0 ? r.id : undefined}
+                // 每条子行都能从部门链接离开，各用自己的返回标识（审查 F09）：首行沿用人员 id（姓名在首行），
+                // 其余为“人员-任用”，返回时焦点回到实际点的那个链接
+                returnId={i === 0 ? r.id : `${r.id}-${e?.id ?? 'none'}`}
                 className={cn(i < items.length - 1 && 'border-b-0', e?.not_yet_effective && 'text-fg-muted')}
               >
                 {i === 0 && (
@@ -294,8 +296,9 @@ export function PersonsPage() {
                     <DbCell className="text-fg-secondary whitespace-nowrap tabular-nums">{period(e.valid_from, e.valid_to)}</DbCell>
                   </>
                 ) : (
+                  // 名册的任用是按当前视角过滤过的（已撤销的不列），空不等于从未任用（审查 F10）
                   <DbCell className="text-fg-muted" colSpan={4}>
-                    没有任用记录
+                    当前名册范围没有任用明细，历史请进入详情查看
                   </DbCell>
                 )}
               </DbRow>
@@ -349,7 +352,7 @@ export function PersonDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { can } = useMe()
-  const query = useGetPerson(id, { as_of: asOf })
+  const query = useGetPerson(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const { data } = query
   const [engaging, setEngaging] = useState(false)
   const [dialog, setDialog] = useState<PersonDialog | null>(null)
@@ -400,6 +403,7 @@ export function PersonDetailPage() {
           )
         }
       />
+      <StaleNotice what="这个人员" query={query} />
       <PropertyList
         items={[
           { label: '状态', value: <Tag tone={PERSON_STATUS_TONE[data.status]}>{PERSON_STATUS[data.status]}</Tag> },

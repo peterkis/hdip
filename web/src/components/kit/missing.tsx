@@ -1,9 +1,10 @@
 // 详情页拿不到对象时（统一规范 R-STATE、U3R-03）：加载中显示与最终布局相近的骨架；
 // 地址不对或对象不存在说“找不到”；401 说身份不可用、403 说无权（不是网络问题，也不显示缓存里的名称）；
 // 其他失败说“没能读取”并给重试——失败不说成不存在。不留空白页。
-// 调用方：if (!data || isDenial(query.error)) return <DetailFallback … />（刷新时被拒绝也不再显示旧内容）。
+// 调用方：if (!data || isDenial(query.error)) return <DetailFallback … />（刷新时被拒绝或返回 404 也不再显示旧内容）；
+// 有内容时页头下放 StaleNotice，同键刷新失败（5xx、网络）标“可能不是最新”。
 import { Link } from 'react-router'
-import { useListHref } from '@/lib/scroll-memory'
+import { useListLink } from '@/lib/scroll-memory'
 import { DbEmpty } from '@/components/kit/database'
 import { failureText, readFailure } from '@/components/kit/read-state'
 import { Button } from '@/components/ui/button'
@@ -13,9 +14,9 @@ type Back = { to: string; label: string }
 
 /** “返回列表”：这次详情是从该列表打开的就回到原筛选与位置（U3R-05） */
 function BackButton({ back }: { back: Back }) {
-  const to = useListHref(back.to)
+  const link = useListLink(back.to)
   return (
-    <Button variant="outline" size="sm" nativeButton={false} render={<Link to={to} />}>
+    <Button variant="outline" size="sm" nativeButton={false} render={<Link to={link.to} state={link.state} />}>
       {back.label}
     </Button>
   )

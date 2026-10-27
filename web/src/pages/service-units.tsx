@@ -20,7 +20,7 @@ import { Callout } from '@/components/kit/callout'
 import { ChangeLink, InlineAction, InlineLink, Section } from '@/components/kit/section'
 import { DbCell, DbRow, DbTable } from '@/components/kit/database'
 import { DetailFallback } from '@/components/kit/missing'
-import { isDenial } from '@/components/kit/read-state'
+import { isDenial, StaleNotice } from '@/components/kit/read-state'
 import { MoreActions } from '@/components/kit/more-actions'
 import { PropertyList } from '@/components/kit/property-list'
 import { Tag } from '@/components/kit/tag'
@@ -51,7 +51,7 @@ export function ServiceUnitDetailPage() {
   const id = Number(useParams().id)
   const { asOf, optionLabels } = useApp()
   const { isMaintainer } = useMe()
-  const query = useGetServiceUnit(id, { as_of: asOf })
+  const query = useGetServiceUnit(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const { data } = query
   const [dialog, setDialog] = useState<UnitDialog | null>(null)
   const [closing, setClosing] = useState<DepartmentClassificationOut | null>(null)
@@ -99,6 +99,7 @@ export function ServiceUnitDetailPage() {
           )
         }
       />
+      <StaleNotice what="这个服务单元" query={query} />
 
       <PropertyList
         items={[
@@ -170,8 +171,12 @@ export function ServiceUnitDetailPage() {
 
       <div className="mt-8 grid gap-8">
         {retired && (
-          <Callout tone="warning" title={`最后有效日 ${data.retired_after}`}>
-            该单元已永久退出（最后有效日当天仍有效），之后不再有新版本；代码 {data.code} 永久绑定，不会被复用。
+          // 退出日之前看（含最后有效日当天）是“已登记退出安排”，之后才是“已退出”（审查 F11）
+          <Callout tone={gone ? 'warning' : 'info'} title={gone ? `已退出 · 最后有效日 ${data.retired_after}` : `已登记退出安排 · 最后有效日 ${data.retired_after}`}>
+            {gone
+              ? '该单元已永久退出（最后有效日当天仍有效），之后不再有新版本'
+              : `该单元已登记退出：${data.retired_after} 当天仍有效，之后不再有新版本，也不能再修订`}
+            ；代码 {data.code} 永久绑定，不会被复用。
             {data.successors.length > 0 && ' 后继单元见下方“演变关系”。'}
           </Callout>
         )}
@@ -263,11 +268,11 @@ export function ServiceUnitDetailPage() {
                       ? {
                           key: 'retired',
                           date: data.retired_after,
-                          title: `退出（${data.successors[0].lineage_type === 'MERGE' ? '合并' : '拆分'}）`,
+                          title: `最后有效日（${data.successors[0].lineage_type === 'MERGE' ? '合并' : '拆分'}退出）`,
                           detail: `${data.successors[0].lineage_type === 'MERGE' ? '合并为' : '拆分为'} ${data.successors.map((r) => r.successor_name).join('、')}，后继自 ${data.successors[0].effective_date} 起`,
                           changeId: data.successors[0].change_id,
                         }
-                      : { key: 'retired', date: data.retired_after, title: '永久退出', detail: '最后有效日当天仍有效，之后不再有新版本' },
+                      : { key: 'retired', date: data.retired_after, title: '最后有效日（永久退出）', detail: '当天仍有效，之后不再有新版本' },
                   ]
                 : []
             }

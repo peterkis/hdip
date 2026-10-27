@@ -1,6 +1,6 @@
 // 服务单元的变更表单（部门的在 department-forms.tsx）。每个表单只拼出一个变更项（kind 与后端 schemas/items.py 对应）。
 // 引用其他对象一律“按名称选择”（ref-selects.tsx），代码由选择带出，操作人员不需要记代码。
-import { useContext, useState } from 'react'
+import { useContext, useRef, useState } from 'react'
 import { useListCampuses, useListDepartments, useListServiceUnits } from '@/api/generated/master/master'
 import type { ServiceUnitCreateUnitType, ServiceUnitVersionOut } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
@@ -278,10 +278,15 @@ interface Successor {
   campus: string
   inst: string
   pinyin: string
+  /** 本次编辑中的对象身份：编辑器的 key 与新代码占位符都用它，增删后继不会让一个后继接手另一个的状态（PR #2 复审 P2-C） */
+  uid: number
+  /** 拼音码是否跟随名称：存在后继本身，切换、删除其他后继都不丢；未定义时由控件按现值推断 */
+  pinyinFollow?: boolean
 }
 
-function successorFrom(current: ServiceUnitVersionOut, unitType: string, name = ''): Successor {
+function successorFrom(current: ServiceUnitVersionOut, unitType: string, name = '', uid = 0): Successor {
   return {
+    uid,
     name,
     unit_type: unitType,
     dept: current.department_code,
@@ -302,10 +307,10 @@ function successorChecks(s: Successor, key: string, label: string): [string, boo
   ]
 }
 
-/** 后继的代码保存时由系统分配；slot 区分同一张拆分里的多个后继 */
-function successorItem(s: Successor, slot = 0) {
+/** 后继的代码保存时由系统分配；占位符按后继的身份区分，取号位置由 ItemDialog 的绑定决定（new-code.ts） */
+function successorItem(s: Successor) {
   return {
-    code: newCode('service_unit', slot),
+    code: newCode('service_unit', s.uid),
     unit_type: s.unit_type as ServiceUnitCreateUnitType,
     fields: {
       name: s.name.trim(),
@@ -331,13 +336,14 @@ function SuccessorFields({
   onRemove,
 }: {
   value: Successor
-  onChange: (s: Successor) => void
+  /** 只传改动的字段，由上层按身份做函数式更新：同一次输入里拼音码与跟随状态先后各改一次，不能互相覆盖 */
+  onChange: (patch: Partial<Successor>) => void
   fieldKey: string
   title: string
   onRemove?: () => void
 }) {
   const { unitTypeOptions } = useApp()
-  const set = (patch: Partial<Successor>) => onChange({ ...s, ...patch })
+  const set = onChange
   return (
     <fieldset className="border-line-subtle grid gap-3 rounded-md border p-3">
       <legend className="text-fg-strong flex w-full items-center px-1 text-xs font-semibold">
@@ -372,7 +378,14 @@ function SuccessorFields({
         />
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <PinyinField source={s.name} name={`${fieldKey}.pinyin`} value={s.pinyin} onChange={(pinyin) => set({ pinyin })} />
+        <PinyinField
+          source={s.name}
+          name={`${fieldKey}.pinyin`}
+          value={s.pinyin}
+          onChange={(pinyin) => set({ pinyin })}
+          follow={s.pinyinFollow}
+          onFollowChange={(pinyinFollow) => set({ pinyinFollow })}
+        />
         <AutoCodeField type="service_unit" label="单元代码" />
       </div>
     </fieldset>
@@ -381,12 +394,14 @@ function SuccessorFields({
 
 export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialogProps & { unitType: string }) {
   const [day, setDay] = useEffectiveDate()
-  const [succ, setSucc] = useState<Successor[]>([successorFrom(current, unitType), successorFrom(current, unitType)])
+  const [succ, setSucc] = useState<Successor[]>(() => [successorFrom(current, unitType, '', 0), successorFrom(current, unitType, '', 1)])
+  // 后继身份只在新增时取、单调不复用（初始两个已占 0、1）
+  const nextUid = useRef(2)
   // 图中点选哪个后继，下方就只显示它的字段，避免一屏堆满
   const [sel, setSel] = useState(0)
-  const update = (i: number) => (s: Successor) => setSucc(succ.map((x, j) => (j === i ? s : x)))
+  const update = (uid: number) => (patch: Partial<Successor>) => setSucc((list) => list.map((x) => (x.uid === uid ? { ...x, ...patch } : x)))
   const add = () => {
-    setSucc([...succ, successorFrom(current, unitType)])
+    setSucc([...succ, successorFrom(current, unitType, '', nextUid.current++)])
     setSel(succ.length)
   }
   const remove = (i: number) => {
@@ -404,7 +419,7 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
           ['effective_date', !!day, '请选择生效日期'],
           ['effective_date', !day || day > current.valid_from, `生效日须晚于当前版本的开始日 ${current.valid_from}`],
           ...succ.flatMap((s, i) => successorChecks(s, `s${i}`, `后继 ${i + 1} 的`)),
-        ]) ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map((s, i) => successorItem(s, i)) }
+        ]) ?? { kind: 'service_unit.split', code, effective_date: day, successors: succ.map((s) => successorItem(s)) }
       }
       // 只在点“保存到申请”未通过时：当前显示的后继没有问题，就切到第一个出错的后继，让标红的字段可见。
       // 之后改字段时的重新检查不切换（build 是纯函数），用户可以停在任意后继回看
@@ -434,9 +449,9 @@ export function UnitSplitDialog({ code, current, unitType, ...props }: UnitDialo
       />
       <OtherSuccessorErrors count={succ.length} sel={sel} onPick={setSel} />
       <SuccessorFields
-        key={sel}
+        key={succ[sel].uid}
         value={succ[sel]}
-        onChange={update(sel)}
+        onChange={update(succ[sel].uid)}
         fieldKey={`s${sel}`}
         title={`后继单元 ${sel + 1}（在上图点选其他后继）`}
         onRemove={succ.length > 2 ? () => remove(sel) : undefined}
@@ -616,7 +631,7 @@ export function UnitMergeDialog({ code, current, unitType, ...props }: UnitDialo
           )}
         </div>
       ))}
-      <SuccessorFields value={succ} onChange={setSucc} fieldKey="succ" title="合并后的单元" />
+      <SuccessorFields value={succ} onChange={(patch) => setSucc((s) => ({ ...s, ...patch }))} fieldKey="succ" title="合并后的单元" />
     </ItemDialog>
   )
 }

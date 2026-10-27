@@ -1,7 +1,9 @@
 // 列表的返回上下文（U3R-05）：从列表进入详情时记下这一次的来源，返回时回到原来的范围、位置与对象。
 // - 记什么：来源地址（含网址里的筛选）、集合范围 scope（查看日期 + 筛选 + 检索，不含详情参数）、滚动位置、打开的对象，
 //   以及少量本地状态（检索词、树的折叠、已加载条数、排序）。只存在本标签页的 sessionStorage，不写进网址。
-// - 何时恢复：只在回到同一来源地址时（浏览器后退、面包屑、详情页的“返回列表”）。从侧栏重新进入、换了筛选不算返回。
+// - 何时恢复：回到当时那一条浏览记录（浏览器后退 / 前进，按 location.key 认），或经面包屑、详情页的“返回列表”回去
+//   （链接带 listReturn 标记）。地址相同但从侧栏重新进入、换了筛选都不算返回。
+//   恢复后不删除记录：后退 → 前进 → 再后退仍回到同一上下文（审查 F08）；下次从列表进入详情时覆盖。
 // - 范围变了（如在详情里改了查看日期）：不恢复旧位置；原对象仍在当前结果里就让它可见并聚焦，否则聚焦页面标题，不补行。
 // 正文的滚动容器是外壳里的 <main>（components/layout.tsx），不是 window；外壳换页时先回顶，所以下一帧再恢复。
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
@@ -12,6 +14,11 @@ type ReturnContext = {
   href: string
   /** 进入的详情页 pathname：只有这次详情才用 href 作“返回列表” */
   target: string
+  /**
+   * 属于这次来源的列表浏览记录（location.key）：最初那一条，以及之后经“返回列表”链接新建的记录。
+   * 只追加不替换（PR #2 复审 SP-06）：面包屑返回后再连续后退回到最初那条，仍能恢复
+   */
+  entries: string[]
   scope: string
   top: number
   /** 行上的 data-return-id */
@@ -26,10 +33,13 @@ function readContext(list: string): ReturnContext | null {
     const raw = sessionStorage.getItem(storeKey(list))
     if (!raw) return null
     const c = JSON.parse(raw) as Partial<ReturnContext> | null
-    if (!c || typeof c.href !== 'string' || typeof c.target !== 'string' || typeof c.scope !== 'string' || typeof c.id !== 'string') return null
+    const entries = Array.isArray(c?.entries) ? c.entries.filter((k): k is string => typeof k === 'string') : []
+    if (!c || typeof c.href !== 'string' || typeof c.target !== 'string' || entries.length === 0 || typeof c.scope !== 'string' || typeof c.id !== 'string')
+      return null
     return {
       href: c.href,
       target: c.target,
+      entries,
       scope: c.scope,
       top: typeof c.top === 'number' && c.top > 0 ? c.top : 0,
       id: c.id,
@@ -49,12 +59,21 @@ function writeContext(list: string, c: ReturnContext | null) {
   }
 }
 
-/** 本次渲染是否是“返回”这一列表的原上下文（地址相同才算） */
+/** “返回列表”链接带的标记：经它进入列表算返回 */
+export const LIST_RETURN_STATE = { listReturn: true }
+
+/** 本次渲染是否是“返回”这一列表的原上下文：地址相同，且是当时那条浏览记录或经“返回列表”链接进入 */
 function useBackContext(): ReturnContext | null {
-  const { pathname, search } = useLocation()
+  const { pathname, search, key, state } = useLocation()
   const [back] = useState(() => {
     const c = readContext(pathname)
-    return c && c.href === pathname + search ? c : null
+    if (!c || c.href !== pathname + search) return null
+    if (c.entries.includes(key)) return c
+    if ((state as { listReturn?: unknown } | null)?.listReturn !== true) return null
+    // 经链接回来是一条新记录：加认这一条（原来的仍保留），之后在任一条上后退 / 前进都能恢复；只留最近 20 条
+    const joined = { ...c, entries: [...c.entries, key].slice(-20) }
+    writeContext(pathname, joined)
+    return joined
   })
   return back
 }
@@ -68,11 +87,11 @@ export function useReturnState<T>(name: string, initial: T, valid: (v: unknown) 
   })
 }
 
-/** 详情页“回到列表”的地址：这次详情是从该列表打开的就带上原筛选，否则是默认列表 */
-export function useListHref(list: string): string {
+/** 详情页“回到列表”的链接：这次详情是从该列表打开的就带上原筛选并标为返回，否则是默认列表 */
+export function useListLink(list: string): { to: string; state?: typeof LIST_RETURN_STATE } {
   const { pathname } = useLocation()
   const c = list ? readContext(list) : null
-  return c && c.target === pathname ? c.href : list
+  return c && c.target === pathname ? { to: c.href, state: LIST_RETURN_STATE } : { to: list }
 }
 
 /**
@@ -81,7 +100,7 @@ export function useListHref(list: string): string {
  * scope 只放真正决定集合的条件（查看日期、筛选、检索、视角），不放详情或弹层参数。
  */
 export function useListReturn({ scope, ready, local = {} }: { scope: string; ready: boolean; local?: Record<string, unknown> }) {
-  const { pathname, search } = useLocation()
+  const { pathname, search, key } = useLocation()
   const back = useBackContext()
   const scopeRef = useRef(scope)
   scopeRef.current = scope
@@ -92,7 +111,6 @@ export function useListReturn({ scope, ready, local = {} }: { scope: string; rea
     // 用过才标记：开发模式下 effect 会先跑一遍再清理，提前标记会让第二遍找不到
     const frame = requestAnimationFrame(() => {
       done.current = true
-      writeContext(pathname, null)
       const main = document.querySelector('main')
       const same = back.scope === scopeRef.current
       if (same && main && back.top > 0) main.scrollTop = back.top
@@ -124,6 +142,7 @@ export function useListReturn({ scope, ready, local = {} }: { scope: string; rea
     writeContext(pathname, {
       href: pathname + search,
       target,
+      entries: [key],
       scope,
       top: document.querySelector('main')?.scrollTop ?? 0,
       id: String(id),

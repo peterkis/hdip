@@ -19,14 +19,16 @@ import { useListUsers } from '@/api/generated/meta/meta'
 import { Icon, type AppIcon } from '@/components/kit/icon'
 import { CrumbProvider, useCurrentCrumb } from '@/components/shell/crumbs'
 import { findNav, itemPath, NAV_GROUPS, type NavGroup, type NavItem } from '@/components/shell/nav'
+import { Callout } from '@/components/kit/callout'
 import { Button } from '@/components/ui/button'
+import { isDenial, ReadError, StaleNotice } from '@/components/kit/read-state'
 import { useApp } from '@/lib/app-context'
 import { today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
 import { useMe } from '@/lib/use-me'
-import { useListHref } from '@/lib/scroll-memory'
+import { useListLink } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 
 const NARROW = '(max-width: 767px)'
@@ -118,6 +120,7 @@ export function Layout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar collapsed={narrow} onExpand={() => setCollapsed(false)} frame={frame} />
           <main className="flex-1 overflow-y-auto">
+            <MeFailure />
             <FrameContext.Provider value={setFrame}>
               <FrameValueContext.Provider value={frame}>
               {frame === 'legacy' ? (
@@ -240,8 +243,9 @@ function SideLink({ item, to, count, planned }: { item: NavItem; to?: string; co
       className={({ isActive }) =>
         cn(
           sideItem,
+          // 选中项（V02，参照 Gr8r）：浅色白底轻浮起 + 细边，深色用选中底、不加阴影；细边与字重让选中不只靠阴影表达
           isActive
-            ? 'bg-surface-selected text-fg-strong font-medium'
+            ? 'bg-surface-raised text-fg-strong ring-line font-medium shadow-(--hd-elevation-card) ring-1 dark:bg-surface-selected dark:shadow-none dark:ring-0'
             : planned
               ? 'text-fg-muted hover:bg-surface-hover'
               : 'text-fg-secondary hover:bg-surface-hover',
@@ -357,23 +361,53 @@ function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: 
   )
 }
 
+/** 当前身份的权限没有读取成功：按权限显示的内容都停在“正在确认权限”，在正文顶部说明一次并给重试 */
+function MeFailure() {
+  const { permsKnown, meQuery } = useMe()
+  if (!meQuery.isError) return null
+  return (
+    <div className="px-(--hd-layout-gutter-narrow) pt-3 md:px-(--hd-layout-gutter)">
+      {permsKnown ? (
+        // 刷新失败但有上次读到的权限：照常使用并标出
+        <StaleNotice what="当前身份的权限" query={meQuery} />
+      ) : isDenial(meQuery.error) ? (
+        // 同一身份刷新时被拒绝：不再沿用旧权限，按权限显示的操作已隐藏
+        <div role="alert">
+          <Callout tone="neutral" title="当前身份的权限无法确认">
+            <span className="flex flex-wrap items-center gap-3">
+              身份可能已停用或无权使用本系统，按权限显示的操作已隐藏。可在左下角切换身份，或稍后重试。
+              <Button size="sm" variant="outline" disabled={meQuery.isFetching} onClick={() => meQuery.refetch()}>
+                {meQuery.isFetching ? '正在重试…' : '重试'}
+              </Button>
+            </span>
+          </Callout>
+        </div>
+      ) : (
+        <ReadError what="当前身份的权限（按权限显示的内容暂不可用）" query={meQuery} compact />
+      )}
+    </div>
+  )
+}
+
 function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: ReactNode }) {
   // 详情页的上一级：这次详情是从该列表打开的就回到原筛选与位置（U3R-05），否则是默认列表
   const path = found?.item ? itemPath(found.item) : ''
-  const listHref = useListHref(path)
+  const listLink = useListLink(path)
   return (
     <>
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
         {/* 窄屏只留当前页面与当前对象，分组名省略 */}
-        {found && <span className="text-fg-muted hidden px-1.5 py-0.5 sm:inline">{found.group.label}</span>}
+        {/* 首个可见的面包屑不留左内缩，文字与标题从同一条起线开始（V01，参照 Gr8r） */}
+        {found && <span className="text-fg-muted hidden py-0.5 pr-1.5 sm:inline">{found.group.label}</span>}
         {found?.item && (
           <>
             <span className="hidden sm:inline">
               <Sep />
             </span>
             <Link
-              to={crumb ? listHref : path}
-              className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
+              to={crumb ? listLink.to : path}
+              state={crumb ? listLink.state : undefined}
+              className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5 max-sm:pl-0"
             >
               <Icon icon={found.item.icon} />
               <span className={cn(!crumb && 'text-fg', crumb && 'hidden sm:inline')}>{found.item.label}</span>

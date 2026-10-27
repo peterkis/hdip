@@ -169,11 +169,20 @@ export function DepartmentsPage() {
   const list = useListDepartments({ as_of: asOf, ...(q && { q }) })
   const status = readStatus(list)
   const all = useMemo(() => list.data ?? [], [list.data])
-  // 同一天的新查询再次返回已选部门时用最新的行；没返回的保留勾选时的样子（只是当前没列出）
+  // 同一天的新查询再次返回已选部门时用最新的行；没返回的保留勾选时的样子（只是当前没列出）。
+  // 部门读取被明确拒绝（401 / 403）时不再显示、不再交出旧选择，并清空（审查 F07）；普通刷新失败照常保留
+  const denied = list.isError && isDenial(list.error)
   const picked = useMemo(() => {
+    if (denied) return []
     const fresh = new Map(all.map((d) => [d.id, d]))
     return [...current.values()].map((d) => fresh.get(d.id) ?? d)
-  }, [current, all])
+  }, [current, all, denied])
+  useEffect(() => {
+    if (!denied || sel.rows.size === 0) return
+    notify.info(`部门读取被拒绝，已清除之前选择的 ${sel.rows.size} 个部门`)
+    setSel({ key: selKey, rows: new Map() })
+    setBatch(null)
+  }, [denied, sel, selKey])
   if (picked.length === 0 && showPicked) setShowPicked(false)
   const schemeQuery = useListClassificationSchemes()
   const mainCodes = schemeQuery.data?.find((s) => s.code === MAIN_SCHEME)?.codes ?? []
@@ -345,7 +354,7 @@ export function DepartmentsPage() {
             </tr>
           )}
           {ordered.map((d) => (
-            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
+            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected hover:bg-surface-selected')}>
               {isMaintainer && (
                 <DbCell>
                   <input
@@ -629,7 +638,7 @@ export function DepartmentDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer, can, permsKnown } = useMe()
-  const query = useGetDepartment(id, { as_of: asOf })
+  const query = useGetDepartment(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const { data } = query
   // 人员、职务是独立读取（U3R-03）：无 person.view 不发请求、写“无权查看”；权限未读到时既不发请求也不说无权；
   // 读取中、失败时不写 0 人、不写“未登记负责人”
@@ -654,7 +663,9 @@ export function DepartmentDetailPage() {
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
   const [closingClass, setClosingClass] = useState<DepartmentClassificationOut | null>(null)
   const viewsQuery = useListOrgViews()
-  const views = viewsQuery.data ?? []
+  // 组织视图标签：被拒绝时不显示缓存里的视图名（PR #2 复审 7.2）；普通刷新失败照常显示并标出
+  const viewsStatus = readStatus(viewsQuery)
+  const views = viewsStatus === 'ready' ? (viewsQuery.data ?? []) : []
   // 当前标签写在网址里（?tab=），返回、刷新、转发链接都回到同一标签（统一规范 0.2）
   const [params, setParams] = useSearchParams()
   const asked = params.get('tab') as TabKey | null
@@ -716,6 +727,7 @@ export function DepartmentDetailPage() {
           </>
         }
       />
+      <StaleNotice what="这个部门" query={query} />
 
       <PropertyList
         items={[
@@ -813,6 +825,15 @@ export function DepartmentDetailPage() {
           <Callout tone="warning" title={`该部门已${DEPARTMENT_LIFECYCLE[latest.lifecycle as DepartmentLifecycle]}`}>
             终态，不能再调整，历史仍可查看；代码 {data.code} 永久绑定，不会被复用。
           </Callout>
+        </div>
+      )}
+
+      {/* 职务、人员归属是独立读取：页头的负责人、标签上的人数和“人员”标签都用它们，刷新失败的说明放在这里一次（PR #2 复审 SP-04），
+          各标签内不再重复 */}
+      {(dutiesStatus === 'ready' || personsStatus === 'ready') && (
+        <div className="mt-3 grid gap-2 empty:hidden">
+          {dutiesStatus === 'ready' && <StaleNotice what="部门职务（当前负责人）" query={dutiesQuery} />}
+          {personsStatus === 'ready' && <StaleNotice what="人员归属（人数）" query={personsQuery} />}
         </div>
       )}
 
@@ -955,7 +976,8 @@ export function DepartmentDetailPage() {
 
         {tab === 'org' && (
           <>
-            {readStatus(viewsQuery) === 'error' && <ReadError what="组织视图列表" query={viewsQuery} compact />}
+            {viewsStatus === 'error' && <ReadError what="组织视图列表" query={viewsQuery} compact />}
+            {viewsStatus === 'ready' && <StaleNotice what="组织视图列表" query={viewsQuery} />}
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="组织视图">
               {views.map((v) => (
                 <Tag key={v.code} tone={v.status === 'ACTIVE' ? 'blue' : 'gray'} className={cn(v.status !== 'ACTIVE' && 'opacity-60')}>

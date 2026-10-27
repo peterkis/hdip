@@ -146,7 +146,7 @@ export function CampusDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const query = useGetCampus(id, { as_of: asOf })
+  const query = useGetCampus(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const { data } = query
   // 下属服务单元是独立读取（U3R-03）：失败时只影响这一节，不写 0 个单元、0 个部门
   const unitsQuery = useListServiceUnits({ as_of: asOf, campus_id: id }, { query: { enabled: Number.isInteger(id) } })
@@ -188,6 +188,7 @@ export function CampusDetailPage() {
           </>
         }
       />
+      <StaleNotice what="这个院区" query={query} />
 
       <PropertyList
         items={[

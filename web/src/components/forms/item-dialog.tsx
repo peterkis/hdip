@@ -20,7 +20,7 @@ import {
 import type { ChangeRequestWrite } from '@/api/generated/model'
 import { ApiError } from '@/api/fetcher'
 import { FormErrorsContext, isFieldErrors, type FieldErrors } from '@/components/forms/fields'
-import { fillNewCodes } from '@/components/forms/new-code'
+import { fillNewCodes, type CodeBinding } from '@/components/forms/new-code'
 import { Callout } from '@/components/kit/callout'
 import { FormEditContext } from '@/components/kit/form-edit'
 import { Button } from '@/components/ui/button'
@@ -55,16 +55,46 @@ export function useDraftItems(): ChangeItemInput[] {
 }
 
 /**
+ * 保存结果是否未确定：没拿到服务端答复（网络中断），或服务端 / 代理出错（5xx）。
+ * 服务端先提交再组装响应，响应出错不能证明没有写入（审查 F04）；只有明确的业务拒绝（4xx）才说没有写入
+ */
+export function saveUncertain(error: Error | null | undefined): boolean {
+  return !!error && (!(error instanceof ApiError) || error.status >= 500)
+}
+
+/**
+ * 这次打开以来保存结果的累计结论（PR #2 复审 SP-03）：
+ * none = 没有可能写入过；maybe = 有过结果未确定的保存；known = 409 已表明上一次其实写入了某张申请。
+ * 之后的明确拒绝（422、412 等）只说明那一次没写入，不推翻更早的“未确定 / 已写入”
+ */
+export type WriteOutcome = 'none' | 'maybe' | 'known'
+
+export function nextOutcome(prev: WriteOutcome, error: Error): WriteOutcome {
+  if (error instanceof ApiError && error.status === 409) return 'known'
+  if (saveUncertain(error)) return prev === 'known' ? 'known' : 'maybe'
+  return prev
+}
+
+/** 关闭确认的说明：只承诺丢弃本地尚未保存的内容，不撤回已写入的申请；有可能或已经写入时提示去核对 */
+export function closeWarning(what: string, outcome: WriteOutcome): string {
+  if (outcome === 'known')
+    return `关闭只丢弃${what}里之后改过、没有保存的内容，不会撤回已经写入的申请；请按上方说明核对那张申请。`
+  if (outcome === 'maybe')
+    return `关闭只丢弃${what}里的内容；上一次保存的结果未确定，可能已经写入申请。关闭后请到变更申请“我的草稿”核对，不要重复新建。`
+  return `关闭会丢弃${what}里尚未保存的内容。`
+}
+
+/**
  * 保存失败的说明（迁移 0022 之后）：
- * - 网络中断等没拿到服务端答复：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
+ * - 网络中断等没拿到服务端答复，或服务端 / 代理出错（5xx）：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
  * - 409：同一次保存的请求键已写入过别的内容（上次其实已成功、之后又改过），服务端的说明已写明去核对哪张申请。
  * - 412：草稿在读取之后被别处改过，这次没有写入（以免覆盖），服务端说明已写明。
  * - 其他被拒（校验未通过等）：没有写入，改好后再保存。
  */
 export function saveFailureText(error: Error, kept: string): string {
-  if (!(error instanceof ApiError))
+  if (saveUncertain(error))
     return `保存结果未确定：${error.message}。服务端可能已经写入；内容不改直接再保存会先核对，不会重复；改过内容再保存时，如果上次其实已写入，会提示你去核对那张申请。${kept}。`
-  if (error.status === 409 || error.status === 412) return `${error.message}${kept}。`
+  if (error instanceof ApiError && (error.status === 409 || error.status === 412)) return `${error.message}${kept}。`
   return `保存未成功：${error.message}。${kept}，改好后可再次保存。`
 }
 
@@ -74,6 +104,8 @@ export function useAddItem() {
   // 本次打开的表单已发出的请求体，按“提交内容”记住：内容没改的重试原样重发（不重读草稿、不再追加一遍），
   // 服务端才能认出是同一次保存；内容改过就重新组装——若上次其实已写入，服务端会拒绝并说明（迁移 0022）
   const sent = useRef<{ fp: string; target: number | 'new'; body: ChangeRequestWrite } | null>(null)
+  // 本次打开的占位符 → 预留位置（new-code.ts）：重试与增删后，保留的对象拿回同一个号
+  const codeBinding = useRef<CodeBinding>(new Map())
   return useMutation({
     mutationFn: async ({
       item,
@@ -93,7 +125,7 @@ export function useAddItem() {
       const send = (t: number | 'new', body: ChangeRequestWrite) => (t === 'new' ? createChangeRequest(body) : updateChangeRequest(t, body))
       // 按最新草稿组装：加入已有草稿时带上读到的 updated_at 作为前提，草稿之后被别处改过，服务端拒绝（412）而不覆盖
       const build = async () => {
-        const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
+        const items = requestKey ? await fillNewCodes(raw, requestKey, codeBinding.current) : raw
         const request_key = requestKey ?? null
         let body: ChangeRequestWrite
         if (target === 'new') body = { items, note: note ?? null, request_key }
@@ -177,6 +209,7 @@ export function ItemDialog({
     if (focusTick) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [focusTick])
   const add = useAddItem()
+  const [outcome, setOutcome] = useState<WriteOutcome>('none')
   // 预留代码用的请求键：表单打开期间不变（弹窗只在打开时挂载，关闭即丢弃）
   const [requestKey] = useState(() => crypto.randomUUID())
 
@@ -211,6 +244,7 @@ export function ItemDialog({
       { item: result, target: targetId ?? 'new', note, requestKey },
       {
         onSuccess: () => onOpenChange(false),
+        onError: (e) => setOutcome((prev) => nextOutcome(prev, e)),
         onSettled: () => {
           saving.current = false
         },
@@ -308,7 +342,7 @@ export function ItemDialog({
           )}
           {confirmClose ? (
             <div role="alertdialog" aria-label="放弃已填写的内容" className="bg-surface-subtle grid gap-3 rounded-lg px-3 py-3">
-              <p className="text-fg text-xs">关闭会丢弃这张表单里已填写的内容，还没有保存到任何申请。</p>
+              <p className="text-fg text-xs">{closeWarning('这张表单', outcome)}</p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" autoFocus onClick={resume}>
                   继续填写

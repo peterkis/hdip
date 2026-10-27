@@ -85,6 +85,7 @@
   --color-danger: var(--hd-danger);
   --color-danger-text: var(--hd-danger-text);
   --color-danger-soft: var(--hd-danger-soft);
+  --color-danger-hover: var(--hd-danger-hover);
   --color-warning-text: var(--hd-warning-text);
   --color-warning-soft: var(--hd-warning-soft);
   --color-success-text: var(--hd-success-text);

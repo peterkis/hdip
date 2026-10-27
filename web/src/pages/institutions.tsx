@@ -123,7 +123,7 @@ export function InstitutionDetailPage() {
   const id = Number(useParams().id)
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const query = useGetInstitution(id, { as_of: asOf })
+  const query = useGetInstitution(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const { data } = query
   // 关系图另读院区与运营关系（U3R-03）：失败只影响图；下面的关系明细来自主体详情本身，照常显示
   const campusesQuery = useListCampuses({ as_of: asOf })
@@ -142,7 +142,10 @@ export function InstitutionDetailPage() {
   const close = (o: boolean) => !o && setDialog(null)
   // 运营关系的计数口径分开写（T7.6，U3R-08）：当前 / 计划按院区去重（两者可能重叠，不相加），已结束按关系段计
   const segs = data.relations.filter((r) => !r.valid_to || r.valid_to >= r.valid_from)
-  const currentCampuses = new Set(segs.filter((r) => r.valid_from <= asOf && (!r.valid_to || r.valid_to >= asOf)).map((r) => r.campus_id))
+  const currentSegs = segs.filter((r) => r.valid_from <= asOf && (!r.valid_to || r.valid_to >= asOf))
+  const currentCampuses = new Set(currentSegs.map((r) => r.campus_id))
+  // 关联不等于运营：登记、管理、收费关系不算“运营”，单独写出运营的院区数（审查 §7.2）
+  const operatingCampuses = new Set(currentSegs.filter((r) => r.relation_type === 'OPERATE').map((r) => r.campus_id))
   const plannedCampuses = new Set(segs.filter((r) => r.valid_from > asOf).map((r) => r.campus_id))
   const endedSegments = segs.filter((r) => r.valid_to && r.valid_to < asOf).length
 
@@ -159,6 +162,7 @@ export function InstitutionDetailPage() {
         }
         actions={isMaintainer && <Button onClick={() => setDialog('revise')}>修订</Button>}
       />
+      <StaleNotice what="这个主体" query={query} />
 
       <PropertyList
         items={[
@@ -181,9 +185,10 @@ export function InstitutionDetailPage() {
           action={isMaintainer ? <InlineAction onClick={() => setDialog('relation')}>建立运营关系</InlineAction> : null}
         >
           <p className="text-fg-secondary text-xs">
-            {asOf} 当天运营 {currentCampuses.size} 个院区 · 计划 {plannedCampuses.size} 个院区 · 已结束 {endedSegments} 段关系
+            {asOf} 当天关联 {currentCampuses.size} 个院区（其中运营 {operatingCampuses.size} 个）· 计划关联 {plannedCampuses.size} 个院区 · 已结束 {endedSegments} 段关系
             <span className="text-fg-muted text-caption"> — 图只画当天有效与计划中的关系，下方明细列出全部历史</span>
           </p>
+          {graphStatus === 'ready' && <StaleNotice what="运营关系图" query={campusesQuery.isError ? campusesQuery : relationsQuery} />}
           {graphStatus === 'ready' ? (
             <OperatorFlow
               institutions={[{ id: data.id, code: data.code, name: shown.name, subtitle: shown.nature ?? undefined }]}

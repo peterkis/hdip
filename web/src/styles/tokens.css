@@ -150,30 +150,31 @@
 
 /* ============================================================ 2. 语义令牌（浅色，默认） */
 :root {
-  /* 文字 */
-  --hd-text-strong: var(--hd-alpha-black-900);
-  --hd-text-primary: var(--hd-alpha-black-800);
-  /* U3R-06：secondary 改实色 gray-600、muted 加深到 alpha-black-600，在 page / raised / subtle 上都 ≥4.5:1 */
-  --hd-text-secondary: var(--hd-gray-600);
-  --hd-text-muted: var(--hd-alpha-black-600);
+  /* 文字（2026-10-27 中性色迁到 Gr8r 工作台：实色暖灰；主次靠字重与字号区分。
+     muted 在 page / sidebar / subtle / raised / selected 上都 ≥4.5:1，见 ui-tokens.md R-COL 4.6） */
+  --hd-text-strong: #1d1c1a;
+  --hd-text-primary: #1d1c1a;
+  --hd-text-secondary: #57544e;
+  --hd-text-muted: #6b6760;
   --hd-text-disabled: var(--hd-alpha-black-400);     /* 只给真正禁用的控件，不给占位提示、空态与事实文字 */
   --hd-text-placeholder: var(--hd-text-muted);       /* 输入与搜索的占位提示：独立角色，初值同 muted */
   --hd-text-on-accent: var(--hd-white);
 
   /* 表面（底色） */
-  --hd-surface-page: var(--hd-white);          /* 页面主体 */
-  --hd-surface-sidebar: var(--hd-gray-50);     /* 左侧栏 */
+  --hd-surface-page: var(--hd-white);          /* 页面主体（Gr8r surface） */
+  --hd-surface-sidebar: #f4f3f0;               /* 左侧栏：比内容区略深的暖灰 */
   --hd-surface-raised: var(--hd-white);        /* 卡片、弹窗、下拉 */
-  --hd-surface-subtle: var(--hd-gray-200);     /* 次级块、表头、代码、只读区 */
-  --hd-surface-hover: var(--hd-alpha-black-100);    /* 悬停：叠加而不是换色 */
-  --hd-surface-pressed: var(--hd-alpha-black-200);
-  --hd-surface-selected: var(--hd-gray-200);
+  --hd-surface-subtle: #f6f5f2;                /* 次级块、表头、代码、只读区 */
+  /* 悬停 / 按下：暖色叠加而不是换色——白底上约等于 Gr8r 的 #f6f5f2 / #eeede9，在侧栏、表头上也仍看得出 */
+  --hd-surface-hover: #3c321e0b;
+  --hd-surface-pressed: #3c321e17;
+  --hd-surface-selected: #eeede9;
   --hd-surface-overlay: var(--hd-alpha-black-400);  /* 弹窗遮罩 */
 
   /* 边框 */
-  --hd-border-subtle: var(--hd-alpha-black-150); /* 分隔线、表格线 */
-  --hd-border-default: var(--hd-alpha-black-200); /* 卡片、容器、次级按钮 */
-  --hd-border-strong: var(--hd-alpha-black-300);
+  --hd-border-subtle: #f0eeea;   /* 分隔线、表格线 */
+  --hd-border-default: #e9e7e2;  /* 卡片、容器、浅色侧栏选中项的细边 */
+  --hd-border-strong: #dad7d0;   /* 次按钮（Button outline）边界、强调分隔；不承担输入边界（输入用 border-input） */
   --hd-border-input: #7f7b75;                     /* 可填写区域（输入、选择、标签输入）的边界：对输入底 ≥3:1；装饰线不用它 */
   --hd-surface-input: var(--hd-white);            /* 输入底色：独立角色，不再取边框色的透明度 */
   --hd-flow-edge: var(--hd-gray-400);            /* 关系图连线：不透明，多条线叠在同一段上颜色不加深 */
@@ -209,23 +210,28 @@
   --hd-danger-soft: var(--hd-red-100);
   --hd-warning-text: var(--hd-orange-700);
   --hd-warning-soft: var(--hd-orange-100);
-  --hd-success-text: var(--hd-green-600);
+  --hd-success-text: var(--hd-green-700);  /* 2026-10-27：600 在侧栏、表头与悬停底上不足 4.5:1 */
   --hd-success-soft: var(--hd-green-100);
   --hd-info-text: var(--hd-blue-700);
   --hd-info-soft: var(--hd-blue-100);
 
-  /* 标签色（Notion 的彩色选项）：底色 + 文字，九种 */
-  --hd-tag-gray-bg: var(--hd-gray-250);     --hd-tag-gray-text: var(--hd-gray-700);
-  --hd-tag-brown-bg: var(--hd-brown-200);   --hd-tag-brown-text: var(--hd-brown-800);
-  --hd-tag-orange-bg: var(--hd-orange-200); --hd-tag-orange-text: var(--hd-orange-800);
-  --hd-tag-yellow-bg: var(--hd-yellow-200); --hd-tag-yellow-text: var(--hd-yellow-900);
-  --hd-tag-green-bg: var(--hd-green-200);   --hd-tag-green-text: var(--hd-green-800);
-  --hd-tag-blue-bg: var(--hd-blue-200);     --hd-tag-blue-text: var(--hd-blue-800);
-  --hd-tag-purple-bg: var(--hd-purple-200); --hd-tag-purple-text: var(--hd-purple-800);
-  --hd-tag-pink-bg: var(--hd-pink-200);     --hd-tag-pink-text: var(--hd-pink-800);
-  --hd-tag-red-bg: var(--hd-red-200);       --hd-tag-red-text: var(--hd-red-800);
-  /* 青：2026-10-23 为任用类型补的第 10 种标签色（与其他标签同一明度区间，正文对比 7.2:1） */
-  --hd-tag-teal-bg: var(--hd-teal-200);     --hd-tag-teal-text: var(--hd-teal-800);
+  /* 危险按钮 / 徽标的悬停、按下底：独立角色，不随标签色变（2026-10-27 标签色改为 Gr8r 浅底时拆出，取原值） */
+  --hd-danger-hover: var(--hd-red-200);
+
+  /* 标签色：十种（灰色 + 九种彩色），底色 + 文字（2026-10-27，ui-tokens.md R-COL 4.7）。
+     浅底按 Gr8r 规则（green / purple / orange / teal / blue / pink 11%、yellow 对应 amber 12%、red 10%）
+     与白色页面合成为实色——实色化是 HDIP 适配：同一标签在表格、选中行、浮层上配对不变；
+     文字沿 Gr8r 色相加深到实色底上 ≥6.1:1。gray 取 Gr8r surface-2 / text-2；brown 是 HDIP 补色（Gr8r 无棕） */
+  --hd-tag-gray-bg: #f6f5f2;    --hd-tag-gray-text: #57544e;
+  --hd-tag-brown-bg: #f2edea;   --hd-tag-brown-text: #755034;
+  --hd-tag-orange-bg: #f8eee8;  --hd-tag-orange-text: #8a461f;
+  --hd-tag-yellow-bg: #f2ece2;  --hd-tag-yellow-text: #784f0c;
+  --hd-tag-green-bg: #e7f0eb;   --hd-tag-green-text: #1f6340;
+  --hd-tag-teal-bg: #e6f2f1;    --hd-tag-teal-text: #16625f;
+  --hd-tag-blue-bg: #e9eff9;    --hd-tag-blue-text: #2a589b;
+  --hd-tag-purple-bg: #f0ecf8;  --hd-tag-purple-text: #6345a3;
+  --hd-tag-pink-bg: #f8eaef;    --hd-tag-pink-text: #953458;
+  --hd-tag-red-bg: #f7ecea;     --hd-tag-red-text: #9b342a;
 
   /* 文字角色：字号 / 行高 / 字重 / 字距 */
   --hd-type-caption-size: var(--hd-size-50);
@@ -316,27 +322,28 @@
 
 /* ============================================================ 深色主题：只重定义语义令牌 */
 .dark {
-  --hd-text-strong: var(--hd-alpha-white-900);
-  --hd-text-primary: var(--hd-alpha-white-800);
-  --hd-text-secondary: var(--hd-alpha-white-700);
-  --hd-text-muted: #ffffff99;   /* U3R-06：60% 白，表头（subtle）与弹窗（raised）上也 ≥4.5:1 */
+  --hd-text-strong: #eceae5;
+  --hd-text-primary: #eceae5;
+  --hd-text-secondary: #b5b2ab;
+  --hd-text-muted: #a09c95;     /* 表头（subtle）、弹窗（raised）、选中行与悬停底上也 ≥4.5:1 */
   --hd-text-disabled: var(--hd-alpha-white-400);
   --hd-text-placeholder: var(--hd-text-muted);
 
-  --hd-surface-page: var(--hd-gray-900);
-  --hd-surface-sidebar: var(--hd-gray-850);
-  --hd-surface-raised: #252525;
-  --hd-surface-subtle: #2c2c2b;
-  --hd-surface-hover: var(--hd-alpha-white-100);
-  --hd-surface-pressed: var(--hd-alpha-white-200);
-  --hd-surface-selected: var(--hd-alpha-white-150);
+  /* Gr8r 关系：侧栏比内容区暗，浮层取第二层 */
+  --hd-surface-page: #1d1d1c;
+  --hd-surface-sidebar: #151514;
+  --hd-surface-raised: #252524;
+  --hd-surface-subtle: #252524;
+  --hd-surface-hover: #fffaf00d;
+  --hd-surface-pressed: #fffaf017;
+  --hd-surface-selected: #2d2d2b;
   --hd-surface-overlay: #0000008a;
 
-  --hd-border-subtle: var(--hd-alpha-white-100);
-  --hd-border-default: var(--hd-alpha-white-150);
-  --hd-border-strong: var(--hd-alpha-white-200);
+  --hd-border-subtle: #252523;
+  --hd-border-default: #2c2b29;
+  --hd-border-strong: #3a3936;
   --hd-border-input: #99958f;
-  --hd-surface-input: var(--hd-gray-850);
+  --hd-surface-input: #191918;
   --hd-flow-edge: var(--hd-gray-600);
   --hd-flow-edge-soft: var(--hd-gray-700);
   --hd-flow-card-foot: var(--hd-gray-850);
@@ -372,16 +379,19 @@
   --hd-info-text: var(--hd-blue-300);
   --hd-info-soft: #10263b;
 
-  --hd-tag-gray-bg: #373737;    --hd-tag-gray-text: var(--hd-alpha-white-800);
-  --hd-tag-brown-bg: #4a3829;   --hd-tag-brown-text: var(--hd-brown-200);
-  --hd-tag-orange-bg: #5c3b23;  --hd-tag-orange-text: var(--hd-orange-200);
-  --hd-tag-yellow-bg: #564328;  --hd-tag-yellow-text: var(--hd-yellow-200);
-  --hd-tag-green-bg: #243d30;   --hd-tag-green-text: var(--hd-green-200);
-  --hd-tag-blue-bg: #143a4e;    --hd-tag-blue-text: var(--hd-blue-200);
-  --hd-tag-purple-bg: #3c2d49;  --hd-tag-purple-text: var(--hd-purple-200);
-  --hd-tag-pink-bg: #4e2c3c;    --hd-tag-pink-text: var(--hd-pink-200);
-  --hd-tag-red-bg: #522e2a;     --hd-tag-red-text: var(--hd-red-200);
-  --hd-tag-teal-bg: #173f3d;    --hd-tag-teal-text: var(--hd-teal-200);
+  --hd-danger-hover: #522e2a;
+
+  /* 标签：Gr8r 浅底与深色页面 #1d1d1c 合成为实色，文字 ≥6.1:1（R-COL 4.7） */
+  --hd-tag-gray-bg: #252524;    --hd-tag-gray-text: #b5b2ab;
+  --hd-tag-brown-bg: #302c28;   --hd-tag-brown-text: #c7a68d;
+  --hd-tag-orange-bg: #332a23;  --hd-tag-orange-text: #e49a6b;
+  --hd-tag-yellow-bg: #332d21;  --hd-tag-yellow-text: #d8a545;
+  --hd-tag-green-bg: #242e28;   --hd-tag-green-text: #65bd8c;
+  --hd-tag-teal-bg: #232f2d;    --hd-tag-teal-text: #58c0b6;
+  --hd-tag-blue-bg: #262c33;    --hd-tag-blue-text: #82aee9;
+  --hd-tag-purple-bg: #2c2933;  --hd-tag-purple-text: #b59eea;
+  --hd-tag-pink-bg: #33292c;    --hd-tag-pink-text: #e793b0;
+  --hd-tag-red-bg: #312724;     --hd-tag-red-text: #e69387;
 
   --hd-elevation-card: 0 0 0 1px var(--hd-alpha-white-100);
   --hd-elevation-popover: 0 0 0 1px var(--hd-alpha-white-100), 0 4px 18px #00000066;
