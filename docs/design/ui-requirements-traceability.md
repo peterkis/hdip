@@ -124,7 +124,7 @@
 | SP-06 | F08 | SC-04 等列表，AC-0502 | 同上 |
 | SP-07、7.1 | §7.3、§7.1 | SC-11、外壳 | 同上 |
 | ST-01、V01～V05 | F13、Gr8r §6 | R-COL 4.6、/design | 同上 |
-
 | P2-A、P2-B（a7cb90e 复审） | F01、SP-01 | SC-16，AC-0406 / 0409 / 0410 | `ui-migration-matrix.md` 14.1 |
 | P2-C（a7cb90e 复审） | F02、SP-02 | SC-07 / SC-16 拆分后继 | 同上 |
 | P2-D（a7cb90e 复审） | §7.1 | 外壳 | 同上 |
+| ST-02、十种标签色（50470ad 收尾） | F13、Gr8r 标签评估 | R-COL 4.7、/design，SC-04 / 07 / 13 / 02 / 11 标签 | `ui-migration-matrix.md` 14.2 |

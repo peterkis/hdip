@@ -198,11 +198,11 @@
       "焦点色",
       "--hd-border-input（#7f7b75 / #99958f）",
       "danger / warning / info 文字与底",
-      "标签 20 组",
       "chart-*",
       "lib/tones.ts"
     ],
     "exceptions": [
+      "十种标签色（灰色 + 九种彩色）改为 Gr8r 浅底实色化，文字 ≥6.1:1，brown 为 HDIP 补色（ui-tokens.md R-COL 4.7，2026-10-27）；危险按钮 / 徽标悬停改用 --hd-danger-hover（原值）",
       "浅色 --hd-success-text 改 green-700（600 在侧栏、表头、悬停底上不足 4.5:1）",
       "深色 --hd-text-muted 取 #a09c95（Gr8r #9a968f 在表头悬停底上 4.49）",
       "悬停 / 按下用暖色透明叠加，不用 Gr8r 的固定值（侧栏、表头上看不出）",

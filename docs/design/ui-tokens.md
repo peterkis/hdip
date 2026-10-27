@@ -262,7 +262,7 @@ W3C 中文排版需求作为中文标点和混排的研究依据；具体字号�
 
 **焦点**：键盘焦点统一为 2px 实色轮廓、外移 2px，颜色取 `--hd-focus-ring`（色值不变）。`index.css` 基础层给 `a[href]`、`button`、`summary`、可 Tab 的元素一条通用规则；组件自己的焦点类优先。基类带 `outline-none` 的组件必须同时写 `outline-solid`（否则 Tailwind 的轮廓样式变量是 none，轮廓不出现）。透明的原生 select / 输入在**可见外层**显示：筛选胶囊、搜索框、顶栏查看日期用 `has-focus-visible:`，标签输入用 `focus-within:`。焦点不替换错误红边（输入的 `focus-visible:border-ring` 已去掉）。滚动容器要给轮廓留出 ≥4px（表单弹窗字段区为 `-m-1 p-1.5`）。2px 是本项目的选择，不宣称为 AA 硬性尺寸。
 
-**危险操作**：Button / Badge `destructive` = `bg-danger-soft text-danger-text`，悬停 / 按下 `bg-tag-red-bg`；Alert `destructive` = danger-soft 底 + danger-text，说明不再 `/90`；菜单 destructive 项文字与图标 danger-text、键盘高亮 danger-soft。`--destructive` 仍是强调红，只用于边界与几何（如错误输入的红边）。
+**危险操作**：Button / Badge `destructive` = `bg-danger-soft text-danger-text`，悬停 / 按下 `bg-danger-hover`（2026-10-27 从 `tag-red-bg` 拆出、取原值，不随标签色变）；Alert `destructive` = danger-soft 底 + danger-text，说明不再 `/90`；菜单 destructive 项文字与图标 danger-text、键盘高亮 danger-soft。`--destructive` 仍是强调红，只用于边界与几何（如错误输入的红边）。
 
 **非输入组件不跟着输入边界变深**：Button outline 透明底、悬停 `bg-surface-hover`；Badge outline 透明；Tabs 深色激活 `bg-surface-subtle border-line`；Field 可选卡片悬停 `bg-surface-hover`；NativeSelect 悬停 `bg-surface-subtle`。
 
@@ -293,9 +293,33 @@ W3C 中文排版需求作为中文标点和混排的研究依据；具体字号�
 - 首个可见面包屑不留左内缩，文字与页面标题同一起线（实测差 0px）。
 - 未做：页面行悬停改固定表面（V03）、浮层阴影简化（V06）——需同屏比较后再定，现有叠加与阴影在各种底上可辨。
 
-**不随之改的例外**：主按钮与强调色三态（蓝 / 紫 / 青，浅深 18 组）、焦点色、`--hd-border-input`（`#7f7b75` / `#99958f`：Gr8r 的普通强边线对内容底只有约 1.44，不能承担输入边界 3:1）、危险 / 警告 / 信息文字、十种标签色与图表色。悬停不照搬 Gr8r 的固定 `#f6f5f2`：侧栏（`#f4f3f0`）、表头（`#f6f5f2`）上会看不出来，所以用叠加。
+**不随之改的例外**：主按钮与强调色三态（蓝 / 紫 / 青，浅深 18 组）、焦点色、`--hd-border-input`（`#7f7b75` / `#99958f`：Gr8r 的普通强边线对内容底只有约 1.44，不能承担输入边界 3:1）、危险 / 警告 / 信息文字与图表色（十种标签色在 2026-10-27 另行改为 Gr8r 浅底，见 4.7）。悬停不照搬 Gr8r 的固定 `#f6f5f2`：侧栏（`#f4f3f0`）、表头（`#f6f5f2`）上会看不出来，所以用叠加。
 
 **静态对比（先合成透明度再按 WCAG 相对亮度计算，方法见 `docs/剧本走查记录.md` 2026-10-27）**：在 page / sidebar / subtle / raised / selected 与三种底的悬停态上，浅色 secondary ≥6.32、muted ≥4.71、危险 ≥5.94、警告 ≥4.74、成功 ≥6.31、蓝 / 紫 / 青强调文字 ≥5.59；深色 secondary ≥6.25、muted ≥4.84、反馈与强调文字 ≥5.56。输入边界对输入底 4.21（浅）/ 5.91（深），对表头 3.86 / 5.15。
+
+### 4.7 十种标签色改为 Gr8r 浅底（2026-10-27）
+
+新决定（取代 4.6 中“十种标签色不变”的例外）：迁到 Gr8r 中性色后，原 Notion 配对的彩色底块（`*-200` 大面积底 + `*-800/900` 深字）比工作台显得重，多个标签并排时先吸引视线。改为 Gr8r 的浅底徽标方向：
+
+- **来源**：浅底按 Gr8r 规则——green / purple 11%、yellow 对应 amber 12%、red 10%（Gr8r 原生 `.badge`），orange / teal / blue / pink 沿 11% 推导（Gr8r 有这些基础色但没有同名徽标），**brown 是 HDIP 补色**（Gr8r 无棕；浅色基色 `#885d3d`、深色 `#c6a58b`）；gray 取 Gr8r surface-2 / text-2。
+- **实色化**（HDIP 适配）：浅底分别与白色页面、深色页面 `#1d1d1c` 合成为实色，同一标签在表格、选中行、浮层上配对不变；Gr8r 的透明底会随父底变化。
+- **文字**：沿 Gr8r 色相加深到实色底上 ≥6.1:1（直接用 Gr8r 基础色作 12px 文字时 orange / teal / blue / rose 只有 3.7～4.3）。
+- **不变**：十个 Tone 名称与业务映射（绿在用、黄计划、橙暂停、红停用、灰已结束、蓝进行中……）、20px 高 / 12px 字 / 4px 圆角 / 6px 内距（几何差异另行比较）、主按钮与强调色、焦点、输入边界、图表色；危险按钮 / 徽标悬停改用独立的 `--hd-danger-hover`（原值）。标签蓝与品牌蓝是不同语义。
+
+| Tone | 浅色底 / 文字 | 对比 | 深色底 / 文字 | 对比 |
+| --- | --- | --- | --- | --- |
+| gray | `#f6f5f2` / `#57544e` | 6.92 | `#252524` / `#b5b2ab` | 7.25 |
+| brown | `#f2edea` / `#755034` | 6.12 | `#302c28` / `#c7a68d` | 6.11 |
+| orange | `#f8eee8` / `#8a461f` | 6.18 | `#332a23` / `#e49a6b` | 6.10 |
+| yellow | `#f2ece2` / `#784f0c` | 6.12 | `#332d21` / `#d8a545` | 6.10 |
+| green | `#e7f0eb` / `#1f6340` | 6.19 | `#242e28` / `#65bd8c` | 6.16 |
+| teal | `#e6f2f1` / `#16625f` | 6.22 | `#232f2d` / `#58c0b6` | 6.35 |
+| blue | `#e9eff9` / `#2a589b` | 6.13 | `#262c33` / `#82aee9` | 6.16 |
+| purple | `#f0ecf8` / `#6345a3` | 6.20 | `#2c2933` / `#b59eea` | 6.14 |
+| pink | `#f8eaef` / `#953458` | 6.19 | `#33292c` / `#e793b0` | 6.16 |
+| red | `#f7ecea` / `#9b342a` | 6.22 | `#312724` / `#e69387` | 6.15 |
+
+对比按 WCAG 相对亮度由源码色值计算，并在浏览器读取最终计算色核对（见 `docs/剧本走查记录.md` 2026-10-27“标签色”）。
 
 ## 5. R-ROW 连续行与表格
 

@@ -73,8 +73,8 @@ export const CODE_STATUS_TONE: Record<string, Tone> = {
 export const LEVEL_TONE: Record<number, Tone> = { 1: 'blue', 2: 'orange', 3: 'purple' }
 export const levelTone = (level: number): Tone => LEVEL_TONE[level] ?? 'pink'
 
-/** 统计图的颜色：标签色之外多一个青色（令牌 --hd-chart-<色>） */
-export type ChartTone = Tone | 'teal'
+/** 统计图的颜色：与标签同一组十个色名，取值在令牌 --hd-chart-<色>（不随标签色变） */
+export type ChartTone = Tone
 
 // 统计图的分类配色：相邻两色须过色盲区分度校验（dataviz 校验脚本），所以不直接沿用标签色
 //（标签色里蓝、紫相邻，绿色弱下几乎分不开）。图上每个节点都有名称标签，颜色不是唯一线索。
@@ -104,7 +104,8 @@ export const CODE_BREAKDOWN_TONE: Record<string, ChartTone> = {
 /**
  * 任用类型：八种各用一色，按含义取色（2026-10-23 Peter：每种类型单独着色）。
  * 这一列表示“哪种用工形式”，不表示状态好坏（同部门主分类 MAIN_CLASS_TONE）；不用红、灰，免得像“停用 / 已结束”。
- * 两种主题下正文对比都 ≥ 6:1，相邻两色的底色或正文色差都清楚可辨（2026-10-23 按 tokens.css 计算）。
+ * 两种主题下正文对比都 ≥ 6.1:1（2026-10-27 标签改为 Gr8r 浅底后按 tokens.css 重算：浅色 6.12～6.22、深色 6.11～6.35），
+ * 相邻两色的正文色相仍可辨。
  */
 export const ENGAGEMENT_TYPE_TONE: Record<string, Tone> = {
   STAFF: 'blue', // 在编：正式编制，最稳定

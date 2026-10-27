@@ -357,7 +357,7 @@ const U31_ROWS: { phase: string; behavior: string; visual: string; open: string 
   { phase: 'R03 读取状态', behavior: '通过（10-27 补：缓存后 404 / 500、主详情与附属区、点选遇拒绝；PR #2 复审补：默认标签负责人 / 人数、编码标签概况名单、权限刷新被拒后直到再次成功才恢复）', visual: '浅色；真实 403（无角色身份）；受控 404 / 500 / 403', open: '深色下读取状态外观只抽查' },
   { phase: 'R04 组织变更向导', behavior: '通过（10-27 补：取号槽位、拼音码保留、后台更新提示；PR #2 复审补：删除后新增不改投、删除前一科不覆盖拼音码；a7cb90e 复审补：初始身份即登记、编辑身份与取号位置分开）', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
   { phase: 'R05 返回上下文', behavior: '通过（10-27 补：后退→前进→再后退、侧栏不恢复、名册第二项任用；PR #2 复审补：面包屑返回后连续后退）', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
-  { phase: 'R06 配色', behavior: '通过；10-27 中性色迁到 Gr8r（R-COL 4.6）', visual: '6 组合计算值 + 截图；真实悬停取样；Gr8r 中性浅 / 深截图', open: '紫 / 青强调在新中性底上只计算未截图；任意多层叠加、图表渐变未测' },
+  { phase: 'R06 配色', behavior: '通过；10-27 中性色迁到 Gr8r（R-COL 4.6）、十种标签色改为 Gr8r 浅底（R-COL 4.7）', visual: '6 组合计算值 + 截图；真实悬停取样；Gr8r 中性浅 / 深截图', open: '紫 / 青强调在新中性底上只计算未截图；任意多层叠加、图表渐变未测' },
   { phase: 'R07 尺度与键盘', behavior: '部分', visual: '1366 / 1920 / 768 / 767；reduce 用规则模拟', open: '系统真实 reduce、原生日历弹层、Windows 缩放' },
   { phase: 'R08 场景模板', behavior: '通过（10-27 补：名册空任用措辞、单元退出安排）', visual: '浅色，默认宽度', open: '仅已撤销任用的人员未在走查库实测' },
   { phase: 'R09 综合验收', behavior: '部分', visual: '14 页 × 1366 / 1920 × 展开 / 折叠，768 / 767，1040 阈值', open: 'Windows 实机、读屏、手机（范围外）' },
@@ -570,6 +570,7 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-danger', cls: 'bg-danger', use: '危险操作' },
       { token: '--hd-danger-text', cls: 'text-danger-text', use: '错误说明、危险按钮文字', text: true },
       { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底、危险按钮底' },
+      { token: '--hd-danger-hover', cls: 'bg-danger-hover', use: '危险按钮 / 徽标的悬停、按下底（不随标签色变）' },
       { token: '--hd-warning-text', cls: 'text-warning-text', use: '提醒文字', text: true },
       { token: '--hd-warning-soft', cls: 'bg-warning-soft', use: '警告提示底' },
       { token: '--hd-success-text', cls: 'text-success-text', use: '成功文字（浅色取 green-700：600 在侧栏、表头上不足 4.5:1）', text: true },
@@ -972,6 +973,20 @@ const STATUS_GROUPS: { title: string; labels: Record<string, string>; tones: Rec
   { title: '演变关系', labels: { SPLIT: '拆分', MERGE: '合并' }, tones: LINEAGE_TONE },
 ]
 
+/** 每种标签色的一个真实业务说法（与 lib/tones.ts 的映射一致） */
+const TONE_SAMPLE: Record<Tone, string> = {
+  gray: '已结束',
+  brown: '被替代',
+  orange: '暂停',
+  yellow: '计划中',
+  green: '在用',
+  teal: '合同',
+  blue: '进行中',
+  purple: '拆分',
+  pink: '实习',
+  red: '已停用',
+}
+
 function TagsSection() {
   return (
     <Section
@@ -984,12 +999,15 @@ function TagsSection() {
       }
     >
       <div className="grid gap-2">
-        <SubTitle>九种标签色</SubTitle>
-        <div className="flex flex-wrap gap-2">
+        <SubTitle>十种标签色（灰色 + 九种彩色）</SubTitle>
+        {/* 真实 Tag、真实业务说法：颜色读同一组 --hd-tag-* 语义令牌，不在本页另写色值。
+            浅底来自 Gr8r（实色化），brown 是 HDIP 补色；文字对实色底 ≥6.1:1（R-COL 4.7） */}
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
           {TONES.map((t) => (
-            <Tag key={t} tone={t}>
-              {t}
-            </Tag>
+            <span key={t} className="inline-flex items-center gap-1.5">
+              <Tag tone={t}>{TONE_SAMPLE[t]}</Tag>
+              <span className="text-fg-muted font-mono text-caption">{t}</span>
+            </span>
           ))}
         </div>
       </div>
