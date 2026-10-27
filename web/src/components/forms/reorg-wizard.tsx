@@ -16,7 +16,7 @@ import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
 import { fillNewCodes, isNewCode, newCode, slotOf } from '@/components/forms/new-code'
 import { FormErrorsContext, requireFields, SelectField, TextField, type Option } from '@/components/forms/fields'
-import { closeWarning, saveFailureText, type ChangeItemInput } from '@/components/forms/item-dialog'
+import { closeWarning, nextOutcome, saveFailureText, type ChangeItemInput, type WriteOutcome } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
 import { Callout } from '@/components/kit/callout'
 import { FormEditContext } from '@/components/kit/form-edit'
@@ -57,6 +57,8 @@ interface NewDept {
   scope: string
   parent: string
   mainClass: string
+  /** 拼音码是否跟随名称：属于这个新部门本身，控件重新挂载或换位置都不丢（PR #2 复审 SP-02）；未定义时由控件按现值推断 */
+  pinyinFollow?: boolean
 }
 
 export interface ReorgSource {
@@ -166,6 +168,7 @@ export function DepartmentReorgWizard({
   const editCtx = useMemo(() => ({ markDirty }), [markDirty])
   const [confirmClose, setConfirmClose] = useState(false)
   const saving = useRef(false)
+  const [outcome, setOutcome] = useState<WriteOutcome>('none')
   const [type, setType] = useState<ReorgType | ''>(init?.type ?? '')
   const [day, setDay] = useState(() => init?.day ?? today())
   const [basis, setBasis] = useState(init?.basis ?? '')
@@ -175,11 +178,19 @@ export function DepartmentReorgWizard({
   const [others, setOthers] = useState<string[]>(init?.others ?? [''])
   // 每个新设部门一个占位代码槽位；保存时整张草稿一起换成系统分配的代码，重试拿回同一批号
   const [requestKey] = useState(() => crypto.randomUUID())
-  // 槽位只在真正新增部门时取（审查 F01）：初值纯构造，渲染不消耗槽位；新槽位 = 现有占位槽位的最大值 + 1，
-  // 取号数量因此只随实际的新部门数增长（接口一次最多 50 个）
+  // 占位代码就是新部门在本次编辑中的身份，承接选择按它指向对象（审查 F01、PR #2 复审 SP-01）：
+  // - 初值纯构造，渲染不消耗槽位；
+  // - 新槽位只在真正新增部门时取，且本次打开内单调递增、不复用——删掉的部门的槽位不会给后来的部门，
+  //   指向它的承接选择保持失效、要求重选，不会被同号的新部门“复活”；已预留的代码与原对象的绑定也不变；
+  // - 切换类型保留已有的新部门（不重建），取号数量因此只随实际新增的部门增长（接口一次最多 50 个）。
   const blankAt = (at: number): NewDept => ({ name: '', code: newCode('department', at), pinyin: '', scope: '', parent: source.parentCode ?? '', mainClass: source.mainClass ?? '' })
-  const blank = (list: NewDept[]) => blankAt(Math.max(-1, ...list.map((n) => slotOf(n.code))) + 1)
   const [news, setNews] = useState<NewDept[]>(() => (init?.news.length ? init.news : [blankAt(0), blankAt(1)]))
+  const nextSlot = useRef<number | null>(null)
+  /** 只在事件处理里调用 */
+  const blank = (): NewDept => {
+    nextSlot.current ??= Math.max(-1, ...news.map((n) => slotOf(n.code))) + 1
+    return blankAt(nextSlot.current++)
+  }
   const [unitTo, setUnitTo] = useState<Record<string, string>>(init?.unitTo ?? {})
   const [childTo, setChildTo] = useState<Record<string, string>>(init?.childTo ?? {})
   const [personTo, setPersonTo] = useState<Record<string, string>>(init?.personTo ?? {})
@@ -451,6 +462,7 @@ export function DepartmentReorgWizard({
       onOpenChange(false)
       navigate(`/changes/${cr.id}`)
     },
+    onError: (e) => setOutcome((prev) => nextOutcome(prev, e)),
     onSettled: () => {
       saving.current = false
     },
@@ -473,7 +485,8 @@ export function DepartmentReorgWizard({
   }
 
   const steps: StepItem[] = STEP_LABELS.map((label, i) => ({ label, state: i < step ? 'done' : i === step ? 'current' : 'upcoming' }))
-  const setNew = (i: number, patch: Partial<NewDept>) => setNews(news.map((n, j) => (j === i ? { ...n, ...patch } : n)))
+  // 函数式更新：同一次输入里拼音码与跟随状态先后各改一次，不能互相覆盖
+  const setNew = (i: number, patch: Partial<NewDept>) => setNews((list) => list.map((n, j) => (j === i ? { ...n, ...patch } : n)))
   // 错误只由重验清除（不因键入任意字符就清掉）
   const errorsCtx = { errors, clear: () => {} }
   const scopeNow = step >= 2 ? scopeProblem() : null
@@ -519,8 +532,12 @@ export function DepartmentReorgWizard({
                         markDirty()
                         setType(t.value)
                         setErrors({})
-                        // 整体拆分至少两个新部门；分设、合并新设先给一个。已做的承接选择不清掉：指向旧新部门的会标为失效、要求重选
-                        setNews(t.value === 'SPLIT' ? [blankAt(0), blankAt(1)] : [blankAt(0)])
+                        // 整体拆分至少两个新部门，分设、合并新设至少一个：保留已填写名称的新部门与前几个（身份不变，指向它们的承接仍有效），
+                        // 只补不足的空白部门；去掉的部门的承接选择标为失效、要求重选（槽位不复用，不会改投给别的部门）
+                        const min = t.value === 'SPLIT' ? 2 : 1
+                        const kept = news.filter((n, j) => j < min || n.name.trim())
+                        while (kept.length < min) kept.push(blank())
+                        setNews(kept)
                       }}
                       className={cn(
                         'grid gap-1 rounded-md border p-3 text-left text-xs transition-colors',
@@ -601,7 +618,8 @@ export function DepartmentReorgWizard({
                   ))}
                 {hasNew &&
                   newList.map((n, i) => (
-                    <fieldset key={i} className="border-line-subtle grid gap-3 rounded-md border p-3">
+                    // 用新部门自己的身份作 key：删掉前面的部门时，后面部门的控件不会接手前一个的状态（SP-02）
+                    <fieldset key={n.code} className="border-line-subtle grid gap-3 rounded-md border p-3">
                       <legend className="text-fg-strong flex w-full items-center px-1 text-xs font-semibold">
                         新设部门 {newList.length > 1 ? i + 1 : ''}
                         {(type === 'SPLIT' && news.length > 2) || (type === 'SPLIT_OFF' && news.length > 1) ? (
@@ -619,7 +637,14 @@ export function DepartmentReorgWizard({
                       </legend>
                       <div className="grid grid-cols-2 gap-3">
                         <TextField label="名称" name={`new.${i}.name`} required value={n.name} onChange={(name) => setNew(i, { name })} />
-                        <PinyinField source={n.name} name={`new.${i}.pinyin`} value={n.pinyin} onChange={(pinyin) => setNew(i, { pinyin })} />
+                        <PinyinField
+                          source={n.name}
+                          name={`new.${i}.pinyin`}
+                          value={n.pinyin}
+                          onChange={(pinyin) => setNew(i, { pinyin })}
+                          follow={n.pinyinFollow}
+                          onFollowChange={(pinyinFollow) => setNew(i, { pinyinFollow })}
+                        />
                       </div>
                       <AutoCodeField type="department" label="管理编码" code={n.code} />
                       <TextField label="承接的职责" value={n.scope} onChange={(scope) => setNew(i, { scope })} placeholder="选填，如：高新院区住院" />
@@ -647,7 +672,7 @@ export function DepartmentReorgWizard({
                 {(type === 'SPLIT' || type === 'SPLIT_OFF') && (
                   <button type="button" className="text-fg-secondary hover:text-fg justify-self-start text-xs hover:underline" onClick={() => {
                     markDirty()
-                    setNews([...news, blank(news)])
+                    setNews([...news, blank()])
                   }}>
                     + 再新设一个部门
                   </button>
@@ -823,7 +848,7 @@ export function DepartmentReorgWizard({
         )}
         {confirmClose ? (
           <div role="alertdialog" aria-label="放弃组织变更向导里的内容" className="bg-surface-subtle grid gap-3 rounded-lg px-3 py-3">
-            <p className="text-fg text-xs">{closeWarning('向导里已填写的内容与承接选择', save.error)}</p>
+            <p className="text-fg text-xs">{closeWarning('向导', outcome)}</p>
             <div className="flex flex-wrap justify-end gap-2">
               <Button
                 type="button"

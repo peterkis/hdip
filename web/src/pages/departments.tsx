@@ -354,7 +354,7 @@ export function DepartmentsPage() {
             </tr>
           )}
           {ordered.map((d) => (
-            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected')}>
+            <DbRow key={d.id} returnId={d.id} className={cn(current.has(d.id) && 'bg-surface-selected hover:bg-surface-selected')}>
               {isMaintainer && (
                 <DbCell>
                   <input
@@ -663,7 +663,9 @@ export function DepartmentDetailPage() {
   const [closingRelation, setClosingRelation] = useState<DepartmentRelationOut | null>(null)
   const [closingClass, setClosingClass] = useState<DepartmentClassificationOut | null>(null)
   const viewsQuery = useListOrgViews()
-  const views = viewsQuery.data ?? []
+  // 组织视图标签：被拒绝时不显示缓存里的视图名（PR #2 复审 7.2）；普通刷新失败照常显示并标出
+  const viewsStatus = readStatus(viewsQuery)
+  const views = viewsStatus === 'ready' ? (viewsQuery.data ?? []) : []
   // 当前标签写在网址里（?tab=），返回、刷新、转发链接都回到同一标签（统一规范 0.2）
   const [params, setParams] = useSearchParams()
   const asked = params.get('tab') as TabKey | null
@@ -826,6 +828,15 @@ export function DepartmentDetailPage() {
         </div>
       )}
 
+      {/* 职务、人员归属是独立读取：页头的负责人、标签上的人数和“人员”标签都用它们，刷新失败的说明放在这里一次（PR #2 复审 SP-04），
+          各标签内不再重复 */}
+      {(dutiesStatus === 'ready' || personsStatus === 'ready') && (
+        <div className="mt-3 grid gap-2 empty:hidden">
+          {dutiesStatus === 'ready' && <StaleNotice what="部门职务（当前负责人）" query={dutiesQuery} />}
+          {personsStatus === 'ready' && <StaleNotice what="人员归属（人数）" query={personsQuery} />}
+        </div>
+      )}
+
       <Tabs value={tab} onValueChange={(v) => setTab(v as TabKey)} className="mt-6">
         <TabsList variant="line" className="max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="props">名称与说明</TabsTrigger>
@@ -965,7 +976,8 @@ export function DepartmentDetailPage() {
 
         {tab === 'org' && (
           <>
-            {readStatus(viewsQuery) === 'error' && <ReadError what="组织视图列表" query={viewsQuery} compact />}
+            {viewsStatus === 'error' && <ReadError what="组织视图列表" query={viewsQuery} compact />}
+            {viewsStatus === 'ready' && <StaleNotice what="组织视图列表" query={viewsQuery} />}
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="组织视图">
               {views.map((v) => (
                 <Tag key={v.code} tone={v.status === 'ACTIVE' ? 'blue' : 'gray'} className={cn(v.status !== 'ACTIVE' && 'opacity-60')}>
@@ -1046,7 +1058,6 @@ export function DepartmentDetailPage() {
               title="部门职务"
               action={can('person.change') ? <InlineAction onClick={() => setDutyDialog({ kind: 'assign' })}>任命职务</InlineAction> : null}
             >
-              {dutiesStatus === 'ready' && <StaleNotice what="部门职务" query={dutiesQuery} />}
               {dutiesStatus === 'ready' ? (
                 <DepartmentDuties rows={duties} onAction={can('person.change') ? (kind, duty) => setDutyDialog({ kind, duty }) : undefined} />
               ) : dutiesStatus === 'error' ? (
@@ -1057,7 +1068,6 @@ export function DepartmentDetailPage() {
               <p className="text-fg-muted text-caption">负责人由职务按日期带出，不写在部门上；代管者可以不归属本部门；职务不等于系统权限。</p>
             </Section>
             <Section title={`人员归属（${asOf}）`}>
-              {personsStatus === 'ready' && <StaleNotice what="人员归属" query={personsQuery} />}
               {personsStatus === 'ready' ? (
                 <DepartmentPersons rows={persons} suspended={onDay?.lifecycle === 'SUSPENDED'} />
               ) : personsStatus === 'error' ? (

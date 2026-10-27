@@ -169,8 +169,11 @@ export function OrganizationOverviewPage() {
     setLastReset(selReset)
     setSel(null)
   }
-  // 点选依赖的读取被拒绝或失败到没有结果：清掉，不在权限恢复后又把旧快照拿出来
-  if (sel && areaStatus === 'error') setSel(null)
+  // 点选名单按它自己的来源判断依赖（PR #2 复审 SP-05），不按当前标签的图：编码图的点选只看来源系统；
+  // 概况条的“跨院区 / 没有在运营单元”名单看单元 + 部门（任何标签下都能点）；布局 / 矩阵的点选看该区块的依赖
+  const selStatus = !sel ? 'ready' : 'codes' in sel ? sS : sel.key === 'cross' || sel.key === 'idle' ? coreStatus : areaStatus
+  // 依赖的读取被拒绝或失败到没有结果：清掉，不在权限恢复后又把旧快照拿出来
+  if (sel && selStatus === 'error') setSel(null)
 
   /** 服务单元列表的链接：带上当前的全部范围，列表与页内清单是同一批单元。
    *  点的是某个部门（院区视角的部门节点、矩阵格、院区 → 部门的带）时按该部门本身筛：
@@ -465,7 +468,7 @@ export function OrganizationOverviewPage() {
             {areaStatus === 'ready' && p.tab === 'codes' && <CodesView gov={gov} systems={systems} onSelect={selectCodes} />}
           </div>
           {/* 点选的快照只在它依赖的读取可用时显示：被拒绝、身份重置后读取中都不显示旧名单；普通刷新失败照常保留（有“可能不是最新”） */}
-          <SelectionPanel sel={areaStatus === 'ready' ? sel : null} onClose={() => setSel(null)} />
+          <SelectionPanel sel={selStatus === 'ready' ? sel : null} onClose={() => setSel(null)} />
         </div>
       </div>
     </>

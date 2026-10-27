@@ -142,7 +142,7 @@ function Sidebar({ active }: { active: string }) {
             className={cn(
               'flex h-7 items-center gap-2 rounded-md px-2 text-left text-xs transition-colors duration-(--hd-duration-fast)',
               active === s.id
-                ? 'bg-surface-selected text-fg-strong font-medium'
+                ? 'bg-surface-raised text-fg-strong ring-line font-medium shadow-(--hd-elevation-card) ring-1 dark:bg-surface-selected dark:shadow-none dark:ring-0'
                 : 'text-fg-secondary hover:bg-surface-hover',
             )}
           >
@@ -325,10 +325,10 @@ function Overview() {
             {
               label: '参考材料',
               icon: InformationCircleIcon,
-              value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法）',
+              value: 'notion-design-md.md（历史抽取，不约束应用）；Gr8r Studio 904205c（布局方法与 2026-10-27 起的中性颜色基线，见 R-COL 4.6）',
             },
             { label: '组件底层', icon: Layers01Icon, value: 'shadcn/ui Base UI（base-mira）+ hugeicons' },
-            { label: '更新', icon: Calendar03Icon, value: '2026-10-25（U0 规范接入、U1 变更申请列表、U2 全部列表页、U3 详情、表单与复杂核对）' },
+            { label: '更新', icon: Calendar03Icon, value: '2026-10-27（U3.1 九阶段、最终审查与 PR #2 复审补修、中性色迁到 Gr8r；此前 U0～U3 于 2026-10-25）' },
           ]}
         />
       </div>
@@ -352,11 +352,11 @@ const STAGE: Record<Stage, { label: string; tone: Tone }> = {
 
 /** U3.1 九个阶段的真实验收状态：只写执行过的检查，环境做不了的写未验 */
 const U31_ROWS: { phase: string; behavior: string; visual: string; open: string }[] = [
-  { phase: 'R01 公共表单', behavior: '通过（10-27 补：5xx 结果未确定、提交期间说明只读）', visual: '1024×768 / 1366×800 浅色；长表单弹窗高度复测', open: '读屏未验' },
+  { phase: 'R01 公共表单', behavior: '通过（10-27 补：5xx 结果未确定、提交期间说明只读；PR #2 复审补：409 后关闭说明）', visual: '1024×768 / 1366×800 浅色；长表单弹窗高度复测', open: '读屏未验' },
   { phase: 'R02 核对定位与批量', behavior: '通过', visual: '浅 / 深，1366 / 1440 / 1920 / 800', open: '—' },
-  { phase: 'R03 读取状态', behavior: '通过（10-27 补：缓存后 404 / 500、主详情与附属区、点选遇拒绝）', visual: '浅色；真实 403（无角色身份）；受控 404 / 500 / 403', open: '深色下读取状态外观只抽查' },
-  { phase: 'R04 组织变更向导', behavior: '通过（10-27 补：取号槽位、拼音码保留、后台更新提示）', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
-  { phase: 'R05 返回上下文', behavior: '通过（10-27 补：后退→前进→再后退、侧栏不恢复、名册第二项任用）', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
+  { phase: 'R03 读取状态', behavior: '通过（10-27 补：缓存后 404 / 500、主详情与附属区、点选遇拒绝；PR #2 复审补：默认标签负责人 / 人数、编码标签概况名单、权限刷新被拒）', visual: '浅色；真实 403（无角色身份）；受控 404 / 500 / 403', open: '深色下读取状态外观只抽查' },
+  { phase: 'R04 组织变更向导', behavior: '通过（10-27 补：取号槽位、拼音码保留、后台更新提示；PR #2 复审补：删除后新增不改投、删除前一科不覆盖拼音码）', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
+  { phase: 'R05 返回上下文', behavior: '通过（10-27 补：后退→前进→再后退、侧栏不恢复、名册第二项任用；PR #2 复审补：面包屑返回后连续后退）', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
   { phase: 'R06 配色', behavior: '通过；10-27 中性色迁到 Gr8r（R-COL 4.6）', visual: '6 组合计算值 + 截图；真实悬停取样；Gr8r 中性浅 / 深截图', open: '紫 / 青强调在新中性底上只计算未截图；任意多层叠加、图表渐变未测' },
   { phase: 'R07 尺度与键盘', behavior: '部分', visual: '1366 / 1920 / 768 / 767；reduce 用规则模拟', open: '系统真实 reduce、原生日历弹层、Windows 缩放' },
   { phase: 'R08 场景模板', behavior: '通过（10-27 补：名册空任用措辞、单元退出安排）', visual: '浅色，默认宽度', open: '仅已撤销任用的人员未在走查库实测' },
@@ -539,8 +539,8 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-surface-sidebar', cls: 'bg-surface-sidebar', use: '左侧栏' },
       { token: '--hd-surface-raised', cls: 'bg-surface-raised', use: '卡片、弹窗、下拉' },
       { token: '--hd-surface-subtle', cls: 'bg-surface-subtle', use: '次级块、代码、只读区' },
-      { token: '--hd-surface-hover', cls: 'bg-surface-hover', use: '悬停（叠加）' },
-      { token: '--hd-surface-selected', cls: 'bg-surface-selected', use: '选中的导航项' },
+      { token: '--hd-surface-hover', cls: 'bg-surface-hover', use: '悬停：暖色透明叠加，各种底上都看得出' },
+      { token: '--hd-surface-selected', cls: 'bg-surface-selected', use: '选中：实色（已选行、矩阵选中格、深色选中导航），悬停时保持' },
       { token: '--hd-surface-input', cls: 'bg-input-bg', use: '输入、选择、标签输入的底色' },
     ],
   },
@@ -548,9 +548,9 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
     title: '边框',
     items: [
       { token: '--hd-border-subtle', cls: 'border-line-subtle', use: '分隔线、表格线' },
-      { token: '--hd-border-default', cls: 'border-line', use: '卡片、容器、次级按钮' },
+      { token: '--hd-border-default', cls: 'border-line', use: '卡片、容器、浅色选中导航的细边' },
       { token: '--hd-border-input', cls: 'border-input', use: '可填写区域的边界（对输入底 ≥3:1）' },
-      { token: '--hd-border-strong', cls: 'border-line-strong', use: '强调的分隔' },
+      { token: '--hd-border-strong', cls: 'border-line-strong', use: '次按钮边界、强调的分隔（不承担输入边界）' },
     ],
   },
   {
@@ -572,6 +572,7 @@ const SEMANTIC_GROUPS: { title: string; items: { token: string; cls: string; use
       { token: '--hd-danger-soft', cls: 'bg-danger-soft', use: '错误提示底、危险按钮底' },
       { token: '--hd-warning-text', cls: 'text-warning-text', use: '提醒文字', text: true },
       { token: '--hd-warning-soft', cls: 'bg-warning-soft', use: '警告提示底' },
+      { token: '--hd-success-text', cls: 'text-success-text', use: '成功文字（浅色取 green-700：600 在侧栏、表头上不足 4.5:1）', text: true },
       { token: '--hd-success-soft', cls: 'bg-success-soft', use: '成功提示底' },
       { token: '--hd-info-soft', cls: 'bg-info-soft', use: '说明提示底' },
     ],
@@ -1183,7 +1184,7 @@ function OverlaySection() {
 // ================================================================== 使用规则
 const DOS = [
   '颜色、字号、圆角、阴影只用令牌生成的类（text-fg-muted、bg-surface-subtle、rounded-md…）',
-  '悬停、选中用透明度叠加（bg-surface-hover），不在每处另配一个灰',
+  '悬停用 bg-surface-hover（暖色透明叠加），选中用 bg-surface-selected（实色）；两者不混用，已选项悬停时保持选中底',
   '状态用 Tag，颜色从 lib/tones.ts 取',
   '一屏一个主按钮；危险操作用 destructive（浅红底）',
   '对象详情顶部用属性列表，说明与规则用 Callout',

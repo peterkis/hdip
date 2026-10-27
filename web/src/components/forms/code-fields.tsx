@@ -42,6 +42,8 @@ export function PinyinField({
   name = 'pinyin',
   initialFollow = true,
   mode = 'org',
+  follow,
+  onFollowChange,
 }: {
   source: string
   value: string
@@ -50,11 +52,20 @@ export function PinyinField({
   initialFollow?: boolean
   /** person：人名，首字按姓氏读音 */
   mode?: PinyinMode
+  /** 跟随状态由调用方保存在编辑对象上时传入（列表里可增删的对象）；未传时控件自己记，挂载时按现值推断 */
+  follow?: boolean
+  onFollowChange?: (follow: boolean) => void
 }) {
   // 用户手改过拼音码就不再自动覆盖；“按名称重新生成”恢复跟随。
   // 是否手改过不只记在控件里：向导切步骤、拆分切后继会重新挂载本控件，所以挂载时按现值推断——
   // 新建时现值非空且不等于按名称生成的结果 = 手改过（含草稿恢复），不重新生成（审查 F02）
-  const [edited, setEdited] = useState(() => initialFollow && !!value && value !== pinyinCode(source, mode))
+  const [ownEdited, setOwnEdited] = useState(() => initialFollow && !!value && value !== pinyinCode(source, mode))
+  // 调用方保存了跟随状态时以它为准：人工值恰好等于自动码、人工清空后重新挂载，都不会被当成“跟随”
+  const edited = follow === undefined ? ownEdited : !follow
+  const setEdited = (v: boolean) => {
+    setOwnEdited(v)
+    onFollowChange?.(!v)
+  }
   const auto = useMemo(() => pinyinCode(source, mode), [source, mode])
   const first = useRef(true)
   useEffect(() => {

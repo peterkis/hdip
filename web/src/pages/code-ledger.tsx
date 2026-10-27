@@ -41,7 +41,9 @@ export function CodeLedgerPage() {
   const [params, setParams] = useSearchParams()
   const ns = params.get('ns') ?? ''
   const status = (params.get('status') ?? '') as CodeStatus | ''
-  const openId = Number(params.get('code')) || null
+  // 地址里有 code 就打开详情弹层；不是正整数（1.5、abc、Infinity）由弹层说“找不到”，不发请求（PR #2 复审 SP-07）
+  const rawCode = params.get('code')
+  const openId = rawCode ? Number(rawCode) : null
   const batch = params.get('batch') === '1'
   // 检索词与已显示条数是本页状态：从部门、单元详情返回时取回（U3R-05）
   const [query, setQuery] = useReturnState('q', '', isString)
@@ -77,7 +79,7 @@ export function CodeLedgerPage() {
   const lastCode = useRef<number | null>(null)
   useEffect(() => {
     if (openId) {
-      lastCode.current = openId
+      if (Number.isInteger(openId)) lastCode.current = openId
       return
     }
     if (!lastCode.current) return
@@ -283,7 +285,7 @@ export function CodeLedgerPage() {
         </DbFooter>
       )}
 
-      {openId && <CodeDetailDialog id={openId} onClose={closeCode} />}
+      {openId !== null && <CodeDetailDialog id={openId} onClose={closeCode} />}
       {dialog === 'register' && (
         <ExternalCodeRegisterDialog open onOpenChange={(o) => !o && setDialog(null)} namespace={nsKey(systems, ns)} />
       )}
@@ -358,8 +360,9 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
 function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const query = useGetExternalCode(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
-  const detailStatus = readStatus(query)
+  const validId = Number.isInteger(id) && id > 0
+  const query = useGetExternalCode(id, { as_of: asOf }, { query: { enabled: validId } })
+  const detailStatus = validId ? readStatus(query) : 'error'
   const data = detailStatus === 'ready' ? query.data : undefined
   const [assigning, setAssigning] = useState(false)
   const [closing, setClosing] = useState<AssignmentOut | null>(null)
@@ -374,7 +377,7 @@ function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) 
           </DialogHeader>
           {detailStatus === 'loading' ? (
             <ReadLoading label="正在读取代码详情…" rows={3} />
-          ) : readFailure(query.error) === 'missing' || readFailure(query.error) === 'invalid' ? (
+          ) : !validId || readFailure(query.error) === 'missing' || readFailure(query.error) === 'invalid' ? (
             <Callout tone="neutral" title="找不到这个代码">
               链接里的代码可能已不存在或地址不完整，请从台账重新打开。
             </Callout>

@@ -14,8 +14,11 @@ type ReturnContext = {
   href: string
   /** 进入的详情页 pathname：只有这次详情才用 href 作“返回列表” */
   target: string
-  /** 来源列表那一条浏览记录的 location.key；经“返回列表”链接回去时改成新记录的 key */
-  entry: string
+  /**
+   * 属于这次来源的列表浏览记录（location.key）：最初那一条，以及之后经“返回列表”链接新建的记录。
+   * 只追加不替换（PR #2 复审 SP-06）：面包屑返回后再连续后退回到最初那条，仍能恢复
+   */
+  entries: string[]
   scope: string
   top: number
   /** 行上的 data-return-id */
@@ -30,12 +33,13 @@ function readContext(list: string): ReturnContext | null {
     const raw = sessionStorage.getItem(storeKey(list))
     if (!raw) return null
     const c = JSON.parse(raw) as Partial<ReturnContext> | null
-    if (!c || typeof c.href !== 'string' || typeof c.target !== 'string' || typeof c.entry !== 'string' || typeof c.scope !== 'string' || typeof c.id !== 'string')
+    const entries = Array.isArray(c?.entries) ? c.entries.filter((k): k is string => typeof k === 'string') : []
+    if (!c || typeof c.href !== 'string' || typeof c.target !== 'string' || entries.length === 0 || typeof c.scope !== 'string' || typeof c.id !== 'string')
       return null
     return {
       href: c.href,
       target: c.target,
-      entry: c.entry,
+      entries,
       scope: c.scope,
       top: typeof c.top === 'number' && c.top > 0 ? c.top : 0,
       id: c.id,
@@ -64,12 +68,12 @@ function useBackContext(): ReturnContext | null {
   const [back] = useState(() => {
     const c = readContext(pathname)
     if (!c || c.href !== pathname + search) return null
-    if (c.entry === key) return c
+    if (c.entries.includes(key)) return c
     if ((state as { listReturn?: unknown } | null)?.listReturn !== true) return null
-    // 经链接回来是一条新记录：改认这条，之后在它上面后退 / 前进也能恢复
-    const moved = { ...c, entry: key }
-    writeContext(pathname, moved)
-    return moved
+    // 经链接回来是一条新记录：加认这一条（原来的仍保留），之后在任一条上后退 / 前进都能恢复；只留最近 20 条
+    const joined = { ...c, entries: [...c.entries, key].slice(-20) }
+    writeContext(pathname, joined)
+    return joined
   })
   return back
 }
@@ -138,7 +142,7 @@ export function useListReturn({ scope, ready, local = {} }: { scope: string; rea
     writeContext(pathname, {
       href: pathname + search,
       target,
-      entry: key,
+      entries: [key],
       scope,
       top: document.querySelector('main')?.scrollTop ?? 0,
       id: String(id),

@@ -77,7 +77,8 @@ export function DeptCampusMatrix({
                       onClick={() => onSelect(r, c, units)}
                       className={cn(
                         'hover:bg-surface-hover flex w-full flex-col items-start gap-1 px-3 py-2 text-left transition-colors duration-(--hd-duration-fast)',
-                        selected === key && 'bg-surface-selected',
+                        // 选中格悬停时仍保持选中底（V04）
+                        selected === key && 'bg-surface-selected hover:bg-surface-selected',
                       )}
                     >
                       <span className="flex items-baseline gap-1.5">

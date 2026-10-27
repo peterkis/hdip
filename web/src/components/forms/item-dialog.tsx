@@ -62,11 +62,26 @@ export function saveUncertain(error: Error | null | undefined): boolean {
   return !!error && (!(error instanceof ApiError) || error.status >= 500)
 }
 
-/** 关闭确认的说明：只丢弃本地输入；上次保存结果未确定时不宣称“没有保存”，提示去核对 */
-export function closeWarning(what: string, error: Error | null | undefined): string {
-  return saveUncertain(error)
-    ? `关闭只丢弃${what}；上一次保存的结果未确定，可能已经写入申请。关闭后请到变更申请“我的草稿”核对，不要重复新建。`
-    : `关闭会丢弃${what}，还没有保存到任何申请。`
+/**
+ * 这次打开以来保存结果的累计结论（PR #2 复审 SP-03）：
+ * none = 没有可能写入过；maybe = 有过结果未确定的保存；known = 409 已表明上一次其实写入了某张申请。
+ * 之后的明确拒绝（422、412 等）只说明那一次没写入，不推翻更早的“未确定 / 已写入”
+ */
+export type WriteOutcome = 'none' | 'maybe' | 'known'
+
+export function nextOutcome(prev: WriteOutcome, error: Error): WriteOutcome {
+  if (error instanceof ApiError && error.status === 409) return 'known'
+  if (saveUncertain(error)) return prev === 'known' ? 'known' : 'maybe'
+  return prev
+}
+
+/** 关闭确认的说明：只承诺丢弃本地尚未保存的内容，不撤回已写入的申请；有可能或已经写入时提示去核对 */
+export function closeWarning(what: string, outcome: WriteOutcome): string {
+  if (outcome === 'known')
+    return `关闭只丢弃${what}里之后改过、没有保存的内容，不会撤回已经写入的申请；请按上方说明核对那张申请。`
+  if (outcome === 'maybe')
+    return `关闭只丢弃${what}里的内容；上一次保存的结果未确定，可能已经写入申请。关闭后请到变更申请“我的草稿”核对，不要重复新建。`
+  return `关闭会丢弃${what}里尚未保存的内容。`
 }
 
 /**
@@ -192,6 +207,7 @@ export function ItemDialog({
     if (focusTick) formRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus()
   }, [focusTick])
   const add = useAddItem()
+  const [outcome, setOutcome] = useState<WriteOutcome>('none')
   // 预留代码用的请求键：表单打开期间不变（弹窗只在打开时挂载，关闭即丢弃）
   const [requestKey] = useState(() => crypto.randomUUID())
 
@@ -226,6 +242,7 @@ export function ItemDialog({
       { item: result, target: targetId ?? 'new', note, requestKey },
       {
         onSuccess: () => onOpenChange(false),
+        onError: (e) => setOutcome((prev) => nextOutcome(prev, e)),
         onSettled: () => {
           saving.current = false
         },
@@ -323,7 +340,7 @@ export function ItemDialog({
           )}
           {confirmClose ? (
             <div role="alertdialog" aria-label="放弃已填写的内容" className="bg-surface-subtle grid gap-3 rounded-lg px-3 py-3">
-              <p className="text-fg text-xs">{closeWarning('这张表单里已填写的内容', add.error)}</p>
+              <p className="text-fg text-xs">{closeWarning('这张表单', outcome)}</p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" autoFocus onClick={resume}>
                   继续填写
