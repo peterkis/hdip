@@ -1,7 +1,8 @@
 {
   "schema_version": "1.0",
   "document_version": "1.0",
-  "status": "proposed_not_applied",
+  "status": "applied_with_amendments",
+  "implementation_note": "2026-10-27: U3.1 implemented on main (7a2f111) plus final-audit fixes; neutral roles migrated to Gr8r per ui-tokens.md R-COL 4.6. source_commit below is the design research baseline, not the current implementation.",
   "authoritative_document": "ui-tokens.md",
   "purpose": "Implementation checklist; do not load as runtime configuration",
   "source_commit": "8c400c49757e2443ceeaa7e1358ba290c786e7c6",

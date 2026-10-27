@@ -150,30 +150,31 @@
 
 /* ============================================================ 2. 语义令牌（浅色，默认） */
 :root {
-  /* 文字 */
-  --hd-text-strong: var(--hd-alpha-black-900);
-  --hd-text-primary: var(--hd-alpha-black-800);
-  /* U3R-06：secondary 改实色 gray-600、muted 加深到 alpha-black-600，在 page / raised / subtle 上都 ≥4.5:1 */
-  --hd-text-secondary: var(--hd-gray-600);
-  --hd-text-muted: var(--hd-alpha-black-600);
+  /* 文字（2026-10-27 中性色迁到 Gr8r 工作台：实色暖灰；主次靠字重与字号区分。
+     muted 在 page / sidebar / subtle / raised / selected 上都 ≥4.5:1，见 ui-tokens.md R-COL 4.6） */
+  --hd-text-strong: #1d1c1a;
+  --hd-text-primary: #1d1c1a;
+  --hd-text-secondary: #57544e;
+  --hd-text-muted: #6b6760;
   --hd-text-disabled: var(--hd-alpha-black-400);     /* 只给真正禁用的控件，不给占位提示、空态与事实文字 */
   --hd-text-placeholder: var(--hd-text-muted);       /* 输入与搜索的占位提示：独立角色，初值同 muted */
   --hd-text-on-accent: var(--hd-white);
 
   /* 表面（底色） */
-  --hd-surface-page: var(--hd-white);          /* 页面主体 */
-  --hd-surface-sidebar: var(--hd-gray-50);     /* 左侧栏 */
+  --hd-surface-page: var(--hd-white);          /* 页面主体（Gr8r surface） */
+  --hd-surface-sidebar: #f4f3f0;               /* 左侧栏：比内容区略深的暖灰 */
   --hd-surface-raised: var(--hd-white);        /* 卡片、弹窗、下拉 */
-  --hd-surface-subtle: var(--hd-gray-200);     /* 次级块、表头、代码、只读区 */
-  --hd-surface-hover: var(--hd-alpha-black-100);    /* 悬停：叠加而不是换色 */
-  --hd-surface-pressed: var(--hd-alpha-black-200);
-  --hd-surface-selected: var(--hd-gray-200);
+  --hd-surface-subtle: #f6f5f2;                /* 次级块、表头、代码、只读区 */
+  /* 悬停 / 按下：暖色叠加而不是换色——白底上约等于 Gr8r 的 #f6f5f2 / #eeede9，在侧栏、表头上也仍看得出 */
+  --hd-surface-hover: #3c321e0b;
+  --hd-surface-pressed: #3c321e17;
+  --hd-surface-selected: #eeede9;
   --hd-surface-overlay: var(--hd-alpha-black-400);  /* 弹窗遮罩 */
 
   /* 边框 */
-  --hd-border-subtle: var(--hd-alpha-black-150); /* 分隔线、表格线 */
-  --hd-border-default: var(--hd-alpha-black-200); /* 卡片、容器、次级按钮 */
-  --hd-border-strong: var(--hd-alpha-black-300);
+  --hd-border-subtle: #f0eeea;   /* 分隔线、表格线 */
+  --hd-border-default: #e9e7e2;  /* 卡片、容器、次级按钮 */
+  --hd-border-strong: #dad7d0;   /* 强调分隔；不承担输入边界（输入用 border-input） */
   --hd-border-input: #7f7b75;                     /* 可填写区域（输入、选择、标签输入）的边界：对输入底 ≥3:1；装饰线不用它 */
   --hd-surface-input: var(--hd-white);            /* 输入底色：独立角色，不再取边框色的透明度 */
   --hd-flow-edge: var(--hd-gray-400);            /* 关系图连线：不透明，多条线叠在同一段上颜色不加深 */
@@ -209,7 +210,7 @@
   --hd-danger-soft: var(--hd-red-100);
   --hd-warning-text: var(--hd-orange-700);
   --hd-warning-soft: var(--hd-orange-100);
-  --hd-success-text: var(--hd-green-600);
+  --hd-success-text: var(--hd-green-700);  /* 2026-10-27：600 在侧栏、表头与悬停底上不足 4.5:1 */
   --hd-success-soft: var(--hd-green-100);
   --hd-info-text: var(--hd-blue-700);
   --hd-info-soft: var(--hd-blue-100);
@@ -316,27 +317,28 @@
 
 /* ============================================================ 深色主题：只重定义语义令牌 */
 .dark {
-  --hd-text-strong: var(--hd-alpha-white-900);
-  --hd-text-primary: var(--hd-alpha-white-800);
-  --hd-text-secondary: var(--hd-alpha-white-700);
-  --hd-text-muted: #ffffff99;   /* U3R-06：60% 白，表头（subtle）与弹窗（raised）上也 ≥4.5:1 */
+  --hd-text-strong: #eceae5;
+  --hd-text-primary: #eceae5;
+  --hd-text-secondary: #b5b2ab;
+  --hd-text-muted: #a09c95;     /* 表头（subtle）、弹窗（raised）、选中行与悬停底上也 ≥4.5:1 */
   --hd-text-disabled: var(--hd-alpha-white-400);
   --hd-text-placeholder: var(--hd-text-muted);
 
-  --hd-surface-page: var(--hd-gray-900);
-  --hd-surface-sidebar: var(--hd-gray-850);
-  --hd-surface-raised: #252525;
-  --hd-surface-subtle: #2c2c2b;
-  --hd-surface-hover: var(--hd-alpha-white-100);
-  --hd-surface-pressed: var(--hd-alpha-white-200);
-  --hd-surface-selected: var(--hd-alpha-white-150);
+  /* Gr8r 关系：侧栏比内容区暗，浮层取第二层 */
+  --hd-surface-page: #1d1d1c;
+  --hd-surface-sidebar: #151514;
+  --hd-surface-raised: #252524;
+  --hd-surface-subtle: #252524;
+  --hd-surface-hover: #fffaf00d;
+  --hd-surface-pressed: #fffaf017;
+  --hd-surface-selected: #2d2d2b;
   --hd-surface-overlay: #0000008a;
 
-  --hd-border-subtle: var(--hd-alpha-white-100);
-  --hd-border-default: var(--hd-alpha-white-150);
-  --hd-border-strong: var(--hd-alpha-white-200);
+  --hd-border-subtle: #252523;
+  --hd-border-default: #2c2b29;
+  --hd-border-strong: #3a3936;
   --hd-border-input: #99958f;
-  --hd-surface-input: var(--hd-gray-850);
+  --hd-surface-input: #191918;
   --hd-flow-edge: var(--hd-gray-600);
   --hd-flow-edge-soft: var(--hd-gray-700);
   --hd-flow-card-foot: var(--hd-gray-850);

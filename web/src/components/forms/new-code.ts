@@ -26,6 +26,12 @@ export function newCode(type: CodeObject, slot = 0): string {
   return `@@new:${type}:${slot}@@`
 }
 
+/** 占位符的槽位；不是占位符（已分配的真实代码）返回 -1 */
+export function slotOf(code: string): number {
+  const m = /^@@new:[a-z_]+:(\d+)@@$/.exec(code)
+  return m ? Number(m[1]) : -1
+}
+
 export function isNewCode(code: string): boolean {
   return code.startsWith('@@new:')
 }

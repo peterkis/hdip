@@ -358,7 +358,7 @@ function CodeRow({ row: r, onOpen }: { row: ExternalCodeRow; onOpen: () => void 
 function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { asOf } = useApp()
   const { isMaintainer } = useMe()
-  const query = useGetExternalCode(id, { as_of: asOf })
+  const query = useGetExternalCode(id, { as_of: asOf }, { query: { enabled: Number.isInteger(id) } })
   const detailStatus = readStatus(query)
   const data = detailStatus === 'ready' ? query.data : undefined
   const [assigning, setAssigning] = useState(false)
@@ -407,6 +407,7 @@ function CodeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) 
             ）。{data.semantic_note && `含义：${data.semantic_note}`}
           </DialogDescription>
         </DialogHeader>
+        <StaleNotice what="这个代码" query={query} />
         {data.assignments.length === 0 ? (
           <Callout tone="warning" title="待裁决">
             这个代码还没有任何解释，在任何日期都是待裁决，不进入导出。裁决 = 新增一条解释，开始日可以在过去。

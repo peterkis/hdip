@@ -51,15 +51,17 @@ export function PinyinField({
   /** person：人名，首字按姓氏读音 */
   mode?: PinyinMode
 }) {
-  // 用户手改过拼音码就不再自动覆盖；“按名称重新生成”恢复跟随
-  const [edited, setEdited] = useState(false)
+  // 用户手改过拼音码就不再自动覆盖；“按名称重新生成”恢复跟随。
+  // 是否手改过不只记在控件里：向导切步骤、拆分切后继会重新挂载本控件，所以挂载时按现值推断——
+  // 新建时现值非空且不等于按名称生成的结果 = 手改过（含草稿恢复），不重新生成（审查 F02）
+  const [edited, setEdited] = useState(() => initialFollow && !!value && value !== pinyinCode(source, mode))
   const auto = useMemo(() => pinyinCode(source, mode), [source, mode])
   const first = useRef(true)
   useEffect(() => {
     const mount = first.current
     first.current = false
-    // 新建：一开始就跟随名称；修订：沿用现有拼音码，改了名称才跟随
-    if (edited || (mount && !initialFollow)) return
+    // 新建：空值时跟随名称；修订：沿用现有拼音码，改了名称才跟随；挂载时已有值的都不动
+    if (edited || (mount && (!initialFollow || value))) return
     if (value !== auto) onChange(auto)
   }, [auto]) // 只在名称变化时跟随
   const multi = useMemo(() => polyphones(source, mode), [source, mode])

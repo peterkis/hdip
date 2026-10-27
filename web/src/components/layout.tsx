@@ -20,13 +20,14 @@ import { Icon, type AppIcon } from '@/components/kit/icon'
 import { CrumbProvider, useCurrentCrumb } from '@/components/shell/crumbs'
 import { findNav, itemPath, NAV_GROUPS, type NavGroup, type NavItem } from '@/components/shell/nav'
 import { Button } from '@/components/ui/button'
+import { ReadError } from '@/components/kit/read-state'
 import { useApp } from '@/lib/app-context'
 import { today } from '@/lib/format'
 import { notify } from '@/lib/notify'
 import { setCurrentUsername, useCurrentUsername } from '@/lib/session'
 import { setTheme, useTheme } from '@/lib/theme'
 import { useMe } from '@/lib/use-me'
-import { useListHref } from '@/lib/scroll-memory'
+import { useListLink } from '@/lib/scroll-memory'
 import { cn } from '@/lib/utils'
 
 const NARROW = '(max-width: 767px)'
@@ -118,6 +119,7 @@ export function Layout() {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar collapsed={narrow} onExpand={() => setCollapsed(false)} frame={frame} />
           <main className="flex-1 overflow-y-auto">
+            <MeFailure />
             <FrameContext.Provider value={setFrame}>
               <FrameValueContext.Provider value={frame}>
               {frame === 'legacy' ? (
@@ -357,10 +359,21 @@ function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: 
   )
 }
 
+/** 当前身份的权限没有读取成功：按权限显示的内容都停在“正在确认权限”，在正文顶部说明一次并给重试 */
+function MeFailure() {
+  const { permsKnown, meQuery } = useMe()
+  if (permsKnown || !meQuery.isError) return null
+  return (
+    <div className="px-(--hd-layout-gutter-narrow) pt-3 md:px-(--hd-layout-gutter)">
+      <ReadError what="当前身份的权限（按权限显示的内容暂不可用）" query={meQuery} compact />
+    </div>
+  )
+}
+
 function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: ReactNode }) {
   // 详情页的上一级：这次详情是从该列表打开的就回到原筛选与位置（U3R-05），否则是默认列表
   const path = found?.item ? itemPath(found.item) : ''
-  const listHref = useListHref(path)
+  const listLink = useListLink(path)
   return (
     <>
       <nav aria-label="面包屑" className="text-fg-secondary flex min-w-0 items-center gap-0.5 whitespace-nowrap">
@@ -372,7 +385,8 @@ function Crumbs({ found, crumb }: { found: ReturnType<typeof findNav>; crumb: Re
               <Sep />
             </span>
             <Link
-              to={crumb ? listHref : path}
+              to={crumb ? listLink.to : path}
+              state={crumb ? listLink.state : undefined}
               className="hover:bg-surface-hover flex items-center gap-1.5 rounded-sm px-1.5 py-0.5"
             >
               <Icon icon={found.item.icon} />

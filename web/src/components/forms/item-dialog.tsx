@@ -55,16 +55,31 @@ export function useDraftItems(): ChangeItemInput[] {
 }
 
 /**
+ * 保存结果是否未确定：没拿到服务端答复（网络中断），或服务端 / 代理出错（5xx）。
+ * 服务端先提交再组装响应，响应出错不能证明没有写入（审查 F04）；只有明确的业务拒绝（4xx）才说没有写入
+ */
+export function saveUncertain(error: Error | null | undefined): boolean {
+  return !!error && (!(error instanceof ApiError) || error.status >= 500)
+}
+
+/** 关闭确认的说明：只丢弃本地输入；上次保存结果未确定时不宣称“没有保存”，提示去核对 */
+export function closeWarning(what: string, error: Error | null | undefined): string {
+  return saveUncertain(error)
+    ? `关闭只丢弃${what}；上一次保存的结果未确定，可能已经写入申请。关闭后请到变更申请“我的草稿”核对，不要重复新建。`
+    : `关闭会丢弃${what}，还没有保存到任何申请。`
+}
+
+/**
  * 保存失败的说明（迁移 0022 之后）：
- * - 网络中断等没拿到服务端答复：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
+ * - 网络中断等没拿到服务端答复，或服务端 / 代理出错（5xx）：结果未确定，服务端可能已写入；内容不改直接再保存会先核对、不会重复。
  * - 409：同一次保存的请求键已写入过别的内容（上次其实已成功、之后又改过），服务端的说明已写明去核对哪张申请。
  * - 412：草稿在读取之后被别处改过，这次没有写入（以免覆盖），服务端说明已写明。
  * - 其他被拒（校验未通过等）：没有写入，改好后再保存。
  */
 export function saveFailureText(error: Error, kept: string): string {
-  if (!(error instanceof ApiError))
+  if (saveUncertain(error))
     return `保存结果未确定：${error.message}。服务端可能已经写入；内容不改直接再保存会先核对，不会重复；改过内容再保存时，如果上次其实已写入，会提示你去核对那张申请。${kept}。`
-  if (error.status === 409 || error.status === 412) return `${error.message}${kept}。`
+  if (error instanceof ApiError && (error.status === 409 || error.status === 412)) return `${error.message}${kept}。`
   return `保存未成功：${error.message}。${kept}，改好后可再次保存。`
 }
 
@@ -308,7 +323,7 @@ export function ItemDialog({
           )}
           {confirmClose ? (
             <div role="alertdialog" aria-label="放弃已填写的内容" className="bg-surface-subtle grid gap-3 rounded-lg px-3 py-3">
-              <p className="text-fg text-xs">关闭会丢弃这张表单里已填写的内容，还没有保存到任何申请。</p>
+              <p className="text-fg text-xs">{closeWarning('这张表单里已填写的内容', add.error)}</p>
               <div className="flex flex-wrap justify-end gap-2">
                 <Button type="button" variant="outline" autoFocus onClick={resume}>
                   继续填写

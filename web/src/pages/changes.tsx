@@ -285,7 +285,7 @@ function ListSkeleton() {
 export function ChangeDetailPage() {
   usePageFrame('work')
   const id = Number(useParams().id)
-  const query = useGetChangeRequest(id)
+  const query = useGetChangeRequest(id, { query: { enabled: Number.isInteger(id) } })
   const { data: cr } = query
   const qc = useQueryClient()
   const navigate = useNavigate()
@@ -316,6 +316,7 @@ export function ChangeDetailPage() {
   // 说明输入框的基准：载入它时的申请、说明与版本。保存说明以这个版本为前提（PR #1 评审）——
   // 页面刷新会带来新版本号，但输入框里是基于旧版本的编辑，不能用新版本号放行。
   // 换到另一张申请时重置；没改过说明时跟随刷新同步到最新内容与版本
+  const [noteLocked, setNoteLocked] = useState(false)
   const [noteBase, setNoteBase] = useState<{ id: number; note: string; version: string } | null>(null)
   if (cr && (noteBase?.id !== cr.id || (note === noteBase.note && cr.updated_at !== noteBase.version))) {
     const text = cr.note ?? ''
@@ -346,9 +347,15 @@ export function ChangeDetailPage() {
   if (!cr || isDenial(query.error))
     return <DetailFallback what="变更申请" back={{ to: '/changes', label: '返回变更申请列表' }} query={query} invalid={!Number.isInteger(id)} />
   const p = cr.permissions
-  /** done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理） */
-  const run = (fn: () => Promise<ChangeRequestOut>, done?: string) =>
-    action.mutate(fn, { onSuccess: () => done && notify.success(done) })
+  /**
+   * done：成功后的轻提示（失败信息仍显示在页面上方，便于逐条处理）。
+   * keepNote：只有“保存说明”请求期间还能继续输入说明；提交、撤销等会让草稿不可编辑的动作进行中，说明框只读，
+   * 免得成功后编辑区收起、请求期间新输入的文字没有地方保存（审查 F03）
+   */
+  const run = (fn: () => Promise<ChangeRequestOut>, done?: string, keepNote = false) => {
+    setNoteLocked(!keepNote)
+    action.mutate(fn, { onSuccess: () => done && notify.success(done), onSettled: () => setNoteLocked(false) })
+  }
   // 申请页只用于核对与提交：不逐项移除（会拆散组织变更这类整体变更）。
   // 向导生成的草稿回到向导调整，保存时整体替换；其他草稿可撤销后重新发起。
   const reorg = cr.items.find((i) => i.kind === 'department.reorganize')
@@ -395,7 +402,7 @@ export function ChangeDetailPage() {
       const next = await updateChangeRequest(id, { items: cr.items, note: sent.trim() || null, expected_updated_at: noteBase?.version ?? cr.updated_at })
       adoptNoteWrite(next, sent)
       return next
-    }, '变更说明已保存')
+    }, '变更说明已保存', true)
 
   // 统一规范 SC-03：页头（编号、状态、动作）→ 处理步骤 → 阻塞信息（问题、权限、隐去说明）→ 变更说明 → 逐组核对 + 目录 → 结束提醒。
   // 净内容宽 ≥1040 时目录在右侧（200px），更窄时在上方并可展开
@@ -448,6 +455,7 @@ export function ChangeDetailPage() {
           </>
         }
       />
+      <StaleNotice what="这个变更申请" query={query} />
 
       <div className="grid gap-4">
         <div className="border-line-subtle border-b pb-4">
@@ -511,7 +519,18 @@ export function ChangeDetailPage() {
                     </Button>
                   }
                 >
-                  <Textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="为什么做这次变更（提交时会一并保存）" />
+                  <Textarea
+                    value={note}
+                    readOnly={noteLocked}
+                    aria-describedby={noteLocked ? 'note-locked' : undefined}
+                    onChange={(e) => setNote(e.target.value)}
+                    placeholder="为什么做这次变更（提交时会一并保存）"
+                  />
+                  {noteLocked && (
+                    <p id="note-locked" role="status" className="text-fg-muted text-caption mt-1">
+                      正在处理申请，说明暂不能修改
+                    </p>
+                  )}
                 </Section>
               ) : (
                 cr.note && (
