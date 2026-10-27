@@ -131,7 +131,7 @@ export function BatchAdjudicate({ namespaceId, q }: { namespaceId?: number; q?: 
           {rows.map((r) => {
             const cur = pick(r)
             return (
-              <DbRow key={r.id} className={cn(selected.has(r.id) && 'bg-surface-selected')}>
+              <DbRow key={r.id} className={cn(selected.has(r.id) && 'bg-surface-selected hover:bg-surface-selected')}>
                 <DbCell>
                   <input
                     type="checkbox"

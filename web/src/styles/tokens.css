@@ -173,8 +173,8 @@
 
   /* 边框 */
   --hd-border-subtle: #f0eeea;   /* 分隔线、表格线 */
-  --hd-border-default: #e9e7e2;  /* 卡片、容器、次级按钮 */
-  --hd-border-strong: #dad7d0;   /* 强调分隔；不承担输入边界（输入用 border-input） */
+  --hd-border-default: #e9e7e2;  /* 卡片、容器、浅色侧栏选中项的细边 */
+  --hd-border-strong: #dad7d0;   /* 次按钮（Button outline）边界、强调分隔；不承担输入边界（输入用 border-input） */
   --hd-border-input: #7f7b75;                     /* 可填写区域（输入、选择、标签输入）的边界：对输入底 ≥3:1；装饰线不用它 */
   --hd-surface-input: var(--hd-white);            /* 输入底色：独立角色，不再取边框色的透明度 */
   --hd-flow-edge: var(--hd-gray-400);            /* 关系图连线：不透明，多条线叠在同一段上颜色不加深 */

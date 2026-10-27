@@ -20,7 +20,7 @@ import {
 import type { ChangeRequestWrite } from '@/api/generated/model'
 import { ApiError } from '@/api/fetcher'
 import { FormErrorsContext, isFieldErrors, type FieldErrors } from '@/components/forms/fields'
-import { fillNewCodes } from '@/components/forms/new-code'
+import { fillNewCodes, type CodeBinding } from '@/components/forms/new-code'
 import { Callout } from '@/components/kit/callout'
 import { FormEditContext } from '@/components/kit/form-edit'
 import { Button } from '@/components/ui/button'
@@ -104,6 +104,8 @@ export function useAddItem() {
   // 本次打开的表单已发出的请求体，按“提交内容”记住：内容没改的重试原样重发（不重读草稿、不再追加一遍），
   // 服务端才能认出是同一次保存；内容改过就重新组装——若上次其实已写入，服务端会拒绝并说明（迁移 0022）
   const sent = useRef<{ fp: string; target: number | 'new'; body: ChangeRequestWrite } | null>(null)
+  // 本次打开的占位符 → 预留位置（new-code.ts）：重试与增删后，保留的对象拿回同一个号
+  const codeBinding = useRef<CodeBinding>(new Map())
   return useMutation({
     mutationFn: async ({
       item,
@@ -123,7 +125,7 @@ export function useAddItem() {
       const send = (t: number | 'new', body: ChangeRequestWrite) => (t === 'new' ? createChangeRequest(body) : updateChangeRequest(t, body))
       // 按最新草稿组装：加入已有草稿时带上读到的 updated_at 作为前提，草稿之后被别处改过，服务端拒绝（412）而不覆盖
       const build = async () => {
-        const items = requestKey ? await fillNewCodes(raw, requestKey) : raw
+        const items = requestKey ? await fillNewCodes(raw, requestKey, codeBinding.current) : raw
         const request_key = requestKey ?? null
         let body: ChangeRequestWrite
         if (target === 'new') body = { items, note: note ?? null, request_key }

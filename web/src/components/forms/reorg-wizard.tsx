@@ -14,7 +14,7 @@ import { getGetDepartmentDependenciesQueryOptions, useListClassificationSchemes,
 import type { DepartmentDependencies } from '@/api/generated/model'
 import { EvolveFlow, type FlowUnit } from '@/components/evolve-flow'
 import { AutoCodeField, PinyinField, pinyinCheck } from '@/components/forms/code-fields'
-import { fillNewCodes, isNewCode, newCode, slotOf } from '@/components/forms/new-code'
+import { fillNewCodes, isNewCode, newCode, slotOf, type CodeBinding } from '@/components/forms/new-code'
 import { FormErrorsContext, requireFields, SelectField, TextField, type Option } from '@/components/forms/fields'
 import { closeWarning, nextOutcome, saveFailureText, type ChangeItemInput, type WriteOutcome } from '@/components/forms/item-dialog'
 import { DepartmentSelect } from '@/components/forms/ref-selects'
@@ -178,19 +178,21 @@ export function DepartmentReorgWizard({
   const [others, setOthers] = useState<string[]>(init?.others ?? [''])
   // 每个新设部门一个占位代码槽位；保存时整张草稿一起换成系统分配的代码，重试拿回同一批号
   const [requestKey] = useState(() => crypto.randomUUID())
-  // 占位代码就是新部门在本次编辑中的身份，承接选择按它指向对象（审查 F01、PR #2 复审 SP-01）：
-  // - 初值纯构造，渲染不消耗槽位；
-  // - 新槽位只在真正新增部门时取，且本次打开内单调递增、不复用——删掉的部门的槽位不会给后来的部门，
-  //   指向它的承接选择保持失效、要求重选，不会被同号的新部门“复活”；已预留的代码与原对象的绑定也不变；
-  // - 切换类型保留已有的新部门（不重建），取号数量因此只随实际新增的部门增长（接口一次最多 50 个）。
+  // 占位代码里的编号就是新部门在本次编辑中的身份，承接选择按它指向对象（审查 F01、PR #2 复审 SP-01 / P2-A）：
+  // - 初值纯构造，渲染不消耗编号；初始部门的编号在建立时就记入高水位（不等第一次新增才按剩下的推算），
+  //   所以任何删除、切类型过滤都不会让用过的编号再分给新部门，指向已去掉部门的承接保持失效、要求重选；
+  // - 新编号只在真正新增部门时取、单调递增；切换类型保留已填写的新部门。
+  // 取号数量与编号无关：保存时按 codeBinding 把参与保存的占位符连续映射到预留位置（P2-B，见 new-code.ts）
   const blankAt = (at: number): NewDept => ({ name: '', code: newCode('department', at), pinyin: '', scope: '', parent: source.parentCode ?? '', mainClass: source.mainClass ?? '' })
-  const [news, setNews] = useState<NewDept[]>(() => (init?.news.length ? init.news : [blankAt(0), blankAt(1)]))
-  const nextSlot = useRef<number | null>(null)
+  const [seed] = useState(() => {
+    const list = init?.news.length ? init.news : [blankAt(0), blankAt(1)]
+    return { list, next: Math.max(-1, ...list.map((n) => slotOf(n.code))) + 1 }
+  })
+  const [news, setNews] = useState<NewDept[]>(seed.list)
+  const nextSlot = useRef(seed.next)
+  const codeBinding = useRef<CodeBinding>(new Map())
   /** 只在事件处理里调用 */
-  const blank = (): NewDept => {
-    nextSlot.current ??= Math.max(-1, ...news.map((n) => slotOf(n.code))) + 1
-    return blankAt(nextSlot.current++)
-  }
+  const blank = (): NewDept => blankAt(nextSlot.current++)
   const [unitTo, setUnitTo] = useState<Record<string, string>>(init?.unitTo ?? {})
   const [childTo, setChildTo] = useState<Record<string, string>>(init?.childTo ?? {})
   const [personTo, setPersonTo] = useState<Record<string, string>>(init?.personTo ?? {})
@@ -450,7 +452,7 @@ export function DepartmentReorgWizard({
     // 请求体只由向导内容决定（不读草稿），内容没改的重试与上次相同，服务端认作同一次保存（迁移 0022）
     mutationFn: async () => {
       const note = `${REORG_TITLE[type as ReorgType]}：${sourceCodes.map(deptName).join('、')}（组织变更向导生成）`
-      const items = await fillNewCodes(buildItems(), requestKey)
+      const items = await fillNewCodes(buildItems(), requestKey, codeBinding.current)
       // 回到向导调整：整体替换草稿的变更项，组织变更始终作为一个整体保存
       return base
         ? updateChangeRequest(base.id, { items, note: base.note ?? note, request_key: requestKey, expected_updated_at: base.updated_at })

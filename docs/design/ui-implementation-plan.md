@@ -640,3 +640,14 @@ U3.1 收尾的第一阶段（任务包 `docs/refer/HDIP-U3.1-Prompt-Pack-v1.0-20
 - **ST-01**：`ui-target-tokens.json` 当前色表、`ui-tokens.md` 首页与 4.5 / 4.6、`/design` 概览 / 规则 / 成功色样 / 阶段表、CLAUDE.md、迁移矩阵第 14 节。
 
 检查与走查见 `docs/剧本走查记录.md` 2026-10-27“PR #2 复审补修”；未验项以该记录的“未执行”清单为准。
+
+### 补充：a7cb90e 复审补修（2026-10-27）
+
+依据 `HDIP-PR2-a7cb90e-Followup-Review-20261027.md`：SP-03～07 可关闭；剩 4 项 P2（P2-A～D）与 ST-01 残余。
+
+- **P2-A / P2-B 编辑身份与取号分开**：向导的初始新部门在建立时就记入编号高水位（`seed`），删除、切类型过滤都不回收编号；`fillNewCodes(items, requestKey, binding)` 新增 `CodeBinding`（占位符 → 预留位置），保存时按出现顺序连续分配、只增不改，取号数量只随参与过保存的对象增长。`ItemDialog`（`useAddItem`）与向导各持有一个，随表单打开而建、关闭而弃。
+- **P2-C 拆分后继**：`Successor` 加 `uid`（编辑器 key 与占位符编号）与 `pinyinFollow`；`SuccessorFields` 只回传改动的字段，上层按 `uid` 函数式更新；合并表单同样只传字段。
+- **P2-D 权限恢复条件**：`useMe` 在当前错误是 401 / 403 时把错误时刻写进查询缓存 `['me-denied', 用户名]`；数据的更新时间不晚于该时刻就不采用，直到这个身份再成功读取一次。
+- **其他**：批量裁决已选行悬停保持选中底；ST-01 残余见迁移矩阵 14.1。
+
+检查：`npm --prefix web run build`、`make check` 通过；`make test` 216 通过（后端未改）。走查见 `docs/剧本走查记录.md` 2026-10-27“a7cb90e 复审补修”；当前未验清单以该节为准（已合并继承以前各节尚未关闭的事项）。
