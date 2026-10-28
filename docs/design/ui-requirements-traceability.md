@@ -128,3 +128,4 @@
 | P2-C（a7cb90e 复审） | F02、SP-02 | SC-07 / SC-16 拆分后继 | 同上 |
 | P2-D（a7cb90e 复审） | §7.1 | 外壳 | 同上 |
 | ST-02、十种标签色（50470ad 收尾） | F13、Gr8r 标签评估 | R-COL 4.7、/design，SC-04 / 07 / 13 / 02 / 11 标签 | `ui-migration-matrix.md` 14.2 |
+| 十色维护标签（2026-10-28 用户反馈） | Gr8r 标签评估、R-COL 4.7 | R-COL 4.8、/design；SC-02 / 04 / 11 / 13 标签 | `ui-migration-matrix.md` 14.3 |

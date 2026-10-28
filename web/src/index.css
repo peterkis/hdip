@@ -94,24 +94,34 @@
   --color-info-soft: var(--hd-info-soft);
   --color-tag-gray-bg: var(--hd-tag-gray-bg);
   --color-tag-gray-text: var(--hd-tag-gray-text);
+  --color-tag-gray-border: var(--hd-tag-gray-border);
   --color-tag-brown-bg: var(--hd-tag-brown-bg);
   --color-tag-brown-text: var(--hd-tag-brown-text);
+  --color-tag-brown-border: var(--hd-tag-brown-border);
   --color-tag-orange-bg: var(--hd-tag-orange-bg);
   --color-tag-orange-text: var(--hd-tag-orange-text);
+  --color-tag-orange-border: var(--hd-tag-orange-border);
   --color-tag-yellow-bg: var(--hd-tag-yellow-bg);
   --color-tag-yellow-text: var(--hd-tag-yellow-text);
+  --color-tag-yellow-border: var(--hd-tag-yellow-border);
   --color-tag-green-bg: var(--hd-tag-green-bg);
   --color-tag-green-text: var(--hd-tag-green-text);
+  --color-tag-green-border: var(--hd-tag-green-border);
   --color-tag-blue-bg: var(--hd-tag-blue-bg);
   --color-tag-blue-text: var(--hd-tag-blue-text);
+  --color-tag-blue-border: var(--hd-tag-blue-border);
   --color-tag-purple-bg: var(--hd-tag-purple-bg);
   --color-tag-purple-text: var(--hd-tag-purple-text);
+  --color-tag-purple-border: var(--hd-tag-purple-border);
   --color-tag-pink-bg: var(--hd-tag-pink-bg);
   --color-tag-pink-text: var(--hd-tag-pink-text);
+  --color-tag-pink-border: var(--hd-tag-pink-border);
   --color-tag-red-bg: var(--hd-tag-red-bg);
   --color-tag-red-text: var(--hd-tag-red-text);
+  --color-tag-red-border: var(--hd-tag-red-border);
   --color-tag-teal-bg: var(--hd-tag-teal-bg);
   --color-tag-teal-text: var(--hd-tag-teal-text);
+  --color-tag-teal-border: var(--hd-tag-teal-border);
 
   /* ---- shadcn 约定的颜色名（ui/ 组件使用） */
   --color-background: var(--background);
