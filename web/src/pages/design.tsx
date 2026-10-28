@@ -60,6 +60,7 @@ import { setTheme, useTheme, type Accent } from '@/lib/theme'
 import {
   CHANGE_STATUS_TONE,
   DEPARTMENT_LIFECYCLE_TONE,
+  ENGAGEMENT_TYPE_TONE,
   LINEAGE_TONE,
   OPERATING_STATUS_TONE,
   UNIT_STATUS_TONE,
@@ -357,7 +358,7 @@ const U31_ROWS: { phase: string; behavior: string; visual: string; open: string 
   { phase: 'R03 读取状态', behavior: '通过（10-27 补：缓存后 404 / 500、主详情与附属区、点选遇拒绝；PR #2 复审补：默认标签负责人 / 人数、编码标签概况名单、权限刷新被拒后直到再次成功才恢复）', visual: '浅色；真实 403（无角色身份）；受控 404 / 500 / 403', open: '深色下读取状态外观只抽查' },
   { phase: 'R04 组织变更向导', behavior: '通过（10-27 补：取号槽位、拼音码保留、后台更新提示；PR #2 复审补：删除后新增不改投、删除前一科不覆盖拼音码；a7cb90e 复审补：初始身份即登记、编辑身份与取号位置分开）', visual: '浅色；参与部门 B→C 晚到请求', open: '读屏未验' },
   { phase: 'R05 返回上下文', behavior: '通过（10-27 补：后退→前进→再后退、侧栏不恢复、名册第二项任用；PR #2 复审补：面包屑返回后连续后退）', visual: '1024 / 1366 / 1920；三级树、主体与院区滚动', open: '—' },
-  { phase: 'R06 配色', behavior: '通过；10-27 中性色迁到 Gr8r（R-COL 4.6）、十种标签色改为 Gr8r 浅底（R-COL 4.7）', visual: '6 组合计算值 + 截图；真实悬停取样；Gr8r 中性浅 / 深截图', open: '紫 / 青强调在新中性底上只计算未截图；任意多层叠加、图表渐变未测' },
+  { phase: 'R06 配色', behavior: '通过；10-27 中性色迁到 Gr8r（R-COL 4.6）、十种标签色改为浅底 + 同色细边 + 深色文字（R-COL 4.8，10-28）', visual: '6 组合计算值 + 截图；真实悬停取样；Gr8r 中性浅 / 深截图', open: '紫 / 青强调在新中性底上只计算未截图；任意多层叠加、图表渐变未测' },
   { phase: 'R07 尺度与键盘', behavior: '部分', visual: '1366 / 1920 / 768 / 767；reduce 用规则模拟', open: '系统真实 reduce、原生日历弹层、Windows 缩放' },
   { phase: 'R08 场景模板', behavior: '通过（10-27 补：名册空任用措辞、单元退出安排）', visual: '浅色，默认宽度', open: '仅已撤销任用的人员未在走查库实测' },
   { phase: 'R09 综合验收', behavior: '部分', visual: '14 页 × 1366 / 1920 × 展开 / 折叠，768 / 767，1040 阈值', open: 'Windows 实机、读屏、手机（范围外）' },
@@ -973,6 +974,24 @@ const STATUS_GROUPS: { title: string; labels: Record<string, string>; tones: Rec
   { title: '演变关系', labels: { SPLIT: '拆分', MERGE: '合并' }, tones: LINEAGE_TONE },
 ]
 
+/** 标签密度样例：八类任用 + 已结束 / 已撤销等状态（模拟数据，标明不是正式人员） */
+const TAG_DENSITY_ROWS: { name: string; code: string; type: string; typeLabel: string; dept: string; status: string; statusTone: Tone }[] = [
+  { name: '李明（模拟）', code: 'P900001', type: 'STAFF', typeLabel: '在编', dept: '呼吸内科', status: '在用', statusTone: 'green' },
+  { name: '王芳（模拟）', code: 'P900002', type: 'CONTRACT', typeLabel: '合同（人事代理）', dept: '心血管内科', status: '在用', statusTone: 'green' },
+  { name: '赵强（模拟）', code: 'P900003', type: 'DISPATCH', typeLabel: '劳务派遣', dept: '医务部', status: '已结束', statusTone: 'gray' },
+  { name: '孙丽（模拟）', code: 'P900004', type: 'REHIRE', typeLabel: '退休返聘', dept: '神经内科', status: '暂停', statusTone: 'orange' },
+  { name: '周敏（模拟）', code: 'P900005', type: 'EXTERNAL', typeLabel: '外聘专家', dept: '临床研究与医学伦理委员会办公室', status: '在用', statusTone: 'green' },
+  { name: '吴昊（模拟）', code: 'P900006', type: 'RESIDENT', typeLabel: '规培', dept: '急诊科', status: '计划中', statusTone: 'yellow' },
+  { name: '郑洁（模拟）', code: 'P900007', type: 'VISITING', typeLabel: '进修', dept: '骨科', status: '已撤销', statusTone: 'gray' },
+  { name: '陈晨（模拟）', code: 'P900008', type: 'INTERN', typeLabel: '实习', dept: '儿科', status: '已停用', statusTone: 'red' },
+]
+
+/** 可移除标签（真实 TagInput）：删除按钮 24×24 命中区，长文字只截断文字 */
+function DemoTagInput() {
+  const [tags, setTags] = useState(['门急诊', '多学科联合诊疗与教学科研协作'])
+  return <TagInput label="承担职责（样例）" value={tags} onChange={setTags} />
+}
+
 /** 每种标签色的一个真实业务说法（与 lib/tones.ts 的映射一致） */
 const TONE_SAMPLE: Record<Tone, string> = {
   gray: '已结束',
@@ -999,9 +1018,11 @@ function TagsSection() {
       }
     >
       <div className="grid gap-2">
-        <SubTitle>十种标签色（灰色 + 九种彩色）</SubTitle>
-        {/* 真实 Tag、真实业务说法：颜色读同一组 --hd-tag-* 语义令牌，不在本页另写色值。
-            浅底来自 Gr8r（实色化），brown 是 HDIP 补色；文字对实色底 ≥6.1:1（R-COL 4.7） */}
+        <SubTitle>十色维护标签：浅底、同色细边、深色文字（灰色 + 九种彩色）</SubTitle>
+        <p className="text-fg-muted text-caption">
+          统一 Tag：总高 20（含上下 1px 细边）、字号 14（text-xs）、行高 18、字重 500、圆角 4、左右内距 6。结构参照 ReUI light badge，十色三元组是 HDIP 适配（R-COL 4.8）。
+        </p>
+        {/* 真实 Tag、真实业务说法：颜色读同一组 --hd-tag-*-bg / -border / -text 语义令牌，不在本页另写色值 */}
         <div className="flex flex-wrap gap-x-4 gap-y-2">
           {TONES.map((t) => (
             <span key={t} className="inline-flex items-center gap-1.5">
@@ -1009,6 +1030,68 @@ function TagsSection() {
               <span className="text-fg-muted font-mono text-caption">{t}</span>
             </span>
           ))}
+        </div>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>真实密度的中文连续行（模拟数据，不是正式人员）</SubTitle>
+        <FrameSample frame="work">
+          <DbTable columns={[{ label: '姓名' }, { label: '任用' }, { label: '主部门' }, { label: '状态' }]}>
+            {TAG_DENSITY_ROWS.map((r) => (
+              <DbRow key={r.name}>
+                <DbCell>
+                  <span className="grid gap-0.5">
+                    <span className="text-fg-strong font-medium">{r.name}</span>
+                    <span className="text-fg-muted font-mono text-caption">{r.code}</span>
+                  </span>
+                </DbCell>
+                <DbCell>
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                    <span className="text-fg-secondary">成都市第三人民医院</span>
+                    <Tag tone={ENGAGEMENT_TYPE_TONE[r.type]}>{r.typeLabel}</Tag>
+                  </span>
+                </DbCell>
+                <DbCell className="text-fg-secondary">{r.dept}</DbCell>
+                <DbCell>
+                  <Tag tone={r.statusTone}>{r.status}</Tag>
+                </DbCell>
+              </DbRow>
+            ))}
+          </DbTable>
+        </FrameSample>
+      </div>
+      <div className="grid gap-2">
+        <SubTitle>行状态、长文字与可移除标签</SubTitle>
+        <FrameSample frame="work">
+          <DbTable columns={[{ label: '行状态' }, { label: '名称' }, { label: '分类与生命周期' }]}>
+            {(
+              [
+                ['普通', ''],
+                ['悬停（示意）', 'bg-surface-hover'],
+                ['已选中且悬停（示意）', 'bg-surface-selected hover:bg-surface-selected'],
+              ] as const
+            ).map(([label, cls]) => (
+              <DbRow key={label} className={cls || undefined}>
+                <DbCell className="text-fg-muted whitespace-nowrap">{label}</DbCell>
+                <DbCell className="text-fg-strong font-medium">呼吸与危重症医学科</DbCell>
+                <DbCell>
+                  <span className="flex flex-wrap gap-1.5">
+                    <Tag tone="blue">临床诊疗类</Tag>
+                    <Tag tone="green">正式履职</Tag>
+                    <Tag tone="brown">被替代</Tag>
+                  </span>
+                </DbCell>
+              </DbRow>
+            ))}
+          </DbTable>
+        </FrameSample>
+        <div className="flex flex-wrap items-start gap-6">
+          <span className="flex w-56 flex-col items-start gap-1">
+            <span className="text-fg-muted text-caption">长中文（容器 224 宽，只截断文字）</span>
+            <Tag tone="teal">心血管疾病与胸痛急救多学科诊疗中心承接的专科门诊</Tag>
+          </span>
+          <span className="w-80">
+            <DemoTagInput />
+          </span>
         </div>
       </div>
       <Rows head={['业务', '状态与颜色']}>

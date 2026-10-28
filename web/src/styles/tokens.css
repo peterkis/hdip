@@ -218,20 +218,20 @@
   /* 危险按钮 / 徽标的悬停、按下底：独立角色，不随标签色变（2026-10-27 标签色改为 Gr8r 浅底时拆出，取原值） */
   --hd-danger-hover: var(--hd-red-200);
 
-  /* 标签色：十种（灰色 + 九种彩色），底色 + 文字（2026-10-27，ui-tokens.md R-COL 4.7）。
-     浅底按 Gr8r 规则（green / purple / orange / teal / blue / pink 11%、yellow 对应 amber 12%、red 10%）
-     与白色页面合成为实色——实色化是 HDIP 适配：同一标签在表格、选中行、浮层上配对不变；
-     文字沿 Gr8r 色相加深到实色底上 ≥6.1:1。gray 取 Gr8r surface-2 / text-2；brown 是 HDIP 补色（Gr8r 无棕） */
-  --hd-tag-gray-bg: #f6f5f2;    --hd-tag-gray-text: #57544e;
-  --hd-tag-brown-bg: #f2edea;   --hd-tag-brown-text: #755034;
-  --hd-tag-orange-bg: #f8eee8;  --hd-tag-orange-text: #8a461f;
-  --hd-tag-yellow-bg: #f2ece2;  --hd-tag-yellow-text: #784f0c;
-  --hd-tag-green-bg: #e7f0eb;   --hd-tag-green-text: #1f6340;
-  --hd-tag-teal-bg: #e6f2f1;    --hd-tag-teal-text: #16625f;
-  --hd-tag-blue-bg: #e9eff9;    --hd-tag-blue-text: #2a589b;
-  --hd-tag-purple-bg: #f0ecf8;  --hd-tag-purple-text: #6345a3;
-  --hd-tag-pink-bg: #f8eaef;    --hd-tag-pink-text: #953458;
-  --hd-tag-red-bg: #f7ecea;     --hd-tag-red-text: #9b342a;
+  /* 标签色：十种（灰色 + 九种彩色），实色浅底 + 同色 1px 细边 + 保留色相的深色文字（2026-10-28，ui-tokens.md R-COL 4.8）。
+     结构参照 ReUI light badge（浅填充、同色细边、深色文字、中等字重）；十色三元组是 HDIP 适配（ReUI 只有语义变体、没有十色分类色板）：
+     green 偏正绿、teal 偏青蓝，orange 偏红橙、yellow 金黄，brown 降低彩度与 orange 区分。文字对实色底 6.50～9.68:1。
+     取代 2026-10-27 的 Gr8r 浅底配对（R-COL 4.7）：那组偏灰、相邻色难以快速区分 */
+  --hd-tag-gray-bg: #f4f3f1;  --hd-tag-gray-border: #dedcd8;  --hd-tag-gray-text: #4a4742;
+  --hd-tag-brown-bg: #f7f1eb;  --hd-tag-brown-border: #e5d5c6;  --hd-tag-brown-text: #704b35;
+  --hd-tag-orange-bg: #fff0e5;  --hd-tag-orange-border: #ffd4b3;  --hd-tag-orange-text: #913e0b;
+  --hd-tag-yellow-bg: #fff8dc;  --hd-tag-yellow-border: #efe0a1;  --hd-tag-yellow-text: #6d5700;
+  --hd-tag-green-bg: #ecf8ef;  --hd-tag-green-border: #cbe8d4;  --hd-tag-green-text: #165b33;
+  --hd-tag-teal-bg: #eaf7f8;  --hd-tag-teal-border: #c0e6eb;  --hd-tag-teal-text: #075964;
+  --hd-tag-blue-bg: #edf4ff;  --hd-tag-blue-border: #cdddff;  --hd-tag-blue-text: #1e4b91;
+  --hd-tag-purple-bg: #f3edff;  --hd-tag-purple-border: #e5d5ff;  --hd-tag-purple-text: #4d169a;
+  --hd-tag-pink-bg: #fcecf5;  --hd-tag-pink-border: #f3d0e3;  --hd-tag-pink-text: #8a245e;
+  --hd-tag-red-bg: #fee8e8;  --hd-tag-red-border: #fdcaca;  --hd-tag-red-text: #9e0812;
 
   /* 文字角色：字号 / 行高 / 字重 / 字距 */
   --hd-type-caption-size: var(--hd-size-50);
@@ -276,6 +276,7 @@
   --hd-control-height: 2rem;     /* 32：按钮、输入框 */
   --hd-control-height-sm: 1.75rem;
   --hd-tag-height: 1.25rem;
+  --hd-tag-leading: 1.125rem;   /* 18：标签行高。20px 总高扣上下 1px 细边后的内容区；字号仍是 text-xs（14px） */
   --hd-sidebar-width: 15rem;     /* 240 */
   --hd-topbar-height: 2.75rem;   /* 44 */
   --hd-page-max-width: 56.25rem; /* 900：Notion 正文宽 */
@@ -381,17 +382,17 @@
 
   --hd-danger-hover: #522e2a;
 
-  /* 标签：Gr8r 浅底与深色页面 #1d1d1c 合成为实色，文字 ≥6.1:1（R-COL 4.7） */
-  --hd-tag-gray-bg: #252524;    --hd-tag-gray-text: #b5b2ab;
-  --hd-tag-brown-bg: #302c28;   --hd-tag-brown-text: #c7a68d;
-  --hd-tag-orange-bg: #332a23;  --hd-tag-orange-text: #e49a6b;
-  --hd-tag-yellow-bg: #332d21;  --hd-tag-yellow-text: #d8a545;
-  --hd-tag-green-bg: #242e28;   --hd-tag-green-text: #65bd8c;
-  --hd-tag-teal-bg: #232f2d;    --hd-tag-teal-text: #58c0b6;
-  --hd-tag-blue-bg: #262c33;    --hd-tag-blue-text: #82aee9;
-  --hd-tag-purple-bg: #2c2933;  --hd-tag-purple-text: #b59eea;
-  --hd-tag-pink-bg: #33292c;    --hd-tag-pink-text: #e793b0;
-  --hd-tag-red-bg: #312724;     --hd-tag-red-text: #e69387;
+  /* 标签：实色浅底 + 同色细边 + 浅色文字（R-COL 4.8），文字对底 7.01～8.27:1 */
+  --hd-tag-gray-bg: #2d2d2b;  --hd-tag-gray-border: #4d4b46;  --hd-tag-gray-text: #c4c1bb;
+  --hd-tag-brown-bg: #352c26;  --hd-tag-brown-border: #604a3b;  --hd-tag-brown-text: #d0b59e;
+  --hd-tag-orange-bg: #3c2a1e;  --hd-tag-orange-border: #74472a;  --hd-tag-orange-text: #f3b37d;
+  --hd-tag-yellow-bg: #363019;  --hd-tag-yellow-border: #6e5c23;  --hd-tag-yellow-text: #e3cc78;
+  --hd-tag-green-bg: #203328;  --hd-tag-green-border: #39634a;  --hd-tag-green-text: #91cba4;
+  --hd-tag-teal-bg: #1c3238;  --hd-tag-teal-border: #35616b;  --hd-tag-teal-text: #8dcad3;
+  --hd-tag-blue-bg: #222e43;  --hd-tag-blue-border: #405b86;  --hd-tag-blue-text: #a5c3f0;
+  --hd-tag-purple-bg: #30253f;  --hd-tag-purple-border: #62478b;  --hd-tag-purple-text: #c8acef;
+  --hd-tag-pink-bg: #3a2532;  --hd-tag-pink-border: #784764;  --hd-tag-pink-text: #e4a5c9;
+  --hd-tag-red-bg: #3b2527;  --hd-tag-red-border: #81454b;  --hd-tag-red-text: #eda6ab;
 
   --hd-elevation-card: 0 0 0 1px var(--hd-alpha-white-100);
   --hd-elevation-popover: 0 0 0 1px var(--hd-alpha-white-100), 0 4px 18px #00000066;

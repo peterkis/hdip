@@ -202,7 +202,7 @@
       "lib/tones.ts"
     ],
     "exceptions": [
-      "十种标签色（灰色 + 九种彩色）改为 Gr8r 浅底实色化，文字 ≥6.1:1，brown 为 HDIP 补色（ui-tokens.md R-COL 4.7，2026-10-27）；危险按钮 / 徽标悬停改用 --hd-danger-hover（原值）",
+      "十种标签色（灰色 + 九种彩色）当前为实色浅底 + 同色 1px 细边 + 深色文字 + 500 字重（ui-tokens.md R-COL 4.8，2026-10-28，取代 4.7 的 Gr8r 浅底）；危险按钮 / 徽标悬停用 --hd-danger-hover",
       "浅色 --hd-success-text 改 green-700（600 在侧栏、表头、悬停底上不足 4.5:1）",
       "深色 --hd-text-muted 取 #a09c95（Gr8r #9a968f 在表头悬停底上 4.49）",
       "悬停 / 按下用暖色透明叠加，不用 Gr8r 的固定值（侧栏、表头上看不出）",
@@ -253,6 +253,21 @@
       "--hd-danger-text": "不变 red-300",
       "--hd-warning-text": "不变 orange-300",
       "--hd-success-text": "不变 green-400"
+    },
+    "tag": {
+      "status": "当前（2026-10-28，ui-tokens.md R-COL 4.8）；规范清单，不作运行时配置",
+      "roles": ["bg", "border", "text"],
+      "geometry": { "height_px": 20, "font_size_px": 14, "line_height_px": 18, "font_weight": 500, "border": "1px solid --hd-tag-<tone>-border", "radius_px": 4, "padding_x_px": 6, "box_sizing": "border-box" },
+      "light": {
+        "gray": ["#f4f3f1", "#dedcd8", "#4a4742"], "brown": ["#f7f1eb", "#e5d5c6", "#704b35"], "orange": ["#fff0e5", "#ffd4b3", "#913e0b"],
+        "yellow": ["#fff8dc", "#efe0a1", "#6d5700"], "green": ["#ecf8ef", "#cbe8d4", "#165b33"], "teal": ["#eaf7f8", "#c0e6eb", "#075964"],
+        "blue": ["#edf4ff", "#cdddff", "#1e4b91"], "purple": ["#f3edff", "#e5d5ff", "#4d169a"], "pink": ["#fcecf5", "#f3d0e3", "#8a245e"], "red": ["#fee8e8", "#fdcaca", "#9e0812"]
+      },
+      "dark": {
+        "gray": ["#2d2d2b", "#4d4b46", "#c4c1bb"], "brown": ["#352c26", "#604a3b", "#d0b59e"], "orange": ["#3c2a1e", "#74472a", "#f3b37d"],
+        "yellow": ["#363019", "#6e5c23", "#e3cc78"], "green": ["#203328", "#39634a", "#91cba4"], "teal": ["#1c3238", "#35616b", "#8dcad3"],
+        "blue": ["#222e43", "#405b86", "#a5c3f0"], "purple": ["#30253f", "#62478b", "#c8acef"], "pink": ["#3a2532", "#784764", "#e4a5c9"], "red": ["#3b2527", "#81454b", "#eda6ab"]
+      }
     },
     "component_usage": {
       "sidebar_active": "浅色 surface-raised + 1px border-default 细边 + elevation-card；深色 surface-selected、无阴影",
