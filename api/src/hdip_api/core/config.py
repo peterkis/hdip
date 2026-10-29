@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # 只决定数据库会话里“现在是几点”（LOCALTIMESTAMP），存储的值仍不带时区。
     timezone: str = "Asia/Shanghai"
     cors_origins: list[str] = ["http://localhost:5173"]
+    # 标准资料包的受控目录（原 ZIP 放在 packages/ 下），数据库只存相对它的路径；不入库
+    standards_dir: str = "../hdip-standards"
 
 
 @lru_cache

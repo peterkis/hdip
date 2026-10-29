@@ -17,13 +17,15 @@ PERSON_VIEW = "person.view"  # 看到人员模块：名册、详情、部门的�
 PERSON_VIEW_SENSITIVE = "person.view_sensitive"  # 看到敏感字段（PERSON_FIELD_PERMISSIONS）
 PERSON_EXPORT = "person.export"  # 导出人员数据集
 PERSON_CHANGE = "person.change"  # 发起、编辑、提交含人员变更项的申请；确认仍按 approval_rule
+# 标准资料库（迁移 0023）：只读参考资料，写入只经本地导入命令，没有写入权限键
+STANDARD_VIEW = "standard.view"
 
 _PERSON_READ = {PERSON_VIEW, PERSON_VIEW_SENSITIVE, PERSON_EXPORT}
-# P1 与组织模块等价：三个角色都能看，维护人能发起
+# P1 与组织模块等价：三个角色都能看，维护人能发起；标准资料三个角色都能看
 ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "maintainer": {CHANGE_CREATE, DICTIONARY_MAINTAIN, PERSON_CHANGE, *_PERSON_READ},
-    "confirmer": set(_PERSON_READ),
-    "viewer": set(_PERSON_READ),
+    "maintainer": {CHANGE_CREATE, DICTIONARY_MAINTAIN, PERSON_CHANGE, *_PERSON_READ, STANDARD_VIEW},
+    "confirmer": {*_PERSON_READ, STANDARD_VIEW},
+    "viewer": {*_PERSON_READ, STANDARD_VIEW},
 }
 
 PERMISSION_LABELS = {
@@ -33,6 +35,7 @@ PERMISSION_LABELS = {
     PERSON_VIEW_SENSITIVE: "查看人员敏感信息",
     PERSON_EXPORT: "导出人员数据",
     PERSON_CHANGE: "维护人员",
+    STANDARD_VIEW: "查看标准资料",
 }
 
 # 敏感字段 → 查看所需的权限键。读接口、导出、申请页都按这里统一隐去（值置空并列入 masked_fields）。

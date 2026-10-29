@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0022**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0023**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)
+- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)、[`source_document`](#source_document)、[`source_package`](#source_package)、[`standard_entry`](#standard_entry)、[`standard_reference`](#standard_reference)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -1114,6 +1114,136 @@
 
 - `person_work_no_guard`：`CREATE TRIGGER person_work_no_guard BEFORE UPDATE ON public.person_work_no FOR EACH ROW EXECUTE FUNCTION hdip_guard_open_end()`
 
+### source_document
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `package_id` | bigint | 是 |  | → `source_package` |
+| `standard_no` | text | 是 |  |  |
+| `standard_year` | text |  |  |  |
+| `title` | text |  |  |  |
+| `family` | text | 是 |  |  |
+| `members` | jsonb | 是 |  |  |
+| `source_version` | text |  |  |  |
+| `source_sha256` | text |  |  |  |
+| `source_pdf` | text |  |  |  |
+| `source_url` | text |  |  |  |
+| `reader` | text | 是 |  |  |
+| `reader_version` | text | 是 |  |  |
+| `total_records` | integer | 是 |  |  |
+| `covered_keys` | integer | 是 | 0 |  |
+| `imported_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `source_document_pkey`（主键）：`PRIMARY KEY (id)`
+- `source_document_rev_uniq`（唯一）：`UNIQUE NULLS NOT DISTINCT (package_id, family, standard_no, standard_year, reader, reader_version)`
+- `source_document_no_check`（检查）：`CHECK ((btrim(standard_no) <> ''::text))`
+- `source_document_total_check`（检查）：`CHECK ((total_records >= 0))`
+- `source_document_year_check`（检查）：`CHECK ((standard_year ~ '^[0-9]{4}$'::text))`
+
+索引：
+
+- `source_document_std_idx`：`CREATE INDEX source_document_std_idx ON public.source_document USING btree (standard_no, standard_year)`
+
+触发器：
+
+- `source_document_guard`：`CREATE TRIGGER source_document_guard BEFORE UPDATE ON public.source_document FOR EACH ROW EXECUTE FUNCTION source_document_guard()`
+
+### source_package
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `file_name` | text | 是 |  |  |
+| `stored_path` | text | 是 |  |  |
+| `bytes` | bigint | 是 |  |  |
+| `sha256` | text | 是 |  |  |
+| `expected_sha256` | text |  |  |  |
+| `release_id` | text |  |  |  |
+| `drive_file_id` | text |  |  |  |
+| `source_url` | text |  |  |  |
+| `members` | jsonb | 是 |  |  |
+| `registered_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `source_package_pkey`（主键）：`PRIMARY KEY (id)`
+- `source_package_sha_uniq`（唯一）：`UNIQUE (sha256)`
+- `source_package_bytes_check`（检查）：`CHECK ((bytes > 0))`
+- `source_package_expected_check`（检查）：`CHECK ((expected_sha256 ~ '^[0-9a-f]{64}$'::text))`
+- `source_package_expected_match_check`（检查）：`CHECK (((expected_sha256 IS NULL) OR (expected_sha256 = sha256)))`
+- `source_package_sha_check`（检查）：`CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))`
+
+触发器：
+
+- `source_package_guard`：`CREATE TRIGGER source_package_guard BEFORE UPDATE ON public.source_package FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### standard_entry
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `document_id` | bigint | 是 |  | → `source_document` |
+| `entry_type` | text | 是 |  |  |
+| `source_key` | text | 是 |  |  |
+| `identifier` | text |  |  |  |
+| `name` | text |  |  |  |
+| `parent_id` | bigint |  |  | → `standard_entry` |
+| `seq` | integer | 是 |  |  |
+| `body` | jsonb | 是 |  |  |
+| `raw` | jsonb | 是 |  |  |
+| `provenance` | jsonb | 是 |  |  |
+| `search_text` | text | 是 |  |  |
+| `imported_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_entry_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_entry_source_uniq`（唯一）：`UNIQUE (document_id, entry_type, source_key)`
+- `standard_entry_key_check`（检查）：`CHECK ((btrim(source_key) <> ''::text))`
+- `standard_entry_type_check`（检查）：`CHECK ((entry_type = ANY (ARRAY['data_element'::text, 'value_domain'::text, 'code_row'::text])))`
+
+索引：
+
+- `standard_entry_doc_idx`：`CREATE INDEX standard_entry_doc_idx ON public.standard_entry USING btree (document_id, entry_type, seq)`
+- `standard_entry_ident_idx`：`CREATE INDEX standard_entry_ident_idx ON public.standard_entry USING btree (identifier)`
+- `standard_entry_parent_idx`：`CREATE INDEX standard_entry_parent_idx ON public.standard_entry USING btree (parent_id)`
+
+触发器：
+
+- `standard_entry_guard`：`CREATE TRIGGER standard_entry_guard BEFORE UPDATE ON public.standard_entry FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### standard_reference
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `from_entry_id` | bigint | 是 |  | → `standard_entry` |
+| `field` | text | 是 |  |  |
+| `ref_kind` | text | 是 |  |  |
+| `raw_text` | text | 是 |  |  |
+| `target_standard` | text | 是 |  |  |
+| `target_year` | text |  |  |  |
+| `target_identifier` | text |  |  |  |
+| `target_label` | text |  |  |  |
+
+约束：
+
+- `standard_reference_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_reference_from_uniq`（唯一）：`UNIQUE (from_entry_id, field)`
+- `standard_reference_kind_check`（检查）：`CHECK ((ref_kind = ANY (ARRAY['value_domain'::text, 'external_standard'::text])))`
+- `standard_reference_year_check`（检查）：`CHECK ((target_year ~ '^[0-9]{4}$'::text))`
+
+索引：
+
+- `standard_reference_target_idx`：`CREATE INDEX standard_reference_target_idx ON public.standard_reference USING btree (target_identifier)`
+
+触发器：
+
+- `standard_reference_guard`：`CREATE TRIGGER standard_reference_guard BEFORE UPDATE ON public.standard_reference FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ## 触发器函数
 
 ### hdip_guard_change_request
@@ -1245,7 +1375,11 @@ $function$
 | `service_unit_classification` | INSERT、SELECT、UPDATE |
 | `service_unit_lineage` | INSERT、SELECT、UPDATE |
 | `service_unit_version` | INSERT、SELECT、UPDATE |
+| `source_document` | SELECT |
+| `source_package` | SELECT |
 | `source_system` | INSERT、SELECT、UPDATE |
+| `standard_entry` | SELECT |
+| `standard_reference` | SELECT |
 
 ## 配置表种子
 
