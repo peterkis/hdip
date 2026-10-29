@@ -4,9 +4,11 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { ReferenceOutMatchBasis } from './referenceOutMatchBasis';
 import type { ReferenceOutRefKind } from './referenceOutRefKind';
 import type { ReferenceOutResolution } from './referenceOutResolution';
 import type { ReferenceTarget } from './referenceTarget';
+import type { RelatedTarget } from './relatedTarget';
 
 export interface ReferenceOut {
   field: string;
@@ -16,9 +18,18 @@ export interface ReferenceOut {
   target_year: string | null;
   target_identifier: string | null;
   target_label: string | null;
+  /** 原文里的值域编号写法；与 target_identifier 不同说明做过排版空白归一 */
+  identifier_as_written?: string | null;
+  identifier_normalized?: boolean;
+  /** 原文值域编号不完整，不解析、不补全 */
+  identifier_incomplete?: boolean;
   resolution: ReferenceOutResolution;
+  match_basis?: ReferenceOutMatchBasis;
+  resolution_note?: string | null;
   /** explicit / catalog 一项，candidates 多项 */
   targets: ReferenceTarget[];
   /** 原文写明年份但本库只收录了其他年份时列出，供阅读，不等价 */
   other_versions?: ReferenceTarget[];
+  /** 未解析时的阅读提示 */
+  related?: RelatedTarget[];
 }

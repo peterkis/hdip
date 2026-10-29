@@ -20,12 +20,13 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  ListStandardDocumentsParams,
   Problem,
   SearchStandardEntriesParams,
   StandardDocumentDetail,
   StandardDocumentRow,
   StandardEntryDetail,
-  StandardEntryRow
+  StandardEntryPage
 } from '../model';
 
 import { hdipFetch } from '../../fetcher';
@@ -50,21 +51,28 @@ const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKe
   return result;
 };
 
-export const getListStandardDocumentsUrl = () => {
+export const getListStandardDocumentsUrl = (params?: ListStandardDocumentsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/standards/documents`
+  return stringifiedParams.length > 0 ? `/api/standards/documents?${stringifiedParams}` : `/api/standards/documents`
 }
 
 /**
- * 已收录的标准资料（每行一份结构化文档修订），含接入覆盖。
+ * 已收录的标准资料（每行一份结构化文档修订），含接入覆盖；默认只列当前处理修订。
  * @summary List Documents
  */
-export const listStandardDocuments = async ( options?: Parameters<typeof hdipFetch>[1]): Promise<StandardDocumentRow[]> => {
+export const listStandardDocuments = async (params?: ListStandardDocumentsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<StandardDocumentRow[]> => {
 
-  return hdipFetch<StandardDocumentRow[]>(getListStandardDocumentsUrl(),
+  return hdipFetch<StandardDocumentRow[]>(getListStandardDocumentsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -77,23 +85,23 @@ export const listStandardDocuments = async ( options?: Parameters<typeof hdipFet
 
 
 
-export const getListStandardDocumentsQueryKey = () => {
+export const getListStandardDocumentsQueryKey = (params?: ListStandardDocumentsParams,) => {
     return [
-    `/api/standards/documents`
+    `/api/standards/documents`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getListStandardDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+export const getListStandardDocumentsQueryOptions = <TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>(params?: ListStandardDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getListStandardDocumentsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getListStandardDocumentsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStandardDocuments>>> = ({ signal }) => listStandardDocuments({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStandardDocuments>>> = ({ signal }) => listStandardDocuments(params, { signal, ...requestOptions });
 
 
 
@@ -107,7 +115,7 @@ export type ListStandardDocumentsQueryError = Problem
 
 
 export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>> & Pick<
+ params: undefined |  ListStandardDocumentsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof listStandardDocuments>>,
           TError,
@@ -117,7 +125,7 @@ export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listS
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>> & Pick<
+ params?: ListStandardDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof listStandardDocuments>>,
           TError,
@@ -127,7 +135,7 @@ export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listS
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ params?: ListStandardDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -135,11 +143,11 @@ export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listS
  */
 
 export function useListStandardDocuments<TData = Awaited<ReturnType<typeof listStandardDocuments>>, TError = Problem>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ params?: ListStandardDocumentsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listStandardDocuments>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getListStandardDocumentsQueryOptions(options)
+  const queryOptions = getListStandardDocumentsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -268,12 +276,12 @@ export const getSearchStandardEntriesUrl = (params?: SearchStandardEntriesParams
 }
 
 /**
- * 按名称或标识检索条目。
+ * 按名称或标识检索条目；先筛选再计数分页，total 是匹配总数。默认只检索当前处理修订。
  * @summary Search Entries
  */
-export const searchStandardEntries = async (params?: SearchStandardEntriesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<StandardEntryRow[]> => {
+export const searchStandardEntries = async (params?: SearchStandardEntriesParams, options?: Parameters<typeof hdipFetch>[1]): Promise<StandardEntryPage> => {
 
-  return hdipFetch<StandardEntryRow[]>(getSearchStandardEntriesUrl(params),
+  return hdipFetch<StandardEntryPage>(getSearchStandardEntriesUrl(params),
   {
     ...options,
     method: 'GET'

@@ -24,6 +24,8 @@ export interface StandardEntryDetail {
   name: string | null;
   seq: number;
   document: DocumentRef;
+  /** 本条目属于历史处理修订时，同一来源文档的当前处理修订 */
+  newer_revision?: DocumentRef | null;
   data_element?: DataElementBody | null;
   value_domain?: ValueDomainBody | null;
   code_row?: CodeRowBody | null;

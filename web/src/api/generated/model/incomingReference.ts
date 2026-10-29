@@ -4,6 +4,8 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { IncomingReferenceLabelCheck } from './incomingReferenceLabelCheck';
+import type { IncomingReferenceMatchBasis } from './incomingReferenceMatchBasis';
 import type { IncomingReferenceResolution } from './incomingReferenceResolution';
 import type { StandardEntryRow } from './standardEntryRow';
 
@@ -11,4 +13,6 @@ export interface IncomingReference {
   entry: StandardEntryRow;
   raw_text: string;
   resolution: IncomingReferenceResolution;
+  match_basis?: IncomingReferenceMatchBasis;
+  label_check?: IncomingReferenceLabelCheck;
 }

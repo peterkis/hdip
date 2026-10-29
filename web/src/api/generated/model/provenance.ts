@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Evidence } from './evidence';
+import type { ProvenanceSourceIssuesItem } from './provenanceSourceIssuesItem';
 
 /**
  * 出处：资料里有什么记什么，缺项保持为空。
@@ -27,6 +28,7 @@ export interface Provenance {
   qa_status?: string | null;
   /** 资料中的 automatic_import_gate，原值 */
   import_gate?: string | null;
-  source_issues?: string[];
+  /** 资料记载的问题：文字或原对象（v1 曾把对象记成 Python 字面形式） */
+  source_issues?: ProvenanceSourceIssuesItem[];
   evidence?: Evidence[];
 }

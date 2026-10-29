@@ -12,5 +12,6 @@ export interface CodeRowBody {
   description: string;
   hierarchy_level?: number | null;
   parent_code?: string | null;
-  raw_cells: string[];
+  /** 原表格各列；null 表示原表未提供（v1 曾记成“None”） */
+  raw_cells: (string | null)[];
 }

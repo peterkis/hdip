@@ -4947,9 +4947,21 @@
           "standards"
         ],
         "summary": "List Documents",
-        "description": "已收录的标准资料（每行一份结构化文档修订），含接入覆盖。",
+        "description": "已收录的标准资料（每行一份结构化文档修订），含接入覆盖；默认只列当前处理修订。",
         "operationId": "listStandardDocuments",
         "parameters": [
+          {
+            "name": "include_superseded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "同时列出历史处理修订",
+              "default": false,
+              "title": "Include Superseded"
+            },
+            "description": "同时列出历史处理修订"
+          },
           {
             "name": "x-hdip-user",
             "in": "header",
@@ -5140,7 +5152,7 @@
           "standards"
         ],
         "summary": "Search Entries",
-        "description": "按名称或标识检索条目。",
+        "description": "按名称或标识检索条目；先筛选再计数分页，total 是匹配总数。默认只检索当前处理修订。",
         "operationId": "searchStandardEntries",
         "parameters": [
           {
@@ -5183,6 +5195,18 @@
             }
           },
           {
+            "name": "top_level",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "只要顶层条目（数据元、值域表），不含代码行",
+              "default": false,
+              "title": "Top Level"
+            },
+            "description": "只要顶层条目（数据元、值域表），不含代码行"
+          },
+          {
             "name": "document_id",
             "in": "query",
             "required": false,
@@ -5195,7 +5219,86 @@
                   "type": "null"
                 }
               ],
+              "description": "只看这一份文档修订（历史修订也可）",
               "title": "Document Id"
+            },
+            "description": "只看这一份文档修订（历史修订也可）"
+          },
+          {
+            "name": "series",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "标准系列，如 WS/T 363",
+              "title": "Series"
+            },
+            "description": "标准系列，如 WS/T 363"
+          },
+          {
+            "name": "standard_no",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "分册，如 WS/T 363.3",
+              "title": "Standard No"
+            },
+            "description": "分册，如 WS/T 363.3"
+          },
+          {
+            "name": "standard_year",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "原文年份",
+              "title": "Standard Year"
+            },
+            "description": "原文年份"
+          },
+          {
+            "name": "include_superseded",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "同时检索历史处理修订",
+              "default": false,
+              "title": "Include Superseded"
+            },
+            "description": "同时检索历史处理修订"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           },
           {
@@ -5204,9 +5307,9 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "maximum": 500,
+              "maximum": 200,
               "minimum": 1,
-              "default": 200,
+              "default": 50,
               "title": "Limit"
             }
           },
@@ -5233,11 +5336,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/StandardEntryRow"
-                  },
-                  "title": "Response Searchstandardentries"
+                  "$ref": "#/components/schemas/StandardEntryPage"
                 }
               }
             }
@@ -7430,10 +7529,18 @@
           },
           "raw_cells": {
             "items": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "type": "array",
-            "title": "Raw Cells"
+            "title": "Raw Cells",
+            "description": "原表格各列；null 表示原表未提供（v1 曾记成“None”）"
           }
         },
         "type": "object",
@@ -9424,9 +9531,18 @@
             ],
             "title": "Standard Year"
           },
+          "reader": {
+            "type": "string",
+            "title": "Reader"
+          },
           "reader_version": {
             "type": "string",
             "title": "Reader Version"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current",
+            "description": "当前处理修订：同一包、资料族、读取器、标准号、原文年份里读取器版本最高的一份"
           }
         },
         "type": "object",
@@ -9434,7 +9550,9 @@
           "id",
           "standard_no",
           "standard_year",
-          "reader_version"
+          "reader",
+          "reader_version",
+          "is_current"
         ],
         "title": "DocumentRef"
       },
@@ -10357,6 +10475,37 @@
               "candidates"
             ],
             "title": "Resolution"
+          },
+          "match_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "prefix_variant"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Basis"
+          },
+          "label_check": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "same",
+                  "minor",
+                  "different"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Check"
           }
         },
         "type": "object",
@@ -11428,6 +11577,43 @@
           "registered_at"
         ],
         "title": "PackageOut"
+      },
+      "ParentRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "identifier",
+          "name"
+        ],
+        "title": "ParentRef"
       },
       "Permissions": {
         "properties": {
@@ -13015,10 +13201,19 @@
           },
           "source_issues": {
             "items": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              ]
             },
             "type": "array",
             "title": "Source Issues",
+            "description": "资料记载的问题：文字或原对象（v1 曾把对象记成 Python 字面形式）",
             "default": []
           },
           "evidence": {
@@ -13093,6 +13288,29 @@
             ],
             "title": "Target Label"
           },
+          "identifier_as_written": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier As Written",
+            "description": "原文里的值域编号写法；与 target_identifier 不同说明做过排版空白归一"
+          },
+          "identifier_normalized": {
+            "type": "boolean",
+            "title": "Identifier Normalized",
+            "default": false
+          },
+          "identifier_incomplete": {
+            "type": "boolean",
+            "title": "Identifier Incomplete",
+            "description": "原文值域编号不完整，不解析、不补全",
+            "default": false
+          },
           "resolution": {
             "type": "string",
             "enum": [
@@ -13102,6 +13320,32 @@
               "candidates"
             ],
             "title": "Resolution"
+          },
+          "match_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "prefix_variant"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Basis"
+          },
+          "resolution_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolution Note"
           },
           "targets": {
             "items": {
@@ -13118,6 +13362,15 @@
             "type": "array",
             "title": "Other Versions",
             "description": "原文写明年份但本库只收录了其他年份时列出，供阅读，不等价",
+            "default": []
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedTarget"
+            },
+            "type": "array",
+            "title": "Related",
+            "description": "未解析时的阅读提示",
             "default": []
           }
         },
@@ -13165,6 +13418,23 @@
           },
           "document": {
             "$ref": "#/components/schemas/DocumentRef"
+          },
+          "label_check": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "same",
+                  "minor",
+                  "different"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Check",
+            "description": "来源引用名称与本表名称的比较；来源没写名称时为空"
           }
         },
         "type": "object",
@@ -13175,6 +13445,34 @@
           "document"
         ],
         "title": "ReferenceTarget"
+      },
+      "RelatedTarget": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "other_part",
+              "other_revision",
+              "prefix_variant_conflict"
+            ],
+            "title": "Kind"
+          },
+          "note": {
+            "type": "string",
+            "title": "Note"
+          },
+          "target": {
+            "$ref": "#/components/schemas/ReferenceTarget"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "note",
+          "target"
+        ],
+        "title": "RelatedTarget",
+        "description": "阅读提示，不是解析结果：不等价、不改指。"
       },
       "RelationOut": {
         "properties": {
@@ -14421,6 +14719,11 @@
             "type": "integer",
             "title": "Id"
           },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "description": "标准系列，如 WS/T 363（标准号去掉分册）"
+          },
           "standard_no": {
             "type": "string",
             "title": "Standard No"
@@ -14483,6 +14786,21 @@
             "type": "string",
             "format": "date-time",
             "title": "Imported At"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "newer_revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "历史处理修订时：同一来源文档的当前处理修订（不是新版标准）"
           },
           "package": {
             "$ref": "#/components/schemas/PackageOut"
@@ -14538,11 +14856,20 @@
               }
             ],
             "title": "Source Url"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentRef"
+            },
+            "type": "array",
+            "title": "Revisions",
+            "description": "同一来源文档的全部处理修订（含本份），按读取器版本从低到高"
           }
         },
         "type": "object",
         "required": [
           "id",
+          "series",
           "standard_no",
           "standard_year",
           "title",
@@ -14554,12 +14881,14 @@
           "covered_keys",
           "counts",
           "imported_at",
+          "is_current",
           "package",
           "members",
           "source_version",
           "source_sha256",
           "source_pdf",
-          "source_url"
+          "source_url",
+          "revisions"
         ],
         "title": "StandardDocumentDetail"
       },
@@ -14568,6 +14897,11 @@
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "description": "标准系列，如 WS/T 363（标准号去掉分册）"
           },
           "standard_no": {
             "type": "string",
@@ -14631,11 +14965,27 @@
             "type": "string",
             "format": "date-time",
             "title": "Imported At"
+          },
+          "is_current": {
+            "type": "boolean",
+            "title": "Is Current"
+          },
+          "newer_revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "历史处理修订时：同一来源文档的当前处理修订（不是新版标准）"
           }
         },
         "type": "object",
         "required": [
           "id",
+          "series",
           "standard_no",
           "standard_year",
           "title",
@@ -14646,7 +14996,8 @@
           "total_records",
           "covered_keys",
           "counts",
-          "imported_at"
+          "imported_at",
+          "is_current"
         ],
         "title": "StandardDocumentRow"
       },
@@ -14697,6 +15048,17 @@
           },
           "document": {
             "$ref": "#/components/schemas/DocumentRef"
+          },
+          "newer_revision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DocumentRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "本条目属于历史处理修订时，同一来源文档的当前处理修订"
           },
           "data_element": {
             "anyOf": [
@@ -14792,6 +15154,38 @@
         ],
         "title": "StandardEntryDetail"
       },
+      "StandardEntryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StandardEntryRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "符合筛选的条目总数（不是本页条数）"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "StandardEntryPage"
+      },
       "StandardEntryRow": {
         "properties": {
           "id": {
@@ -14842,6 +15236,17 @@
               }
             ],
             "title": "Parent Id"
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ParentRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "代码行所属的值域表"
           }
         },
         "type": "object",

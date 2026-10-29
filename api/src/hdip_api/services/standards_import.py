@@ -98,14 +98,22 @@ def split_standard(label: str) -> tuple[str, str | None]:
 _REF_RE = re.compile(
     r"^(?P<std>(?:WS/T|WS|GB/T|GB)\s*\d+(?:\s*\.\s*\d+)*)"
     r"(?:\s*[—–-]\s*(?P<year>\d{4}))?"
-    r"\s*(?P<cv>CV\d+(?:\.\d+)*)?"
-    r"\s*(?P<label>.*)$",
+    r"\s*(?P<rest>.*)$",
     re.S,
 )
+# 值域编号 CVdd.dd.ddd：点两侧、前两段数字之间允许排版空白（如“CV0 5. 10. 018”）；
+# 末段三位须连写，后面不能紧跟数字，免得把表名开头的数字并进编号
+_CV_FULL = re.compile(r"CV\s*(\d)\s*(\d)\s*\.\s*(\d)\s*(\d)\s*\.\s*(\d{3})(?!\d)", re.S)
+_CV_PREFIX = re.compile(r"CV[\d\s.]*\d|CV", re.S)
+CV_ID = re.compile(r"CV\d{2}\.\d{2}\.\d{3}")
 
 
 def parse_allowed_values(field_name: str, raw: str) -> tuple[str, Ref | None]:
-    """允许值原文 → (原性质, 引用)。只认开头明确写出标准号的引用；其余按原文说明保留。"""
+    """允许值原文 → (原性质, 引用)。只认开头明确写出标准号的引用；其余按原文说明保留。
+
+    值域编号只认完整的 CVdd.dd.ddd（内部排版空白归一后记为阅读定位用的编号，原文在 raw_text）；
+    编号不完整时目标标识留空、不猜测补全（读取器 v2，资料基线 3.1 B1）。
+    """
     if not raw.strip():
         return "empty", None
     m = _REF_RE.match(_ws(raw))
@@ -113,15 +121,25 @@ def parse_allowed_values(field_name: str, raw: str) -> tuple[str, Ref | None]:
         return "text", None
     std = re.sub(r"\s*\.\s*", ".", m.group("std"))
     std = re.sub(r"^(WS/T|WS|GB/T|GB)\s*", r"\1 ", std)
-    cv = m.group("cv")
+    rest = m.group("rest")
+    cv: str | None = None
+    kind = "external_standard"
+    if rest.startswith("CV"):
+        kind = "value_domain"
+        if full := _CV_FULL.match(rest):
+            a, b, c, d, e = full.groups()
+            cv, rest = f"CV{a}{b}.{c}{d}.{e}", rest[full.end() :]
+        else:
+            rest = rest[_CV_PREFIX.match(rest).end() :]
+    label = rest.strip()
     return "reference", Ref(
         field=field_name,
-        ref_kind="value_domain" if cv else "external_standard",
+        ref_kind=kind,
         raw_text=raw,
         target_standard=std,
         target_year=m.group("year"),
         target_identifier=cv,
-        target_label=m.group("label") or None,
+        target_label=label or None,
     )
 
 
@@ -236,7 +254,9 @@ class Ws363364Reader:
 
     family = "ws363-364"
     name = "ws363-364"
-    version = "1"
+    # 2：值域编号排版空白归一、不完整编号不建目标；source_issues 保留对象；raw_cells 的 null
+    # 保留为空；补读 qa_evidence.source_images（资料基线 3.1 B1、D）
+    version = "2"
     DE_MEMBER = "p001/files/enhanced-current-official-data-elements.json"
     CV_TABLES = "p002/files/data/tables.json"
     CV_ROWS = "p002/files/data/rows.json"
@@ -328,6 +348,7 @@ class Ws363364Reader:
         )
         qa = src.obj("qa_evidence")
         images = qa.list("image_paths", str) or qa.list("pages", str)
+        images += [p for p in qa.list("source_images", str) if p not in images]
         source_pdf, source_url = src.str("source_pdf"), src.str("source_url")
         provenance = _model(
             Provenance,
@@ -341,7 +362,7 @@ class Ws363364Reader:
                 "source_sha256": src.str("source_sha256"),
                 "qa_status": src.str("qa_status"),
                 "import_gate": src.str("automatic_import_gate"),
-                "source_issues": [str(x) for x in src.list("source_issues")],
+                "source_issues": src.list("source_issues", str, dict),
                 "evidence": _evidence_images(images, self.members)
                 + _source_pdf(source_pdf, source_url, self.members),
             },
@@ -421,7 +442,7 @@ class Ws363364Reader:
                 "description": src.str("description") or "",
                 "hierarchy_level": src.int("hierarchy_level"),
                 "parent_code": src.str("parent_code") or None,
-                "raw_cells": [str(c) for c in src.list("raw_cells")],
+                "raw_cells": src.list("raw_cells", str, type(None)),
             },
             src.where,
         )

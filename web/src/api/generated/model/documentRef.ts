@@ -9,5 +9,8 @@ export interface DocumentRef {
   id: number;
   standard_no: string;
   standard_year: string | null;
+  reader: string;
   reader_version: string;
+  /** 当前处理修订：同一包、资料族、读取器、标准号、原文年份里读取器版本最高的一份 */
+  is_current: boolean;
 }
