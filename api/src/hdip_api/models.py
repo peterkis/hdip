@@ -571,3 +571,87 @@ class PersonDuty(_Period, Base):
     mode: Mapped[str] = mapped_column(Text)
     # 任职依据（迁移 0021）：任命、交接时必填；之前的记录为空
     basis_note: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------- 标准资料库（迁移 0023）
+# 外部标准原文的只读参考：只由 scripts/import_standards.py（hdip_owner）写入，应用账号只读。
+
+
+class SourcePackage(Base):
+    """收录的标准资料包（ZIP）：身份、摘要、成员清单；登记后不可改。"""
+
+    __tablename__ = "source_package"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    file_name: Mapped[str] = mapped_column(Text)
+    stored_path: Mapped[str] = mapped_column(Text)
+    bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(Text)
+    expected_sha256: Mapped[str | None] = mapped_column(Text)
+    release_id: Mapped[str | None] = mapped_column(Text)
+    drive_file_id: Mapped[str | None] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    members: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class SourceDocument(Base):
+    """某标准原文版本在某包、某读取器版本下的一份结构化修订视图。"""
+
+    __tablename__ = "source_document"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    package_id: Mapped[int] = mapped_column(ForeignKey("source_package.id"))
+    standard_no: Mapped[str] = mapped_column(Text)
+    standard_year: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    family: Mapped[str] = mapped_column(Text)
+    members: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    source_version: Mapped[str | None] = mapped_column(Text)
+    source_sha256: Mapped[str | None] = mapped_column(Text)
+    source_pdf: Mapped[str | None] = mapped_column(Text)
+    source_url: Mapped[str | None] = mapped_column(Text)
+    reader: Mapped[str] = mapped_column(Text)
+    reader_version: Mapped[str] = mapped_column(Text)
+    total_records: Mapped[int] = mapped_column(Integer)
+    covered_keys: Mapped[int] = mapped_column(Integer, server_default=text("0"))
+    imported_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardEntry(Base):
+    """类型化来源条目：数据元、值域表、代码行…；body 按类型固定结构，raw 为原记录。"""
+
+    __tablename__ = "standard_entry"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("source_document.id"))
+    entry_type: Mapped[str] = mapped_column(Text)
+    source_key: Mapped[str] = mapped_column(Text)
+    identifier: Mapped[str | None] = mapped_column(Text)
+    name: Mapped[str | None] = mapped_column(Text)
+    parent_id: Mapped[int | None] = mapped_column(ForeignKey("standard_entry.id"))
+    seq: Mapped[int] = mapped_column(Integer)
+    body: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    raw: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    search_text: Mapped[str] = mapped_column(Text)
+    imported_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardReference(Base):
+    """条目原文里的引用：只记原文写明的内容，目标在读取时按目录计算。"""
+
+    __tablename__ = "standard_reference"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    from_entry_id: Mapped[int] = mapped_column(ForeignKey("standard_entry.id"))
+    field: Mapped[str] = mapped_column(Text)
+    ref_kind: Mapped[str] = mapped_column(Text)
+    raw_text: Mapped[str] = mapped_column(Text)
+    target_standard: Mapped[str] = mapped_column(Text)
+    target_year: Mapped[str | None] = mapped_column(Text)
+    target_identifier: Mapped[str | None] = mapped_column(Text)
+    target_label: Mapped[str | None] = mapped_column(Text)

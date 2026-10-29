@@ -23,3 +23,6 @@ web/dist/
 
 # 参考资料（体积大，不入库）
 docs/refer/
+
+# 标准资料包与解压内容（体积大、外部资料，不入库；HDIP_STANDARDS_DIR）
+hdip-standards/

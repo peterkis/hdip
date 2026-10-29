@@ -61,6 +61,7 @@ erDiagram
 | 服务单元 | `service_unit` / `service_unit_version`、`service_unit_lineage`、`service_unit_classification` | 部门 × 院区 × 运营主体 × 期间；拆分合并的演变关系；单元分类（D3） |
 | 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
 | 人员 | `person` / `person_version`、`person_engagement`、`person_work_no`、`person_assignment`、`person_duty` | 人员身份 + 姓名版本；任用、业务工号、部门归属自带期间，结束日在到达前可改（迁移 0016，见第 8 节） |
+| 标准资料 | `source_package`、`source_document`、`standard_entry`、`standard_reference` | 外部标准原文的只读参考：来源包、结构化文档修订、类型化条目、来源中的引用。只由本地导入命令写入，不经变更申请，应用账号只读（迁移 0023，见第 9 节） |
 
 院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
 
@@ -96,8 +97,9 @@ erDiagram
    - 运营关系另外放开 `closed_change_id`、`closed_at`、`closed_by`，它们必须与结束日同一次写入。
    - 部门的赋值、归属、别名放开 `closed_change_id`，同样只能随结束日写入一次。
    - **配置字典例外**：`classification_scheme`、`classification_code` 放开名称、说明、排序、启用和维护记录列，供维护人直接维护；代码值与单选属性不可改。（迁移 0006 起，`department` 身份行整行不可更新，原先的过渡例外已收回。）
-3. **变更申请终态**：`hdip_guard_change_request` 禁止修改已确认、已退回、已撤销的申请。
-4. **人员的期间（迁移 0016）**：任用、业务工号、部门归属用另一个触发器 `hdip_guard_open_end()`：只有 `valid_to`、`closed_change_id` 可改；**结束日在到达前可以改**（提前、推后、清空、撤销计划），改时必须同时记下本次申请；原结束日早于今天（`current_date`，会话时区）或原行是空期间时整行不可再改（约束名 `hdip_period_passed` / `hdip_history_immutable`）。组织各表仍用 `hdip_guard_update`（结束日只写一次），两者互不影响。
+3. **标准资料例外（迁移 0023）**：标准资料四张表不是院内主数据，不经变更申请；`hdip_app` 只有 SELECT（迁移里 `REVOKE INSERT, UPDATE`），由本地导入命令用 `hdip_owner` 写入。来源包、条目、引用登记后整行不可改（`hdip_guard_update()`）；`source_document` 只允许导入命令更新接入覆盖（`covered_keys`、`imported_at`），其余列一律不可改（迁移 0024 起同样用 `hdip_guard_update('covered_keys', 'imported_at')`，取代 0023 手工列举身份字段的 `source_document_guard()`）。见第 9 节。
+4. **变更申请终态**：`hdip_guard_change_request` 禁止修改已确认、已退回、已撤销的申请。
+5. **人员的期间（迁移 0016）**：任用、业务工号、部门归属用另一个触发器 `hdip_guard_open_end()`：只有 `valid_to`、`closed_change_id` 可改；**结束日在到达前可以改**（提前、推后、清空、撤销计划），改时必须同时记下本次申请；原结束日早于今天（`current_date`，会话时区）或原行是空期间时整行不可再改（约束名 `hdip_period_passed` / `hdip_history_immutable`）。组织各表仍用 `hdip_guard_update`（结束日只写一次），两者互不影响。
 
 ### 2.4 数据库强制与应用校验
 
@@ -211,6 +213,8 @@ stateDiagram-v2
 | 0020 | 人员状态中文名改为“有效任用 / 计划中 / 无效任用”（`option_item.person_relation_status`，码值不变；导出 `relation_status_name` 随之变化） |
 | 0022 | 草稿写入的请求键：`change_request_write`（只追加；用户 + 请求键唯一；`payload_hash` 区分重试与改过之后再保存），新建 / 更新草稿可安全重试（U3.1 遗留 R01-1） |
 | 0021 | A1：`person_duty.basis_note` 任职依据（可空，1–500 字，`person_duty_basis_note_check`）；任命、交接必填由应用层检查，之前的记录为空 |
+| 0024 | 标准资料库：`source_document` 的更新保护改用允许列 `hdip_guard_update('covered_keys', 'imported_at')`（触发器名仍为 `source_document_guard`），移除 0023 的自定义函数 `source_document_guard()`（它漏了 `title`、`source_version`、`source_pdf`、`source_url` 等列）；已导入数据不动 |
+| 0023 | 标准资料库 F0：`source_package`（同字节只登记一次，与清单摘要不一致不登记）、`source_document`（标准号 + 原文年份 + 读取器版本的一份结构化修订，接入覆盖可更新）、`standard_entry`（`data_element` / `value_domain` / `code_row`，按“文档修订 + 类型 + 源记录键”唯一）、`standard_reference`（原文写明的标准号、年份文字、值域标识；解析在读取时计算）。`hdip_app` 只读 |
 
 ### 新增一类对象或变更的检查单
 
@@ -457,3 +461,24 @@ erDiagram
 - 提示（不阻止）：变更项处理结果里的 `notices`（同名人员、部门筹备 / 暂停履职、暂未分配主部门），随预演结果返回，申请页显示在对应行下。
 - 权限（`core/permissions.py`）：`person.view`、`person.view_sensitive`、`person.export`、`person.change`。没有 `person.view` 时人员接口 403，含人员变更项的申请整张隐藏（按号打开为 404）。敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（目前为空：工号不是敏感字段；身份证号、电话将来加入时登记），读接口、导出统一置空并列入 `masked_fields`；申请详情（`GET /api/change-requests/{id}` 及各动作的返回、提交 / 确认被拒的问题）与人员详情的结束日调整记录由 `services/masking.py` 隐去：敏感键置空，文字里的敏感值（本申请所带，及人员各表同名列的取值）替换为“（已隐去）”；`ChangeRequestOut.masked_fields` 列出隐去的字段；申请列表的说明同一规则（`queries.list_changes`）。草稿含当前用户看不到的值时拒绝其编辑（`workflow.update_draft`）。
 - 拼音码：人名首字按姓氏读音（前端 `lib/pinyin.ts` 的 `person` 模式，单 S、曾 Z、区 O），组织名称的固定读音（区 → Q）不适用；后端 pypinyin 没有姓氏模式，只在变更项未给出时兜底。
+
+## 9. 标准资料库（F0 / F1 已实施，迁移 0023、0024）
+
+依据：`docs/标准资料库-建设计划.md`（建设计划 v3.0）与 `docs/标准资料库-F0F1开发计划.md`；资料基线见 `docs/标准资料库-资料基线.md`。
+
+标准资料是外部原文的只读参考，**不是院内主数据**：不经变更申请、没有 API 写入口，不改分类方案、编码映射台账等业务配置，也不表示医院已采用。写入只经 `api/scripts/import_standards.py`（迁移账号），应用账号只读。
+
+| 表 | 一行是 | 要点 |
+| --- | --- | --- |
+| `source_package` | 一个收录的资料包（ZIP） | 本地 SHA-256 唯一（同字节只登记一次）；`expected_sha256` 为清单摘要，为空 = 未与清单比对，与本地摘要不一致时不登记（`source_package_expected_match_check`）；`stored_path` 相对 `HDIP_STANDARDS_DIR`；`members` 是成员清单（路径、大小、CRC）。整行不可改 |
+| `source_document` | 某标准原文版本在某包、某读取器版本下的一份结构化修订 | `standard_no` + `standard_year`（原文年份，不是整理年份）；一个汇总 JSON 含多个分册时各分册分别成行；`members` 记所读成员及其 SHA；`source_sha256` 是原 PDF 摘要（取自资料，不是 ZIP 摘要）；`total_records` 是所读成员里该标准的源记录数，`covered_keys` 是已接入数，随 `--select` 扩大而更新；只有 `covered_keys`、`imported_at` 可改（迁移 0024）。读取器改了解析结果 = 新 `reader_version` = 新行，旧结果保留 |
+| `standard_entry` | 一条来源条目 | `entry_type` 由代码固定（F1：`data_element` 数据元、`value_domain` 值域表、`code_row` 代码）；`source_key` 优先原 `row_id`，缺少时用“成员路径#[位置]”；`identifier`（DE / CV / 码值）只用于检索，不是跨版本主键，同一码值在不同表或年份各有条目、不按码值去重；`body` 按类型固定结构（`schemas/standards.py`），`raw` 为原记录，`provenance` 为出处（成员、位置、PDF 物理页、印刷页、表内位置、资料复核状态原值、图证与可用性）；`search_text` 是检索派生值。代码行的 `parent_id` 指向值域表 |
+| `standard_reference` | 条目原文里的一处引用 | 只记原文写明的：`target_standard`、`target_year`（原文未写为空）、`target_identifier`、`target_label`、`raw_text`；`ref_kind`：`value_domain` / `external_standard` |
+
+- **引用在读取时解析**（`services/standards.py` 的 `resolve`），不写回：原文写明年份且本库恰有一份 → 原文指定；原文写明的年份本库没有 → 未解析，其他年份另列为“仅供阅读，不等价”；原文未写年份且本库只有一份 → 按目录定位（不表示原文指定了该年份）；多份 → 多个候选。新导入资料后解析结果随之变化，但不会把写明 2011 的引用改指 2023。
+- **允许值的原性质**：空 / 引用（开头明确写出 WS、WS/T、GB、GB/T 标准号）/ 原文说明（如“1.城市2.农村”），原文始终保留；只有明确写出的引用才建 `standard_reference`。
+- **证据可用性**：资料记了图证或 PDF 路径时按包成员核对，包里没有就标“未随包提供”；官方 URL 标“外部链接 · 未核实可访问”。F1 不提供包内文件的打开。
+- **导入**：直接读 ZIP 成员，不解压、不执行包内程序；整次导入一个事务，任何一条读不通报“成员#[位置]：问题”并整体回滚。逐条读取时检查所用字段的形状（`services/standards_import.py` 的 `_Src`：文本、整数、数组及逐项类型、嵌套对象），正文与出处再经模型校验，错误都带“字段 路径”；缺字段与 null 按未提供处理；重复导入不增条目；码值不是字符串时拒绝（不按数字读）。
+- 权限键 `standard.view`（三个角色都有）。读取接口：`GET /api/standards/documents`、`/documents/{id}`、`/entries?q=&entry_type=&document_id=`、`/entries/{id}`。
+- 测试：`api/tests/test_std.py`（STD-01～06），用 `tests/std_helpers.py` 生成与主题 01 包同结构的小资料包，不依赖真实资料。
+

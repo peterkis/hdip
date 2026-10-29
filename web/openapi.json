@@ -4940,6 +4940,459 @@
           }
         }
       }
+    },
+    "/api/standards/documents": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "List Documents",
+        "description": "已收录的标准资料（每行一份结构化文档修订），含接入覆盖。",
+        "operationId": "listStandardDocuments",
+        "parameters": [
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StandardDocumentRow"
+                  },
+                  "title": "Response Liststandarddocuments"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/standards/documents/{doc_id}": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Get Document",
+        "description": "标准资料详情：来源包、读取成员、读取器版本与覆盖。",
+        "operationId": "getStandardDocument",
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Doc Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardDocumentDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/standards/entries": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Search Entries",
+        "description": "按名称或标识检索条目。",
+        "operationId": "searchStandardEntries",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "名称或标识（DE / CV / 码值）",
+              "title": "Q"
+            },
+            "description": "名称或标识（DE / CV / 码值）"
+          },
+          {
+            "name": "entry_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "data_element",
+                    "value_domain",
+                    "code_row"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Entry Type"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Document Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StandardEntryRow"
+                  },
+                  "title": "Response Searchstandardentries"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/standards/entries/{entry_id}": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Get Entry",
+        "description": "条目详情：类型化正文、值域代码、引用解析、被引用、出处与原记录。",
+        "operationId": "getStandardEntry",
+        "parameters": [
+          {
+            "name": "entry_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Entry Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardEntryDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -6938,6 +7391,60 @@
         "type": "object",
         "title": "ClassificationSchemeWrite"
       },
+      "CodeRowBody": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code",
+            "description": "码值，字符串原样（保留前导零）"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "hierarchy_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hierarchy Level"
+          },
+          "parent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Code"
+          },
+          "raw_cells": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Raw Cells"
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name",
+          "description",
+          "raw_cells"
+        ],
+        "title": "CodeRowBody"
+      },
       "CodeSuggestion": {
         "properties": {
           "target_type": {
@@ -6988,6 +7495,81 @@
         ],
         "title": "CodeSuggestion",
         "description": "按源名称找到的候选：只是建议，裁决仍由人勾选确认、经变更申请生效。"
+      },
+      "DataElementBody": {
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "title": "Identifier",
+            "description": "数据元标识符，如 DE02.01.031.00"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "definition": {
+            "type": "string",
+            "title": "Definition"
+          },
+          "data_type": {
+            "type": "string",
+            "title": "Data Type",
+            "description": "数据元值的数据类型，原文，如 S3"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "description": "表示格式，原文，如 N2"
+          },
+          "allowed_values": {
+            "type": "string",
+            "title": "Allowed Values",
+            "description": "数据元允许值原文（保留换行）"
+          },
+          "allowed_value_nature": {
+            "type": "string",
+            "enum": [
+              "empty",
+              "reference",
+              "text"
+            ],
+            "title": "Allowed Value Nature"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version",
+            "description": "数据元版本，如 V1.1"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifier",
+          "name",
+          "definition",
+          "data_type",
+          "format",
+          "allowed_values",
+          "allowed_value_nature"
+        ],
+        "title": "DataElementBody"
       },
       "DateFact": {
         "properties": {
@@ -8821,6 +9403,41 @@
         ],
         "title": "DeptRef"
       },
+      "DocumentRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Year"
+          },
+          "reader_version": {
+            "type": "string",
+            "title": "Reader Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "standard_no",
+          "standard_year",
+          "reader_version"
+        ],
+        "title": "DocumentRef"
+      },
       "DutyRegister": {
         "properties": {
           "as_of": {
@@ -9064,6 +9681,60 @@
         ],
         "title": "EngagementEndChange",
         "description": "任用结束日的一次登记或调整（来自已确认申请的前后结果，不另存）。"
+      },
+      "Evidence": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "image",
+              "pdf"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "in_package",
+              "external",
+              "not_in_package"
+            ],
+            "title": "Availability"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "label",
+          "availability"
+        ],
+        "title": "Evidence"
       },
       "ExternalCodeAssign": {
         "properties": {
@@ -9667,6 +10338,34 @@
           "db_time"
         ],
         "title": "Health"
+      },
+      "IncomingReference": {
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/StandardEntryRow"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "catalog",
+              "unresolved",
+              "candidates"
+            ],
+            "title": "Resolution"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entry",
+          "raw_text",
+          "resolution"
+        ],
+        "title": "IncomingReference"
       },
       "InstitutionCreate": {
         "properties": {
@@ -10628,6 +11327,107 @@
           "status"
         ],
         "title": "OrgViewOut"
+      },
+      "PackageOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "stored_path": {
+            "type": "string",
+            "title": "Stored Path"
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "expected_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Sha256"
+          },
+          "sha_check": {
+            "type": "string",
+            "enum": [
+              "matched",
+              "not_compared"
+            ],
+            "title": "Sha Check"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Release Id"
+          },
+          "drive_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Drive File Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "file_name",
+          "stored_path",
+          "bytes",
+          "sha256",
+          "expected_sha256",
+          "sha_check",
+          "release_id",
+          "drive_file_id",
+          "source_url",
+          "member_count",
+          "registered_at"
+        ],
+        "title": "PackageOut"
       },
       "Permissions": {
         "properties": {
@@ -12104,6 +12904,278 @@
         "title": "ProblemItem",
         "description": "一条可读的业务错误。item_index 指向变更申请里的第几项（从 0 开始）。\n\nmessage 只说事实（短句、主动语态）；hint 说怎么改；facts 是相关日期。"
       },
+      "Provenance": {
+        "properties": {
+          "member": {
+            "type": "string",
+            "title": "Member",
+            "description": "包内成员路径"
+          },
+          "json_pointer": {
+            "type": "string",
+            "title": "Json Pointer",
+            "description": "成员内 JSON 位置，如 [123]"
+          },
+          "record_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Id",
+            "description": "原资料的记录 ID（row_id 等）"
+          },
+          "pdf_pages": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Pdf Pages",
+            "default": []
+          },
+          "printed_pages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Printed Pages",
+            "default": []
+          },
+          "table_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Table Ref",
+            "description": "表 / 片段 / 行，如“片段 1 第 2 行”"
+          },
+          "source_pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Pdf"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sha256"
+          },
+          "qa_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qa Status",
+            "description": "资料中的复核状态，原值"
+          },
+          "import_gate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Import Gate",
+            "description": "资料中的 automatic_import_gate，原值"
+          },
+          "source_issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Source Issues",
+            "default": []
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "member",
+          "json_pointer"
+        ],
+        "title": "Provenance",
+        "description": "出处：资料里有什么记什么，缺项保持为空。"
+      },
+      "ReferenceOut": {
+        "properties": {
+          "field": {
+            "type": "string",
+            "title": "Field"
+          },
+          "ref_kind": {
+            "type": "string",
+            "enum": [
+              "value_domain",
+              "external_standard"
+            ],
+            "title": "Ref Kind"
+          },
+          "raw_text": {
+            "type": "string",
+            "title": "Raw Text"
+          },
+          "target_standard": {
+            "type": "string",
+            "title": "Target Standard"
+          },
+          "target_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Year"
+          },
+          "target_identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Identifier"
+          },
+          "target_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Label"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": [
+              "explicit",
+              "catalog",
+              "unresolved",
+              "candidates"
+            ],
+            "title": "Resolution"
+          },
+          "targets": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceTarget"
+            },
+            "type": "array",
+            "title": "Targets",
+            "description": "explicit / catalog 一项，candidates 多项"
+          },
+          "other_versions": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceTarget"
+            },
+            "type": "array",
+            "title": "Other Versions",
+            "description": "原文写明年份但本库只收录了其他年份时列出，供阅读，不等价",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "field",
+          "ref_kind",
+          "raw_text",
+          "target_standard",
+          "target_year",
+          "target_identifier",
+          "target_label",
+          "resolution",
+          "targets"
+        ],
+        "title": "ReferenceOut"
+      },
+      "ReferenceTarget": {
+        "properties": {
+          "entry_id": {
+            "type": "integer",
+            "title": "Entry Id"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entry_id",
+          "identifier",
+          "name",
+          "document"
+        ],
+        "title": "ReferenceTarget"
+      },
       "RelationOut": {
         "properties": {
           "id": {
@@ -13291,6 +14363,497 @@
         "title": "SourceSystemWrite",
         "description": "维护来源系统实例（配置）。code 新建后不可改。"
       },
+      "StandardCodeRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "hierarchy_level": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hierarchy Level"
+          },
+          "parent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "code",
+          "name",
+          "description",
+          "hierarchy_level",
+          "parent_code"
+        ],
+        "title": "StandardCodeRow"
+      },
+      "StandardDocumentDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Year"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "package_file": {
+            "type": "string",
+            "title": "Package File"
+          },
+          "reader": {
+            "type": "string",
+            "title": "Reader"
+          },
+          "reader_version": {
+            "type": "string",
+            "title": "Reader Version"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "covered_keys": {
+            "type": "integer",
+            "title": "Covered Keys"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "各条目类型已接入数"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At"
+          },
+          "package": {
+            "$ref": "#/components/schemas/PackageOut"
+          },
+          "members": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Members"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sha256"
+          },
+          "source_pdf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Pdf"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "standard_no",
+          "standard_year",
+          "title",
+          "family",
+          "package_file",
+          "reader",
+          "reader_version",
+          "total_records",
+          "covered_keys",
+          "counts",
+          "imported_at",
+          "package",
+          "members",
+          "source_version",
+          "source_sha256",
+          "source_pdf",
+          "source_url"
+        ],
+        "title": "StandardDocumentDetail"
+      },
+      "StandardDocumentRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Year"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "family": {
+            "type": "string",
+            "title": "Family"
+          },
+          "package_file": {
+            "type": "string",
+            "title": "Package File"
+          },
+          "reader": {
+            "type": "string",
+            "title": "Reader"
+          },
+          "reader_version": {
+            "type": "string",
+            "title": "Reader Version"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "covered_keys": {
+            "type": "integer",
+            "title": "Covered Keys"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "各条目类型已接入数"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "standard_no",
+          "standard_year",
+          "title",
+          "family",
+          "package_file",
+          "reader",
+          "reader_version",
+          "total_records",
+          "covered_keys",
+          "counts",
+          "imported_at"
+        ],
+        "title": "StandardDocumentRow"
+      },
+      "StandardEntryDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "entry_type": {
+            "type": "string",
+            "enum": [
+              "data_element",
+              "value_domain",
+              "code_row"
+            ],
+            "title": "Entry Type"
+          },
+          "source_key": {
+            "type": "string",
+            "title": "Source Key"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "data_element": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DataElementBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "value_domain": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ValueDomainBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "code_row": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CodeRowBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "parent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StandardEntryRow"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "codes": {
+            "items": {
+              "$ref": "#/components/schemas/StandardCodeRow"
+            },
+            "type": "array",
+            "title": "Codes",
+            "description": "值域表的代码行，按原顺序",
+            "default": []
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/ReferenceOut"
+            },
+            "type": "array",
+            "title": "References",
+            "default": []
+          },
+          "referenced_by": {
+            "items": {
+              "$ref": "#/components/schemas/IncomingReference"
+            },
+            "type": "array",
+            "title": "Referenced By",
+            "default": []
+          },
+          "provenance": {
+            "$ref": "#/components/schemas/Provenance"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw"
+          },
+          "imported_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Imported At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "entry_type",
+          "source_key",
+          "identifier",
+          "name",
+          "seq",
+          "document",
+          "provenance",
+          "raw",
+          "imported_at"
+        ],
+        "title": "StandardEntryDetail"
+      },
+      "StandardEntryRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "entry_type": {
+            "type": "string",
+            "enum": [
+              "data_element",
+              "value_domain",
+              "code_row"
+            ],
+            "title": "Entry Type"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identifier"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "entry_type",
+          "identifier",
+          "name",
+          "document"
+        ],
+        "title": "StandardEntryRow"
+      },
       "SuccessorUnit": {
         "properties": {
           "code": {
@@ -13450,6 +15013,55 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "ValueDomainBody": {
+        "properties": {
+          "identifier": {
+            "type": "string",
+            "title": "Identifier",
+            "description": "值域代码，如 CV02.01.101"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "definition": {
+            "type": "string",
+            "title": "Definition"
+          },
+          "structure": {
+            "type": "string",
+            "title": "Structure"
+          },
+          "definition_raw": {
+            "type": "string",
+            "title": "Definition Raw",
+            "description": "定义与编码结构原文段落"
+          },
+          "column_headers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Headers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "identifier",
+          "name",
+          "definition",
+          "structure",
+          "definition_raw"
+        ],
+        "title": "ValueDomainBody"
       }
     }
   }

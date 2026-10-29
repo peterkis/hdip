@@ -1,6 +1,7 @@
 // 侧栏导航配置：按业务主题域分组。新增主题域 = 在 NAV_GROUPS 里加一组，不改外壳代码。
 // planned = 规划中（不在当前 MVP 范围，设计文档第 1 节），进入统一的“规划中”页面。
 import {
+  Book02Icon,
   Briefcase01Icon,
   Building03Icon,
   DashboardSquare02Icon,
@@ -75,8 +76,10 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: '分类方案', icon: Tag01Icon, to: '/dictionary/classification' },
       { label: '编码映射台账', icon: Link04Icon, to: '/standards/code-mapping' },
+      // 标准资料库（docs/标准资料库-F0F1开发计划.md）：外部标准原文的只读参考
+      { label: '标准资料', icon: Book02Icon, to: '/standards/library', permission: 'standard.view' },
+      { label: '数据元', icon: Blocks, to: '/standards/data-elements', permission: 'standard.view' },
       { label: '标准数据集', icon: Database01Icon, planned: 'standard-datasets' },
-      { label: '数据元', icon: Blocks, planned: 'data-elements' },
       { label: '数据目录', icon: FolderLibraryIcon, planned: 'data-catalog' },
     ],
   },
