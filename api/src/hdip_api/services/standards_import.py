@@ -158,7 +158,8 @@ def _source_pdf(name: str | None, url: str | None, members: set[str]) -> list[Ev
     return out
 
 
-def _body(model: type[BaseModel], data: dict, where: str) -> BaseModel:
+def _model[M: BaseModel](model: type[M], data: dict, where: str) -> M:
+    """正文、出处的模型校验；不通过时报出成员、位置与字段。"""
     try:
         return model.model_validate(data)
     except ValidationError as e:
@@ -167,10 +168,64 @@ def _body(model: type[BaseModel], data: dict, where: str) -> BaseModel:
         raise ImportFailure(f"{where}：字段 {loc} 不符合要求（{first['msg']}）") from None
 
 
-def _need(rec: dict, key: str, where: str, *, allow_empty: bool = False) -> Any:
-    if key not in rec or rec[key] is None or (not allow_empty and rec[key] == ""):
-        raise ImportFailure(f"{where}：缺少 {key}")
-    return rec[key]
+_KIND = {str: "文本", int: "整数", type(None): "空值", dict: "对象", list: "数组"}
+
+
+class _Src:
+    """一条源记录：按字段取值并检查形状。
+
+    形状不对时报“成员#[位置]：字段 路径 应为…（原值 …）”，不跳过、不补默认值；
+    缺字段与 null 照旧按“未提供”处理（资料本身允许缺项）。
+    """
+
+    def __init__(self, rec: Any, where: str, path: str = "") -> None:
+        if not isinstance(rec, dict):
+            what = f"字段 {path.rstrip('.')}" if path else "记录"
+            raise ImportFailure(f"{where}：{what} 应为对象（原值 {rec!r:.60}）")
+        self.rec, self.where, self.path = rec, where, path
+
+    def fail(self, key: str, want: str, value: Any) -> ImportFailure:
+        return ImportFailure(
+            f"{self.where}：字段 {self.path}{key} 应为{want}（原值 {value!r:.60}）"
+        )
+
+    def need(self, key: str) -> str:
+        """必填文本：缺字段、null、空串都算缺少。"""
+        v = self.str(key)
+        if not v:
+            raise ImportFailure(f"{self.where}：缺少 {self.path}{key}")
+        return v
+
+    def str(self, key: str) -> str | None:
+        v = self.rec.get(key)
+        if v is not None and not isinstance(v, str):
+            raise self.fail(key, "文本", v)
+        return v
+
+    def int(self, key: str) -> int | None:
+        v = self.rec.get(key)
+        if v is not None and (not isinstance(v, int) or isinstance(v, bool)):
+            raise self.fail(key, "整数", v)
+        return v
+
+    def list(self, key: str, *items: type) -> list:
+        """数组；给了 items 时逐项检查类型。缺字段或 null 视为空数组。"""
+        v = self.rec.get(key)
+        if v is None:
+            return []
+        if not isinstance(v, list):
+            raise self.fail(key, "数组", v)
+        if items:
+            for n, x in enumerate(v):
+                if not isinstance(x, items) or isinstance(x, bool):
+                    want = "或".join(_KIND[t] for t in items)
+                    raise self.fail(f"{key}[{n}]", want, x)
+        return v
+
+    def obj(self, key: str) -> "_Src":
+        """嵌套对象；缺字段或 null 视为空对象。"""
+        v = self.rec.get(key)
+        return _Src({} if v is None else v, self.where, f"{self.path}{key}.")
 
 
 # ---------------------------------------------------------------- 资料族：WS/T 363 + 364
@@ -216,63 +271,82 @@ class Ws363364Reader:
                 d.members.append(member)
             return d
 
-        for i, rec in enumerate(self._load(self.DE_MEMBER)):
-            where = f"{self.DE_MEMBER}#[{i}]"
-            d = doc(_need(rec, "standard", where), self.DE_MEMBER)
-            d.records.append(self._data_element(rec, i, where, len(d.records)))
-            d.source_version = d.source_version or rec.get("source_version")
-            d.source_sha256 = d.source_sha256 or rec.get("source_sha256")
-            d.source_pdf = d.source_pdf or rec.get("source_pdf")
-            d.source_url = d.source_url or rec.get("source_url")
+        for i, raw in enumerate(self._load(self.DE_MEMBER)):
+            src = _Src(raw, f"{self.DE_MEMBER}#[{i}]")
+            d = doc(src.need("standard"), self.DE_MEMBER)
+            d.records.append(self._data_element(src, i, len(d.records)))
+            d.source_version = d.source_version or src.str("source_version")
+            d.source_sha256 = d.source_sha256 or src.str("source_sha256")
+            d.source_pdf = d.source_pdf or src.str("source_pdf")
+            d.source_url = d.source_url or src.str("source_url")
 
         table_key: dict[tuple[str, str], str] = {}
-        for i, rec in enumerate(self._load(self.CV_TABLES)):
-            where = f"{self.CV_TABLES}#[{i}]"
-            label = _need(rec, "standard_part", where)
+        for i, raw in enumerate(self._load(self.CV_TABLES)):
+            src = _Src(raw, f"{self.CV_TABLES}#[{i}]")
+            label = src.need("standard_part")
             d = doc(label, self.CV_TABLES)
-            r = self._value_domain(rec, i, where, len(d.records))
+            r = self._value_domain(src, i, len(d.records))
             table_key[(label, r.identifier or "")] = r.source_key
             d.records.append(r)
-            d.source_sha256 = d.source_sha256 or rec.get("source_sha256")
-            d.source_url = d.source_url or rec.get("source_url")
+            d.source_sha256 = d.source_sha256 or src.str("source_sha256")
+            d.source_url = d.source_url or src.str("source_url")
 
-        for i, rec in enumerate(self._load(self.CV_ROWS)):
-            where = f"{self.CV_ROWS}#[{i}]"
-            label = _need(rec, "standard_part", where)
-            cv = _need(rec, "cv_id", where)
+        for i, raw in enumerate(self._load(self.CV_ROWS)):
+            src = _Src(raw, f"{self.CV_ROWS}#[{i}]")
+            label = src.need("standard_part")
+            cv = src.need("cv_id")
             parent = table_key.get((label, cv))
             if parent is None:
                 raise ImportFailure(
-                    f"{where}：代码行所属的值域表 {label} {cv} 不在 {self.CV_TABLES}"
+                    f"{src.where}：代码行所属的值域表 {label} {cv} 不在 {self.CV_TABLES}"
                 )
             d = doc(label, self.CV_ROWS)
-            d.records.append(self._code_row(rec, i, where, len(d.records), parent))
-            d.source_pdf = d.source_pdf or rec.get("source_path")
+            d.records.append(self._code_row(src, i, len(d.records), parent))
+            d.source_pdf = d.source_pdf or src.str("source_path")
 
         yield from docs.values()
 
-    def _data_element(self, rec: dict, i: int, where: str, seq: int) -> Record:
-        cells = _need(rec, "raw_cells", where)
-        ident = _need(cells, "数据元标识符", where)
-        allowed = cells.get("数据元允许值") or ""
+    def _data_element(self, src: _Src, i: int, seq: int) -> Record:
+        cells = src.obj("raw_cells")
+        ident = cells.need("数据元标识符")
+        allowed = cells.str("数据元允许值") or ""
         nature, ref = parse_allowed_values("数据元允许值", allowed)
-        body = _body(
+        body = _model(
             DataElementBody,
             {
                 "identifier": ident,
-                "name": _need(cells, "数据元名称", where),
-                "definition": cells.get("定义") or "",
-                "data_type": cells.get("数据元值的数据类型") or "",
-                "format": cells.get("表示格式") or "",
+                "name": cells.need("数据元名称"),
+                "definition": cells.str("定义") or "",
+                "data_type": cells.str("数据元值的数据类型") or "",
+                "format": cells.str("表示格式") or "",
                 "allowed_values": allowed,
                 "allowed_value_nature": nature,
-                "version": rec.get("data_element_version"),
-                "section": rec.get("source_section"),
+                "version": src.str("data_element_version"),
+                "section": src.str("source_section"),
             },
-            where,
+            src.where,
         )
-        qa = rec.get("qa_evidence") or {}
-        images = list(qa.get("image_paths") or qa.get("pages") or [])
+        qa = src.obj("qa_evidence")
+        images = qa.list("image_paths", str) or qa.list("pages", str)
+        source_pdf, source_url = src.str("source_pdf"), src.str("source_url")
+        provenance = _model(
+            Provenance,
+            {
+                "member": self.DE_MEMBER,
+                "json_pointer": f"[{i}]",
+                "pdf_pages": src.list("source_pdf_pages", int),
+                "printed_pages": [str(p) for p in src.list("source_printed_pages", str, int)],
+                "source_pdf": source_pdf,
+                "source_url": source_url,
+                "source_sha256": src.str("source_sha256"),
+                "qa_status": src.str("qa_status"),
+                "import_gate": src.str("automatic_import_gate"),
+                "source_issues": [str(x) for x in src.list("source_issues")],
+                "evidence": _evidence_images(images, self.members)
+                + _source_pdf(source_pdf, source_url, self.members),
+            },
+            src.where,
+        )
         return Record(
             entry_type="data_element",
             source_key=f"{self.DE_MEMBER}#[{i}]",
@@ -280,40 +354,48 @@ class Ws363364Reader:
             name=body.name,
             seq=seq,
             body=body,
-            raw=rec,
-            provenance=Provenance(
-                member=self.DE_MEMBER,
-                json_pointer=f"[{i}]",
-                pdf_pages=rec.get("source_pdf_pages") or [],
-                printed_pages=[str(p) for p in rec.get("source_printed_pages") or []],
-                source_pdf=rec.get("source_pdf"),
-                source_url=rec.get("source_url"),
-                source_sha256=rec.get("source_sha256"),
-                qa_status=rec.get("qa_status"),
-                import_gate=rec.get("automatic_import_gate"),
-                source_issues=[str(x) for x in rec.get("source_issues") or []],
-                evidence=_evidence_images(images, self.members)
-                + _source_pdf(rec.get("source_pdf"), rec.get("source_url"), self.members),
-            ),
+            raw=src.rec,
+            provenance=provenance,
             refs=[ref] if ref else [],
         )
 
-    def _value_domain(self, rec: dict, i: int, where: str, seq: int) -> Record:
-        cv = _need(rec, "cv_id", where)
-        body = _body(
+    def _value_domain(self, src: _Src, i: int, seq: int) -> Record:
+        cv = src.need("cv_id")
+        body = _model(
             ValueDomainBody,
             {
                 "identifier": cv,
-                "name": _need(rec, "table_name", where),
-                "definition": rec.get("definition") or "",
-                "structure": rec.get("structure") or "",
-                "definition_raw": rec.get("definition_and_structure_raw") or "",
-                "column_headers": rec.get("source_column_headers"),
+                "name": src.need("table_name"),
+                "definition": src.str("definition") or "",
+                "structure": src.str("structure") or "",
+                "definition_raw": src.str("definition_and_structure_raw") or "",
+                "column_headers": src.list("source_column_headers", str)
+                if src.rec.get("source_column_headers") is not None
+                else None,
             },
-            where,
+            src.where,
         )
-        page = rec.get("source_physical_page")
-        printed = rec.get("source_printed_page")
+        page = src.int("source_physical_page")
+        printed = src.rec.get("source_printed_page")
+        if printed is not None and not isinstance(printed, str | int):
+            raise src.fail("source_printed_page", "文本或整数", printed)
+        source_url, qa_note = src.str("source_url"), src.str("qa_note")
+        provenance = _model(
+            Provenance,
+            {
+                "member": self.CV_TABLES,
+                "json_pointer": f"[{i}]",
+                "record_id": src.str("table_id"),
+                "pdf_pages": [page] if page is not None else [],
+                "printed_pages": [str(printed)] if printed else [],
+                "source_url": source_url,
+                "source_sha256": src.str("source_sha256"),
+                "qa_status": src.str("qa_status"),
+                "source_issues": [qa_note] if qa_note else [],
+                "evidence": _source_pdf(None, source_url, self.members),
+            },
+            src.where,
+        )
         return Record(
             entry_type="value_domain",
             source_key=f"{self.CV_TABLES}#[{i}]",
@@ -321,39 +403,52 @@ class Ws363364Reader:
             name=body.name,
             seq=seq,
             body=body,
-            raw=rec,
-            provenance=Provenance(
-                member=self.CV_TABLES,
-                json_pointer=f"[{i}]",
-                record_id=rec.get("table_id"),
-                pdf_pages=[page] if isinstance(page, int) else [],
-                printed_pages=[str(printed)] if printed else [],
-                source_url=rec.get("source_url"),
-                source_sha256=rec.get("source_sha256"),
-                qa_status=rec.get("qa_status"),
-                source_issues=[rec["qa_note"]] if rec.get("qa_note") else [],
-                evidence=_source_pdf(None, rec.get("source_url"), self.members),
-            ),
+            raw=src.rec,
+            provenance=provenance,
         )
 
-    def _code_row(self, rec: dict, i: int, where: str, seq: int, parent_key: str) -> Record:
-        row_id = _need(rec, "row_id", where)
-        code = _need(rec, "code", where)
-        if not isinstance(code, str):
-            raise ImportFailure(f"{where}：码值应为字符串（原值 {code!r}），不能按数字读取")
-        body = _body(
+    def _code_row(self, src: _Src, i: int, seq: int, parent_key: str) -> Record:
+        row_id = src.need("row_id")
+        code = src.rec.get("code")
+        if code is not None and not isinstance(code, str):
+            raise ImportFailure(f"{src.where}：码值应为字符串（原值 {code!r}），不能按数字读取")
+        code = src.need("code")
+        body = _model(
             CodeRowBody,
             {
                 "code": code,
-                "name": rec.get("name") or "",
-                "description": rec.get("description") or "",
-                "hierarchy_level": rec.get("hierarchy_level"),
-                "parent_code": rec.get("parent_code") or None,
-                "raw_cells": [str(c) for c in rec.get("raw_cells") or []],
+                "name": src.str("name") or "",
+                "description": src.str("description") or "",
+                "hierarchy_level": src.int("hierarchy_level"),
+                "parent_code": src.str("parent_code") or None,
+                "raw_cells": [str(c) for c in src.list("raw_cells")],
             },
-            where,
+            src.where,
         )
-        frag, row = rec.get("source_fragment"), rec.get("source_row")
+        frag, row = src.int("source_fragment"), src.int("source_row")
+        source_pdf, source_url = src.str("source_path"), src.str("source_url")
+        image, qa_note = src.str("source_image"), src.str("qa_note")
+        provenance = _model(
+            Provenance,
+            {
+                "member": self.CV_ROWS,
+                "json_pointer": f"[{i}]",
+                "record_id": row_id,
+                "pdf_pages": src.list("source_physical_pages", int),
+                "printed_pages": [str(p) for p in src.list("source_printed_pages", str, int)],
+                "table_ref": f"片段 {frag} 第 {row} 行"
+                if frag is not None and row is not None
+                else None,
+                "source_pdf": source_pdf,
+                "source_url": source_url,
+                "source_sha256": src.str("source_sha256"),
+                "qa_status": src.str("qa_status"),
+                "source_issues": [qa_note] if qa_note else [],
+                "evidence": _evidence_images([image] if image else [], self.members)
+                + _source_pdf(source_pdf, source_url, self.members),
+            },
+            src.where,
+        )
         return Record(
             entry_type="code_row",
             source_key=row_id,
@@ -361,27 +456,9 @@ class Ws363364Reader:
             name=body.name,
             seq=seq,
             body=body,
-            raw=rec,
+            raw=src.rec,
             parent_key=parent_key,
-            provenance=Provenance(
-                member=self.CV_ROWS,
-                json_pointer=f"[{i}]",
-                record_id=row_id,
-                pdf_pages=rec.get("source_physical_pages") or [],
-                printed_pages=[str(p) for p in rec.get("source_printed_pages") or []],
-                table_ref=f"片段 {frag} 第 {row} 行"
-                if frag is not None and row is not None
-                else None,
-                source_pdf=rec.get("source_path"),
-                source_url=rec.get("source_url"),
-                source_sha256=rec.get("source_sha256"),
-                qa_status=rec.get("qa_status"),
-                source_issues=[rec["qa_note"]] if rec.get("qa_note") else [],
-                evidence=_evidence_images(
-                    [rec["source_image"]] if rec.get("source_image") else [], self.members
-                )
-                + _source_pdf(rec.get("source_path"), rec.get("source_url"), self.members),
-            ),
+            provenance=provenance,
         )
 
 

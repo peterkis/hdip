@@ -167,6 +167,54 @@ def test_std05_failure_keeps_existing(api, owner_engine, tmp_path):
         c.execute(text("UPDATE standard_entry SET name = 'x'"))
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("source_pdf_pages", ["bad"], r"#\[0\]：字段 source_pdf_pages\[0\] 应为整数"),
+        ("qa_evidence", "bad", r"#\[0\]：字段 qa_evidence 应为对象"),
+        (
+            "qa_evidence",
+            {"image_paths": [3]},
+            r"#\[0\]：字段 qa_evidence\.image_paths\[0\] 应为文本",
+        ),
+    ],
+)
+def test_std05_malformed_source_located(api, owner_engine, tmp_path, field, value, message):
+    """出处与嵌套结构的形状错误也报出成员、位置与字段；整体回滚，已有内容照常可读。"""
+    run_import(owner_engine, build_zip(tmp_path), F1)
+    des, tables, rows = default_records()
+    des[0][field] = value
+    bad = build_zip(tmp_path, des, tables, rows, name="malformed.zip")
+    with pytest.raises(
+        ImportFailure, match=r"enhanced-current-official-data-elements\.json" + message
+    ):
+        run_import(owner_engine, bad)
+    with owner_engine.connect() as c:
+        assert c.execute(text("SELECT count(*) FROM source_package")).scalar() == 1
+        assert c.execute(text("SELECT count(*) FROM standard_entry")).scalar() == 15
+    assert len(_find(api, "身份证件类别代码")) == 2
+
+
+def test_std05_document_guard(api, owner_engine, tmp_path):
+    """文档修订只有接入覆盖与导入时间可更新（迁移 0024）；扩大范围仍能更新覆盖。"""
+    zp = build_zip(tmp_path)
+    run_import(owner_engine, zp, F1)
+    for col, val in (
+        ("source_version", "x"),
+        ("source_url", "https://example.org"),
+        ("title", "x"),
+    ):
+        with owner_engine.begin() as c, pytest.raises(DBAPIError, match="历史记录不可修改"):
+            c.execute(text(f"UPDATE source_document SET {col} = :v"), {"v": val})
+    run_import(owner_engine, zp)
+    with owner_engine.connect() as c:
+        covered = c.execute(
+            text("SELECT standard_no, covered_keys FROM source_document ORDER BY standard_no")
+        ).all()
+        assert covered == [("WS/T 363.3", 4), ("WS/T 364.3", 16)]
+        assert c.execute(text("SELECT count(*) FROM source_document")).scalar() == 2
+
+
 def test_std06_missing_evidence_not_faked(api, owner_engine, tmp_path):
     """资料里记了图证路径但未随包提供：如实标出，不当作可预览；官方原文只是外部链接。"""
     run_import(owner_engine, build_zip(tmp_path), F1)
