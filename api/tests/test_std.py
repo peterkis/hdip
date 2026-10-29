@@ -13,11 +13,13 @@ from hdip_api.services.standards_import import ImportFailure
 F1 = {"DE02.01.031.00", "CV02.01.101"}
 
 
-def _find(api, q, entry_type=None):
-    params = {"q": q} | ({"entry_type": entry_type} if entry_type else {})
+def _find(api, q, entry_type=None, **params):
+    params |= {"q": q} | ({"entry_type": entry_type} if entry_type else {})
     r = api.get("/api/standards/entries", params=params)
     assert r.status_code == 200, r.text
-    return r.json()
+    page = r.json()
+    assert page["total"] >= len(page["items"])
+    return page["items"]
 
 
 def test_std01_reading_path(api, owner_engine, tmp_path):

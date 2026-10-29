@@ -462,9 +462,9 @@ erDiagram
 - 权限（`core/permissions.py`）：`person.view`、`person.view_sensitive`、`person.export`、`person.change`。没有 `person.view` 时人员接口 403，含人员变更项的申请整张隐藏（按号打开为 404）。敏感字段登记在 `PERSON_FIELD_PERMISSIONS`（目前为空：工号不是敏感字段；身份证号、电话将来加入时登记），读接口、导出统一置空并列入 `masked_fields`；申请详情（`GET /api/change-requests/{id}` 及各动作的返回、提交 / 确认被拒的问题）与人员详情的结束日调整记录由 `services/masking.py` 隐去：敏感键置空，文字里的敏感值（本申请所带，及人员各表同名列的取值）替换为“（已隐去）”；`ChangeRequestOut.masked_fields` 列出隐去的字段；申请列表的说明同一规则（`queries.list_changes`）。草稿含当前用户看不到的值时拒绝其编辑（`workflow.update_draft`）。
 - 拼音码：人名首字按姓氏读音（前端 `lib/pinyin.ts` 的 `person` 模式，单 S、曾 Z、区 O），组织名称的固定读音（区 → Q）不适用；后端 pypinyin 没有姓氏模式，只在变更项未给出时兜底。
 
-## 9. 标准资料库（F0 / F1 已实施，迁移 0023、0024）
+## 9. 标准资料库（F0 / F1、F2 第一批已实施，迁移 0023、0024）
 
-依据：`docs/标准资料库-建设计划.md`（建设计划 v3.0）与 `docs/标准资料库-F0F1开发计划.md`；资料基线见 `docs/标准资料库-资料基线.md`。
+依据：`docs/标准资料库-建设计划.md`（建设计划 v3.0）、`docs/标准资料库-F0F1开发计划.md` 与 `docs/标准资料库-F2开发计划.md`；资料基线见 `docs/标准资料库-资料基线.md`。F2 第一批没有迁移：处理修订与引用解析的新规则都在读取时计算。
 
 标准资料是外部原文的只读参考，**不是院内主数据**：不经变更申请、没有 API 写入口，不改分类方案、编码映射台账等业务配置，也不表示医院已采用。写入只经 `api/scripts/import_standards.py`（迁移账号），应用账号只读。
 
@@ -475,10 +475,23 @@ erDiagram
 | `standard_entry` | 一条来源条目 | `entry_type` 由代码固定（F1：`data_element` 数据元、`value_domain` 值域表、`code_row` 代码）；`source_key` 优先原 `row_id`，缺少时用“成员路径#[位置]”；`identifier`（DE / CV / 码值）只用于检索，不是跨版本主键，同一码值在不同表或年份各有条目、不按码值去重；`body` 按类型固定结构（`schemas/standards.py`），`raw` 为原记录，`provenance` 为出处（成员、位置、PDF 物理页、印刷页、表内位置、资料复核状态原值、图证与可用性）；`search_text` 是检索派生值。代码行的 `parent_id` 指向值域表 |
 | `standard_reference` | 条目原文里的一处引用 | 只记原文写明的：`target_standard`、`target_year`（原文未写为空）、`target_identifier`、`target_label`、`raw_text`；`ref_kind`：`value_domain` / `external_standard` |
 
-- **引用在读取时解析**（`services/standards.py` 的 `resolve`），不写回：原文写明年份且本库恰有一份 → 原文指定；原文写明的年份本库没有 → 未解析，其他年份另列为“仅供阅读，不等价”；原文未写年份且本库只有一份 → 按目录定位（不表示原文指定了该年份）；多份 → 多个候选。新导入资料后解析结果随之变化，但不会把写明 2011 的引用改指 2023。
+- **处理修订**：`reader_version` 是本系统的处理修订，不是标准版本。在“包 + 资料族 + 读取器 + 标准号 + 原文年份”范围内，读取器版本（按十进制整数比较）最高的一份是当前处理修订，查询时计算，不存字段。列表与检索默认只给当前处理修订（`include_superseded=true` 才含历史），历史处理修订按 id 仍可打开。
+- **引用在读取时解析**（`services/standards.py` 的 `resolve`），不写回，并且只在来源条目自己的处理修订范围里找：同一包、资料族、读取器、读取器版本。所以 v1 与 v2 不互相成为候选，本范围没有目标就是未解析，不回退到其他修订。
+  - 先按原文标准号（含分册）和值域编号精确找。
+    - 原文写明年份：本库恰有一份 → 原文指定；本库没有该年份 → 未解析，其他年份另列为“仅供阅读，不等价”。
+    - 原文未写年份：只有一份 → 按目录定位（不表示原文指定了该年份）；多份 → 多个候选。
+  - 精确为 0 时，只对 WS/T 363.x—2023 数据元里写作“WS 364.x”的引用，回退到同一修订、同分册、同编号的“WS/T 364.x”（`match_basis = prefix_variant`，仍是按目录定位）。名称明显不一致不回退；有多个候选时不选。
+  - 仍找不到时只给阅读提示（`related`）：其他分册的同编号表、其他处理修订的同标识条目。阅读提示不是解析结果。
+  - 每个目标附 `label_check`（一致 / 只差“代码”“表” / 不一致），只作核对提示，不改变解析结果。
+  - 新导入资料后，解析结果随之变化；但写明 2011 的引用不会改指 2023。
+- **值域编号**（读取器 v2）：只认完整的 `CVdd.dd.ddd`，内部排版空白归一后用于阅读定位，原文在 `raw_text`。编号不完整时 `target_identifier` 为空，不补全。
 - **允许值的原性质**：空 / 引用（开头明确写出 WS、WS/T、GB、GB/T 标准号）/ 原文说明（如“1.城市2.农村”），原文始终保留；只有明确写出的引用才建 `standard_reference`。
 - **证据可用性**：资料记了图证或 PDF 路径时按包成员核对，包里没有就标“未随包提供”；官方 URL 标“外部链接 · 未核实可访问”。F1 不提供包内文件的打开。
 - **导入**：直接读 ZIP 成员，不解压、不执行包内程序；整次导入一个事务，任何一条读不通报“成员#[位置]：问题”并整体回滚。逐条读取时检查所用字段的形状（`services/standards_import.py` 的 `_Src`：文本、整数、数组及逐项类型、嵌套对象），正文与出处再经模型校验，错误都带“字段 路径”；缺字段与 null 按未提供处理；重复导入不增条目；码值不是字符串时拒绝（不按数字读）。
-- 权限键 `standard.view`（三个角色都有）。读取接口：`GET /api/standards/documents`、`/documents/{id}`、`/entries?q=&entry_type=&document_id=`、`/entries/{id}`。
-- 测试：`api/tests/test_std.py`（STD-01～06），用 `tests/std_helpers.py` 生成与主题 01 包同结构的小资料包，不依赖真实资料。
+- 权限键 `standard.view`（三个角色都有）。读取接口：
+  - `GET /api/standards/documents?include_superseded=`
+  - `/documents/{id}`（含 `revisions`）
+  - `/entries?q=&entry_type=&top_level=&document_id=&series=&standard_no=&standard_year=&include_superseded=&offset=&limit=`：先筛选再计数分页，返回 `{items, total}`，排序稳定
+  - `/entries/{id}`
+- 测试：`api/tests/test_std.py`（STD-01～06）与 `test_std_f2.py`（读取器 v2、处理修订、引用解析规则、筛选与分页）。两者都用 `tests/std_helpers.py` 生成与主题 01 包同结构的小资料包，不依赖真实资料。
 

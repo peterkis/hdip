@@ -5,10 +5,13 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocumentRef } from './documentRef';
+import type { ReferenceTargetLabelCheck } from './referenceTargetLabelCheck';
 
 export interface ReferenceTarget {
   entry_id: number;
   identifier: string | null;
   name: string | null;
   document: DocumentRef;
+  /** 来源引用名称与本表名称的比较；来源没写名称时为空 */
+  label_check?: ReferenceTargetLabelCheck;
 }

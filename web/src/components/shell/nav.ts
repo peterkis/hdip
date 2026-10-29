@@ -12,6 +12,7 @@ import {
   Hospital01Icon,
   IdentityCardIcon,
   Link04Icon,
+  ListViewIcon,
   Location01Icon,
   Tag01Icon,
   UserGroupIcon,
@@ -79,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
       // 标准资料库（docs/标准资料库-F0F1开发计划.md）：外部标准原文的只读参考
       { label: '标准资料', icon: Book02Icon, to: '/standards/library', permission: 'standard.view' },
       { label: '数据元', icon: Blocks, to: '/standards/data-elements', permission: 'standard.view' },
+      { label: '值域与代码', icon: ListViewIcon, to: '/standards/value-domains', permission: 'standard.view' },
       { label: '标准数据集', icon: Database01Icon, planned: 'standard-datasets' },
       { label: '数据目录', icon: FolderLibraryIcon, planned: 'data-catalog' },
     ],

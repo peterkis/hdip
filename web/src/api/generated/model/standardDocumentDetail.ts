@@ -4,12 +4,15 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DocumentRef } from './documentRef';
 import type { PackageOut } from './packageOut';
 import type { StandardDocumentDetailCounts } from './standardDocumentDetailCounts';
 import type { StandardDocumentDetailMembersItem } from './standardDocumentDetailMembersItem';
 
 export interface StandardDocumentDetail {
   id: number;
+  /** 标准系列，如 WS/T 363（标准号去掉分册） */
+  series: string;
   standard_no: string;
   standard_year: string | null;
   title: string | null;
@@ -22,10 +25,15 @@ export interface StandardDocumentDetail {
   /** 各条目类型已接入数 */
   counts: StandardDocumentDetailCounts;
   imported_at: string;
+  is_current: boolean;
+  /** 历史处理修订时：同一来源文档的当前处理修订（不是新版标准） */
+  newer_revision?: DocumentRef | null;
   package: PackageOut;
   members: StandardDocumentDetailMembersItem[];
   source_version: string | null;
   source_sha256: string | null;
   source_pdf: string | null;
   source_url: string | null;
+  /** 同一来源文档的全部处理修订（含本份），按读取器版本从低到高 */
+  revisions: DocumentRef[];
 }

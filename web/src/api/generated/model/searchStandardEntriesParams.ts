@@ -12,10 +12,37 @@ export type SearchStandardEntriesParams = {
  */
 q?: string | null;
 entry_type?: SearchStandardEntriesEntryType;
+/**
+ * 只要顶层条目（数据元、值域表），不含代码行
+ */
+top_level?: boolean;
+/**
+ * 只看这一份文档修订（历史修订也可）
+ */
 document_id?: number | null;
 /**
+ * 标准系列，如 WS/T 363
+ */
+series?: string | null;
+/**
+ * 分册，如 WS/T 363.3
+ */
+standard_no?: string | null;
+/**
+ * 原文年份
+ */
+standard_year?: string | null;
+/**
+ * 同时检索历史处理修订
+ */
+include_superseded?: boolean;
+/**
+ * @minimum 0
+ */
+offset?: number;
+/**
  * @minimum 1
- * @maximum 500
+ * @maximum 200
  */
 limit?: number;
 };

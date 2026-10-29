@@ -4,10 +4,13 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { DocumentRef } from './documentRef';
 import type { StandardDocumentRowCounts } from './standardDocumentRowCounts';
 
 export interface StandardDocumentRow {
   id: number;
+  /** 标准系列，如 WS/T 363（标准号去掉分册） */
+  series: string;
   standard_no: string;
   standard_year: string | null;
   title: string | null;
@@ -20,4 +23,7 @@ export interface StandardDocumentRow {
   /** 各条目类型已接入数 */
   counts: StandardDocumentRowCounts;
   imported_at: string;
+  is_current: boolean;
+  /** 历史处理修订时：同一来源文档的当前处理修订（不是新版标准） */
+  newer_revision?: DocumentRef | null;
 }

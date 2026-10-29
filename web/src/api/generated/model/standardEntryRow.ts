@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocumentRef } from './documentRef';
+import type { ParentRef } from './parentRef';
 import type { StandardEntryRowEntryType } from './standardEntryRowEntryType';
 
 export interface StandardEntryRow {
@@ -14,4 +15,6 @@ export interface StandardEntryRow {
   name: string | null;
   document: DocumentRef;
   parent_id?: number | null;
+  /** 代码行所属的值域表 */
+  parent?: ParentRef | null;
 }
