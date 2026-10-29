@@ -347,8 +347,15 @@ class Ws363364Reader:
             src.where,
         )
         qa = src.obj("qa_evidence")
-        images = qa.list("image_paths", str) or qa.list("pages", str)
-        images += [p for p in qa.list("source_images", str) if p not in images]
+        # 新建列表合并去重：_Src.list 返回源数组本身，原地追加会改写 raw 里的 image_paths / pages
+        images = list(
+            dict.fromkeys(
+                [
+                    *(qa.list("image_paths", str) or qa.list("pages", str)),
+                    *qa.list("source_images", str),
+                ]
+            )
+        )
         source_pdf, source_url = src.str("source_pdf"), src.str("source_url")
         provenance = _model(
             Provenance,

@@ -4,7 +4,6 @@
 // 不写成原文指定了该年份；原文写明的年份本库没有收录时显示未解析，其他年份另列、不等价。
 // 读取器版本是本系统的“处理修订”，不是标准版本：列表默认只给当前处理修订，历史处理修订按链接仍可打开。
 import { Book02Icon, Calendar03Icon, HashtagIcon, TextFontIcon } from '@hugeicons/core-free-icons'
-import { keepPreviousData } from '@tanstack/react-query'
 import { useDeferredValue, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import type {
@@ -445,7 +444,7 @@ function EntryBrowser({
       offset,
       limit: PAGE,
     },
-    { query: { placeholderData: keepPreviousData } },
+    // 不用跨查询键的占位数据：新范围读取成功前不显示上一范围的行与总数（R1）
   )
   const status = readStatus(list)
   const page = status === 'ready' ? list.data : undefined
@@ -622,6 +621,7 @@ export function StandardEntryDetailPage() {
           </Section>
         )}
         <ProvenanceSection data={data} />
+        <IndexEvidence raw={data.raw} />
         <Section title="原记录">
           <details className="border-line-subtle rounded-md border">
             <summary className="text-fg-secondary cursor-pointer px-3 py-2 text-xs">
@@ -741,7 +741,7 @@ function CodesSection({ data }: { data: StandardEntryDetail }) {
 const RESOLUTION: Record<ReferenceOut['resolution'], { label: string; tone: Tone }> = {
   explicit: { label: '原文指定', tone: 'green' },
   catalog: { label: '按目录定位', tone: 'blue' },
-  unresolved: { label: '本库未收录', tone: 'gray' },
+  unresolved: { label: '未解析', tone: 'gray' },
   candidates: { label: '多个候选', tone: 'orange' },
 }
 
@@ -785,13 +785,13 @@ const RELATED_TITLE: Record<'other_part' | 'other_revision' | 'prefix_variant_co
   prefix_variant_conflict: '前缀差异的同编号表（名称不一致，未定位）',
 }
 
-/** 原文引用的解析：说清楚是原文指定、目录定位还是未收录，不替原文补年份、不改指 */
+/** 原文引用的解析：说清楚是原文指定、目录定位还是未解析，不替原文补年份、不改指 */
 function ReferenceView({ r }: { r: ReferenceOut }) {
   const cited = standardLabel(r.target_standard, r.target_year) + (r.target_identifier ? ` ${r.target_identifier}` : '')
   const first = r.targets[0]
   const mismatch = r.targets.length === 1 && first.label_check === 'different'
   let note: ReactNode
-  if (r.ref_kind === 'external_standard') note = `引用外部规范 ${cited}，本库尚未收录`
+  if (r.ref_kind === 'external_standard') note = `引用外部规范 ${cited}；本期未执行跨资料族解析`
   else if (r.identifier_incomplete) note = `原文值域编号不完整（“${r.identifier_as_written ?? ''}”），不解析、不补全`
   else if (mismatch) note = '编号可定位，但来源名称与目标表名称不一致，语义尚未确认'
   else if (r.match_basis === 'prefix_variant' && r.resolution_note) note = r.resolution_note
@@ -800,7 +800,7 @@ function ReferenceView({ r }: { r: ReferenceOut }) {
   else if (r.resolution === 'candidates')
     note = r.target_year ? `原文写明 ${r.target_year} 年，本库该年份有多个候选，不自动选择` : '原文未写年份，本库存在多个候选，不自动选择'
   else if ((r.related ?? []).length > 0) note = `按原文 ${cited} 未解析到本库条目；下面的资料只供参考，不是解析结果`
-  else note = `本库尚未收录 ${cited}`
+  else note = `在本引用的查找范围内未找到 ${cited}`
   const related = r.related ?? []
   const groups = (['other_part', 'prefix_variant_conflict', 'other_revision'] as const)
     .map((k) => ({ k, items: related.filter((x) => x.kind === k) }))
@@ -865,6 +865,49 @@ const AVAILABILITY: Record<Evidence['availability'], { label: string; tone: Tone
   in_package: { label: '包内有，暂未提供打开', tone: 'blue' },
   external: { label: '外部链接 · 未核实可访问', tone: 'gray' },
   not_in_package: { label: '未随包提供', tone: 'yellow' },
+}
+
+/**
+ * 原记录补充：索引出处。直接读原记录 qa_evidence 里的索引页与路径（读取器 v2 未提取进出处），
+ * 只显示原值文字：不并入正文页码、不生成打开链接、不说文件在包内；形态不符的留在原 JSON 里
+ */
+function IndexEvidence({ raw }: { raw: Record<string, unknown> }) {
+  const qa = raw.qa_evidence
+  if (!qa || typeof qa !== 'object' || Array.isArray(qa)) return null
+  const q = qa as Record<string, unknown>
+  const strings = (v: unknown) => (Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : typeof v === 'string' ? [v] : [])
+  const ints = (v: unknown) => (Array.isArray(v) && v.every((x) => Number.isInteger(x)) ? (v as number[]) : Number.isInteger(v) ? [v as number] : [])
+  const paths = [...strings(q.index_image_paths), ...strings(q.index_image_path)]
+  const pages = [...ints(q.index_pdf_pages), ...ints(q.index_pdf_page)]
+  if (paths.length === 0 && pages.length === 0) return null
+  return (
+    <Section title="原记录补充：索引出处">
+      <PropertyList
+        items={[
+          ...(pages.length > 0 ? [{ label: '索引页（PDF 物理页）', value: pages.join('、') }] : []),
+          ...(paths.length > 0
+            ? [
+                {
+                  label: '索引页图证路径',
+                  value: (
+                    <ul className="grid gap-1">
+                      {paths.map((x, i) => (
+                        <li key={i} className="text-fg-secondary font-mono text-caption break-all">
+                          {x}
+                        </li>
+                      ))}
+                    </ul>
+                  ),
+                },
+              ]
+            : []),
+        ]}
+      />
+      <p className="text-fg-muted text-caption">
+        以下为原记录保存的索引页和路径；仅有路径记录，不代表图像文件已收录或已核验可访问。这些不是本处理修订提取的出处，正文页码见上方“出处”。
+      </p>
+    </Section>
+  )
 }
 
 function ProvenanceSection({ data }: { data: StandardEntryDetail }) {

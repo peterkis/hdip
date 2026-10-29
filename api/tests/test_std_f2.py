@@ -352,3 +352,28 @@ def test_top_level_not_crowded_out_by_code_rows(api, owner_engine, tmp_path):
     # 码值检索：结果带所属表，不合并不同表的相同码值
     hits = _page(api, q="001", entry_type="code_row")["items"]
     assert {(h["identifier"], h["parent"]["identifier"]) for h in hits} >= {("001", "CV02.01.103")}
+
+
+@pytest.mark.parametrize("first", ["image_paths", "pages"])
+def test_evidence_merge_keeps_raw_untouched(tmp_path, first):
+    """图证合并新建列表：raw 里的 image_paths / pages 不被 source_images 改写；顺序稳定、去重。"""
+    import copy
+    import zipfile
+
+    from hdip_api.services.standards_import import Ws363364Reader, _Src
+
+    rec = de("DE94.00.001.00", "图证", "1.是2.否")
+    rec["qa_evidence"] = {
+        first: ["a/p1.png", "a/p2.png"],
+        "source_images": ["b/s1.png", "a/p2.png", "b/s2.png"],
+    }
+    before = copy.deepcopy(rec)
+    with zipfile.ZipFile(build_zip(tmp_path)) as zf:
+        r = Ws363364Reader(zf)._data_element(_Src(rec, "t#[0]"), 0, 0)
+    assert r.raw == before
+    assert [e.path for e in r.provenance.evidence if e.kind == "image"] == [
+        "a/p1.png",
+        "a/p2.png",
+        "b/s1.png",
+        "b/s2.png",
+    ]
