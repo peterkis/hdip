@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0024**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0025**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)、[`source_document`](#source_document)、[`source_package`](#source_package)、[`standard_entry`](#standard_entry)、[`standard_reference`](#standard_reference)
+- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)、[`source_document`](#source_document)、[`source_package`](#source_package)、[`standard_edition`](#standard_edition)、[`standard_edition_version`](#standard_edition_version)、[`standard_entry`](#standard_entry)、[`standard_file`](#standard_file)、[`standard_reference`](#standard_reference)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -1180,6 +1180,66 @@
 
 - `source_package_guard`：`CREATE TRIGGER source_package_guard BEFORE UPDATE ON public.source_package FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
+### standard_edition
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `series` | text | 是 |  |  |
+| `standard_no` | text | 是 |  |  |
+| `standard_year` | text | 是 |  |  |
+| `registered_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_edition_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_edition_uniq`（唯一）：`UNIQUE (standard_no, standard_year)`
+- `standard_edition_no_check`（检查）：`CHECK (((standard_no ~~ (series \|\| ' %'::text)) AND (standard_no ~ ' [0-9]+(\.[0-9]+)*$'::text)))`
+- `standard_edition_series_check`（检查）：`CHECK ((series = ANY (ARRAY['GB'::text, 'GB/T'::text, 'WS'::text, 'WS/T'::text])))`
+- `standard_edition_year_check`（检查）：`CHECK ((standard_year ~ '^[0-9]{4}$'::text))`
+
+触发器：
+
+- `standard_edition_guard`：`CREATE TRIGGER standard_edition_guard BEFORE UPDATE ON public.standard_edition FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### standard_edition_version
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `edition_id` | bigint | 是 |  | → `standard_edition` |
+| `seq` | integer | 是 |  |  |
+| `title` | text | 是 |  |  |
+| `catalog_code` | text |  |  |  |
+| `catalog_category` | text |  |  |  |
+| `status` | text |  |  |  |
+| `issued_on` | date |  |  |  |
+| `effective_on` | date |  |  |  |
+| `abolished_on` | date |  |  |  |
+| `verified_on` | date |  |  |  |
+| `basis_url` | text |  |  |  |
+| `basis_note` | text |  |  |  |
+| `online_url` | text |  |  |  |
+| `difference` | text |  |  |  |
+| `file_identity` | text |  |  |  |
+| `note` | text |  |  |  |
+| `change_note` | text | 是 |  |  |
+| `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_edition_version_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_edition_version_uniq`（唯一）：`UNIQUE (edition_id, seq)`
+- `standard_edition_version_abolished_check`（检查）：`CHECK (((abolished_on IS NULL) OR (status = 'ABOLISHED'::text)))`
+- `standard_edition_version_basis_check`（检查）：`CHECK (((status IS NULL) OR ((verified_on IS NOT NULL) AND ((basis_url IS NOT NULL) OR (basis_note IS NOT NULL)))))`
+- `standard_edition_version_seq_check`（检查）：`CHECK ((seq >= 1))`
+- `standard_edition_version_status_check`（检查）：`CHECK ((status = ANY (ARRAY['CURRENT'::text, 'ABOLISHED'::text])))`
+- `standard_edition_version_title_check`（检查）：`CHECK ((btrim(title) <> ''::text))`
+
+触发器：
+
+- `standard_edition_version_guard`：`CREATE TRIGGER standard_edition_version_guard BEFORE UPDATE ON public.standard_edition_version FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ### standard_entry
 
 | 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
@@ -1214,6 +1274,42 @@
 触发器：
 
 - `standard_entry_guard`：`CREATE TRIGGER standard_entry_guard BEFORE UPDATE ON public.standard_entry FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### standard_file
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `edition_id` | bigint | 是 |  | → `standard_edition` |
+| `role` | text | 是 |  |  |
+| `source` | text | 是 |  |  |
+| `identity_check` | text | 是 |  |  |
+| `page_image` | boolean | 是 | false |  |
+| `stored_path` | text | 是 |  |  |
+| `file_name` | text | 是 |  |  |
+| `media_type` | text | 是 |  |  |
+| `bytes` | bigint | 是 |  |  |
+| `sha256` | text | 是 |  |  |
+| `note` | text |  |  |  |
+| `registered_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_file_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_file_edition_sha_uniq`（唯一）：`UNIQUE (edition_id, sha256)`
+- `standard_file_path_uniq`（唯一）：`UNIQUE (stored_path)`
+- `standard_file_bytes_check`（检查）：`CHECK ((bytes > 0))`
+- `standard_file_path_check`（检查）：`CHECK (((stored_path ~~ 'originals/%'::text) AND (stored_path !~~ '%..%'::text)))`
+- `standard_file_role_check`（检查）：`CHECK ((role = ANY (ARRAY['TEXT'::text, 'BOUND'::text, 'ERRATA'::text, 'PAGE_IMAGE'::text, 'ORIGINAL_FORMAT'::text])))`
+- `standard_file_sha_check`（检查）：`CHECK ((sha256 ~ '^[0-9a-f]{64}$'::text))`
+
+索引：
+
+- `standard_file_sha_idx`：`CREATE INDEX standard_file_sha_idx ON public.standard_file USING btree (sha256)`
+
+触发器：
+
+- `standard_file_guard`：`CREATE TRIGGER standard_file_guard BEFORE UPDATE ON public.standard_file FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
 ### standard_reference
 
@@ -1378,7 +1474,10 @@ $function$
 | `source_document` | SELECT |
 | `source_package` | SELECT |
 | `source_system` | INSERT、SELECT、UPDATE |
+| `standard_edition` | SELECT |
+| `standard_edition_version` | SELECT |
 | `standard_entry` | SELECT |
+| `standard_file` | SELECT |
 | `standard_reference` | SELECT |
 
 ## 配置表种子

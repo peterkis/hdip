@@ -7,6 +7,7 @@
 import type { CodeRowBody } from './codeRowBody';
 import type { DataElementBody } from './dataElementBody';
 import type { DocumentRef } from './documentRef';
+import type { EditionRef } from './editionRef';
 import type { IncomingReference } from './incomingReference';
 import type { Provenance } from './provenance';
 import type { ReferenceOut } from './referenceOut';
@@ -37,4 +38,8 @@ export interface StandardEntryDetail {
   provenance: Provenance;
   raw: StandardEntryDetailRaw;
   imported_at: string;
+  /** 所属标准（按所在处理修订） */
+  edition?: EditionRef | null;
+  /** 所据原文文件（摘要与所在处理修订一致）；有它才可按物理页打开出处 */
+  file_id?: number | null;
 }

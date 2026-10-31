@@ -5492,6 +5492,407 @@
           }
         }
       }
+    },
+    "/api/standards/editions": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Search Editions",
+        "description": "标准目录：一行一项标准（标准号 + 年份），先筛选再计数分页，total 是匹配总数。",
+        "operationId": "searchStandardEditions",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "名称或标准号（如 363.3、WS/T 363.3—2023）",
+              "title": "Q"
+            },
+            "description": "名称或标准号（如 363.3、WS/T 363.3—2023）"
+          },
+          {
+            "name": "series",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "GB / GB/T / WS / WS/T",
+              "title": "Series"
+            },
+            "description": "GB / GB/T / WS / WS/T"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "current",
+                    "upcoming",
+                    "abolished",
+                    "unverified"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "has_text",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "有无正文文件",
+              "title": "Has Text"
+            },
+            "description": "有无正文文件"
+          },
+          {
+            "name": "structured",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "有无结构化成果",
+              "title": "Structured"
+            },
+            "description": "有无结构化成果"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardEditionPage"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/standards/editions/{edition_id}": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Get Edition",
+        "description": "标准详情：目录信息与登记历史、原文文件、挂在本标准下的处理修订。",
+        "operationId": "getStandardEdition",
+        "parameters": [
+          {
+            "name": "edition_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Edition Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardEditionDetail"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
+    },
+    "/api/standards/files/{file_id}/content": {
+      "get": {
+        "tags": [
+          "standards"
+        ],
+        "summary": "Get File Content",
+        "description": "原文文件内容（inline）。文件不在资料目录或大小与登记不同时返回 404，不给别的文件。",
+        "operationId": "getStandardFileContent",
+        "parameters": [
+          {
+            "name": "file_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "File Id"
+            }
+          },
+          {
+            "name": "x-hdip-user",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Hdip-User"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "原文文件",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -9725,6 +10126,288 @@
         ],
         "title": "DutyRegisterRow",
         "description": "部门任职台账的一行 = 一条职务（A1）。任职部门与此人的主部门可以不同（代管）。"
+      },
+      "EditionRef": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "type": "string",
+            "title": "Standard Year"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "standard_no",
+          "standard_year",
+          "title"
+        ],
+        "title": "EditionRef"
+      },
+      "EditionRevision": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/DocumentRef"
+          },
+          "package_file": {
+            "type": "string",
+            "title": "Package File"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "covered_keys": {
+            "type": "integer",
+            "title": "Covered Keys"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "source_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Sha256"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id",
+            "description": "摘要相同的原文文件；没有为空，不按页码跳转"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document",
+          "package_file",
+          "total_records",
+          "covered_keys",
+          "counts",
+          "source_sha256",
+          "file_id"
+        ],
+        "title": "EditionRevision",
+        "description": "挂在本标准下的一份处理修订（标准号 + 年份相同）。"
+      },
+      "EditionVersionOut": {
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "title": "Seq"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "catalog_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Code"
+          },
+          "catalog_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "CURRENT",
+                  "ABOLISHED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "issued_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued On"
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective On"
+          },
+          "abolished_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abolished On"
+          },
+          "verified_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified On"
+          },
+          "basis_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Url"
+          },
+          "basis_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Note"
+          },
+          "online_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online Url"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference"
+          },
+          "file_identity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Identity"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "change_note": {
+            "type": "string",
+            "title": "Change Note"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "seq",
+          "title",
+          "catalog_code",
+          "catalog_category",
+          "status",
+          "issued_on",
+          "effective_on",
+          "abolished_on",
+          "verified_on",
+          "basis_url",
+          "basis_note",
+          "online_url",
+          "difference",
+          "file_identity",
+          "note",
+          "change_note",
+          "recorded_at"
+        ],
+        "title": "EditionVersionOut"
       },
       "EngagementEndChange": {
         "properties": {
@@ -14864,6 +15547,29 @@
             "type": "array",
             "title": "Revisions",
             "description": "同一来源文档的全部处理修订（含本份），按读取器版本从低到高"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditionRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "所属标准：标准号与年份完全相同的目录记录；目录未登记为空"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id",
+            "description": "所据原文：所属标准下摘要与 source_sha256 相同的文件；没有为空"
           }
         },
         "type": "object",
@@ -15001,6 +15707,338 @@
         ],
         "title": "StandardDocumentRow"
       },
+      "StandardEditionDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "description": "GB / GB/T / WS / WS/T"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "type": "string",
+            "title": "Standard Year"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "upcoming",
+              "abolished",
+              "unverified"
+            ],
+            "title": "Status"
+          },
+          "verified_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified On"
+          },
+          "issued_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued On"
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective On"
+          },
+          "catalog_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference",
+            "description": "官网目录与文件不一致的类别，原样"
+          },
+          "text_files": {
+            "type": "integer",
+            "title": "Text Files",
+            "description": "正文、合订、官方原格式文件数"
+          },
+          "page_images": {
+            "type": "integer",
+            "title": "Page Images"
+          },
+          "other_files": {
+            "type": "integer",
+            "title": "Other Files",
+            "description": "修改单等其他文件数"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "当前处理修订的各条目类型数（多份处理修订相加）；没有结构化成果为空"
+          },
+          "current": {
+            "$ref": "#/components/schemas/EditionVersionOut"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/EditionVersionOut"
+            },
+            "type": "array",
+            "title": "Versions",
+            "description": "目录信息的登记历史，按 seq 从早到晚"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/StandardFileOut"
+            },
+            "type": "array",
+            "title": "Files"
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/EditionRevision"
+            },
+            "type": "array",
+            "title": "Revisions",
+            "description": "全部处理修订，当前的排在前面"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "series",
+          "standard_no",
+          "standard_year",
+          "title",
+          "status",
+          "verified_on",
+          "issued_on",
+          "effective_on",
+          "catalog_category",
+          "difference",
+          "text_files",
+          "page_images",
+          "other_files",
+          "counts",
+          "current",
+          "versions",
+          "files",
+          "revisions"
+        ],
+        "title": "StandardEditionDetail"
+      },
+      "StandardEditionPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/StandardEditionRow"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "符合筛选的标准总数（不是本页条数）"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "offset",
+          "limit"
+        ],
+        "title": "StandardEditionPage"
+      },
+      "StandardEditionRow": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "series": {
+            "type": "string",
+            "title": "Series",
+            "description": "GB / GB/T / WS / WS/T"
+          },
+          "standard_no": {
+            "type": "string",
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "type": "string",
+            "title": "Standard Year"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "upcoming",
+              "abolished",
+              "unverified"
+            ],
+            "title": "Status"
+          },
+          "verified_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Verified On"
+          },
+          "issued_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued On"
+          },
+          "effective_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective On"
+          },
+          "catalog_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Category"
+          },
+          "difference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Difference",
+            "description": "官网目录与文件不一致的类别，原样"
+          },
+          "text_files": {
+            "type": "integer",
+            "title": "Text Files",
+            "description": "正文、合订、官方原格式文件数"
+          },
+          "page_images": {
+            "type": "integer",
+            "title": "Page Images"
+          },
+          "other_files": {
+            "type": "integer",
+            "title": "Other Files",
+            "description": "修改单等其他文件数"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts",
+            "description": "当前处理修订的各条目类型数（多份处理修订相加）；没有结构化成果为空"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "series",
+          "standard_no",
+          "standard_year",
+          "title",
+          "status",
+          "verified_on",
+          "issued_on",
+          "effective_on",
+          "catalog_category",
+          "difference",
+          "text_files",
+          "page_images",
+          "other_files",
+          "counts"
+        ],
+        "title": "StandardEditionRow"
+      },
       "StandardEntryDetail": {
         "properties": {
           "id": {
@@ -15137,6 +16175,29 @@
             "type": "string",
             "format": "date-time",
             "title": "Imported At"
+          },
+          "edition": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EditionRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "所属标准（按所在处理修订）"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id",
+            "description": "所据原文文件（摘要与所在处理修订一致）；有它才可按物理页打开出处"
           }
         },
         "type": "object",
@@ -15258,6 +16319,84 @@
           "document"
         ],
         "title": "StandardEntryRow"
+      },
+      "StandardFileOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "TEXT",
+              "BOUND",
+              "ERRATA",
+              "PAGE_IMAGE",
+              "ORIGINAL_FORMAT"
+            ],
+            "title": "Role"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "identity_check": {
+            "type": "string",
+            "title": "Identity Check"
+          },
+          "page_image": {
+            "type": "boolean",
+            "title": "Page Image"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "media_type": {
+            "type": "string",
+            "title": "Media Type"
+          },
+          "bytes": {
+            "type": "integer",
+            "title": "Bytes"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "source",
+          "identity_check",
+          "page_image",
+          "file_name",
+          "media_type",
+          "bytes",
+          "sha256",
+          "note",
+          "registered_at"
+        ],
+        "title": "StandardFileOut"
       },
       "SuccessorUnit": {
         "properties": {

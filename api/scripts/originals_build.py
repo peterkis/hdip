@@ -182,6 +182,8 @@ def edition(key, code, name="", stub=True):
             "官网分类": "",
             "官网详情": "",
             "在线阅读": "",
+            "核实日期": "",
+            "核实依据": "",
             "官网PDF": "",
             "差异类别": "",
             "文件内标识": "",
@@ -231,7 +233,8 @@ log = {}
 for r in csv.DictReader(open(official / "download_log.csv", encoding="utf-8-sig")):
     if r["status"] == "success":
         log[r["filename"]] = r
-std = json.load(open(official / "standards.json", encoding="utf-8"))["standards"]
+snapshot = json.load(open(official / "standards.json", encoding="utf-8"))
+std, collected = snapshot["standards"], snapshot["collectedAt"][:10]
 for s in std:
     key = parse(s["code"])
     p = official / (s.get("pdfRelativePath") or "")
@@ -276,6 +279,8 @@ for s in std:
             官网分类=s.get("category", ""),
             官网详情=s.get("detailUrl", ""),
             在线阅读=s.get("onlineUrl", ""),
+            核实日期=collected,
+            核实依据="全国标准信息公共服务平台“卫生健康委员会”分类目录快照",
         )
     elif e["标准号"] != s["code"].strip() or e["名称"] != s["name"]:
         note(e, f"官网目录重复列出：{s['code'].strip()}《{s['name']}》（{s['status']}）")
@@ -384,11 +389,10 @@ for r in records:
         continue
     src = pool.get(r["sha256"])
     if src is None:
-        if r["kind"] == "gif":
-            why = (
-                f"页图未成套（Drive 清单 {partial[r['code']]} 页，"
-                f"有链接 {linked[r['code']]} 页），未下载"
-            )
+        if r["kind"] == "gif" and not did:
+            why = f"Drive 清单没有页图链接（全套 {partial[r['code']]} 页）"
+        elif r["kind"] == "gif":
+            why = f"页图未下载（全套 {partial[r['code']]} 页，有链接 {linked[r['code']]} 页）"
         elif not did:
             why = "Drive 清单没有文件链接"
         elif (r.get("size") or 0) > 10 * 1024 * 1024:
@@ -466,6 +470,14 @@ for r in records:
         )
     elif key and not editions[key]["名称"]:
         editions[key]["名称"] = r.get("title", "")
+
+pages = Counter(r["目录"].removesuffix("/原页图") for r in files.values() if r["角色"] == "原页图")
+for r in records:  # page images: say how much of the set is here
+    key = parse(r["code"], r.get("year")) if r["kind"] == "gif" else None
+    if key in editions and partial[r["code"]] > pages[str(folder(key).relative_to(originals))]:
+        n = pages[str(folder(key).relative_to(originals))]
+        note(editions[key], f"原页图不全：全套 {partial[r['code']]} 页，已收 {n} 页")
+        partial[r["code"]] = 0  # note once
 
 for s in sources:  # rows that point at bytes filed through another row (yearless codes, duplicates)
     if not s.get("归档路径") and s["sha256"] in placed:
@@ -549,7 +561,7 @@ write(
 def coverage(rs, e):
     if e["差异类别"] == "目录与文件标识不一致":
         return "身份冲突"
-    if any(r["角色"] in ("正文", "合订") for r in rs):
+    if any(r["角色"] in ("正文", "合订", "原格式") for r in rs):  # 原格式: the official DOCX text
         return "有正文"
     if rs:
         return "部分资料"
@@ -568,6 +580,7 @@ for key in sorted(editions, key=lambda k: (k[0], [int(x) for x in k[1].split("."
         dict(
             e,
             系列=key[0],
+            编号=f"{key[0].replace('-', '/')} {key[1]}",
             年份=key[2],
             目录=d if rs else "",
             正文=body,
@@ -581,8 +594,9 @@ write(
     "editions.csv",
     [
         "系列",
-        "标准号",
+        "编号",
         "年份",
+        "标准号",
         "名称",
         "官网状态",
         "批准日期",
@@ -599,6 +613,8 @@ write(
         "当前结构化成果",
         "官网详情",
         "在线阅读",
+        "核实日期",
+        "核实依据",
         "备注",
     ],
     erows,
