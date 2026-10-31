@@ -117,7 +117,7 @@ HDIP（Hospital Data Intelligence Platform）轻量 MVP：成都市第三人民�
 | 部门拆分、合并等组织变更的评估与分期（第一期已实施） | `docs/部门组织变更-评估与分期.md` |
 | **人员模块**：人员、任用、部门归属的对象、规则、动作、验收剧本 PERS-xx 与分期（P1、P3 已实施） | `docs/HDIP 轻量人员模块设计：人员、任用、部门归属.md` |
 | **人员域边界与后续计划**：哪些不在本平台建设、A0 / A1 / S0 / I1 / R1 的范围与顺序、待确认事项 | `docs/人员域边界复审与实施计划.md` |
-| **标准资料库**：建设计划（来源与证据、标准定义两层，F0～F5）、F0 / F1 开发计划与决定、F2 第一批（读取器 v2、处理修订、引用解析规则、检索分页）、资料基线与输入清单、364 值域引用补查（9 个完整但未闭合的 CV，只是资料说明） | `docs/标准资料库-建设计划.md`、`docs/标准资料库-F0F1开发计划.md`、`docs/标准资料库-F2开发计划.md`、`docs/标准资料库-资料基线.md`、`docs/标准资料库-值域引用补查.md`；数据库见 `docs/database/README.md` 第 9 节 |
+| **标准资料库**：建设计划（来源与证据、标准定义两层，F0～F5）、F0 / F1 开发计划与决定、F2 第一批（读取器 v2、处理修订、引用解析规则、检索分页）、资料基线与输入清单、364 值域引用补查（9 个完整但未闭合的 CV，只是资料说明）、标准目录与原文计划（原件层已整理：官网目录为入口、封面是证据，差异分类见第 10.1 节；D1～D4 待定） | `docs/标准资料库-建设计划.md`、`docs/标准资料库-F0F1开发计划.md`、`docs/标准资料库-F2开发计划.md`、`docs/标准资料库-资料基线.md`、`docs/标准资料库-值域引用补查.md`、`docs/标准资料库-目录与原文实施计划.md`；数据库见 `docs/database/README.md` 第 9 节 |
 | **人员共享数据契约**：现有人员接口与导出的粒度、日期口径、未知值、责任方、消费者 | `docs/人员共享数据契约.md` |
 
 改了迁移就执行 `make migrate && make db-doc`，并同步 `docs/database/README.md` 里相应的说明。
@@ -134,6 +134,7 @@ api/                FastAPI + Pydantic v2 + SQLAlchemy 2.0（psycopg 3），uv �
     routes/         路由，前缀 /api；master.py、persons.py 只读，changes.py 是唯一写入口；codes.py 只做代码预留（不改主数据）
   scripts/export_openapi.py   导出 web/openapi.json
   scripts/import_standards.py  标准资料包导入（迁移账号；资料包放在 HDIP_STANDARDS_DIR，默认仓库根目录 hdip-standards/，不入库）
+  scripts/originals_build.py   标准原件层合成（官网下载 + Drive 归档，按摘要核对，生成 hdip-standards/originals 与 catalog/*.csv；不碰数据库）；originals_sweep.py 把 Drive 下载结果核对后放进 inbox
   scripts/export_schema_doc.py  从数据库生成 docs/database/schema-reference.md（make db-doc）
   tests/            pytest；自动建独立测试库 <库名>_test（需 CREATEDB），每个测试前清空业务表
 migrations/         Alembic 迁移（api/alembic.ini 指向这里），约束与索引手写 SQL
