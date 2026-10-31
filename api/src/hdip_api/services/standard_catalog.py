@@ -3,9 +3,10 @@
 - 目录一行 = 一项标准（标准号 + 年份），目录信息取最新一版；状态在读取时推算“即将实施”。
 - 已有结构化成果在读取时挂上：处理修订按标准号 + 年份完全相同找标准，按 source_sha256 找原文文件；
   只按摘要认同一份文件，A 文件的页码不拿到 B 文件里跳。
-- 原文按 id 读取：路径须仍在资料目录 originals/ 下，大小与登记一致才给出。
+- 原文按 id 读取：路径须仍在资料目录 originals/ 下，大小与 SHA-256 都与登记一致才给出。
 """
 
+import hashlib
 from datetime import date
 from pathlib import Path
 
@@ -312,4 +313,16 @@ def file_path(session: Session, standards_dir: Path, file_id: int) -> tuple[Stan
         raise FileUnavailable("原文文件不在资料目录：可能已被移走，请重建原件层后再试")
     if p.stat().st_size != f.bytes:
         raise FileUnavailable("原文文件已变动：大小与登记时不同，不显示")
+    # 同大小替换（误改、同盘硬链接的另一入口被改写）只有摘要看得出：只算这一份，不扫描整库，
+    # 不把磁盘摘要写回库里。页面上“摘要一致的原文”与按页跳转都以此为前提
+    if _sha256(p) != f.sha256:
+        raise FileUnavailable("原文文件已变动：内容摘要与登记时不同，不显示")
     return f, p
+
+
+def _sha256(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 20), b""):
+            h.update(b)
+    return h.hexdigest()

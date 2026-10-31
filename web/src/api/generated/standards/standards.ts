@@ -690,7 +690,9 @@ export const getGetStandardFileContentUrl = (fileId: number,) => {
 }
 
 /**
- * 原文文件内容（inline）。文件不在资料目录或大小与登记不同时返回 404，不给别的文件。
+ * 原文文件内容（inline）。
+ *
+ * 文件不在资料目录，或大小、SHA-256 与登记不同时返回 404，不给别的文件。
  * @summary Get File Content
  */
 export const getStandardFileContent = async (fileId: number, options?: Parameters<typeof hdipFetch>[1]): Promise<Blob> => {

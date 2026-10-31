@@ -143,7 +143,10 @@ def get_edition(session: SessionDep, user: CurrentUser, edition_id: Annotated[in
     responses={200: {"content": {"application/pdf": {}}, "description": "原文文件"}},
 )
 def get_file_content(session: SessionDep, user: CurrentUser, file_id: Annotated[int, Path()]):
-    """原文文件内容（inline）。文件不在资料目录或大小与登记不同时返回 404，不给别的文件。"""
+    """原文文件内容（inline）。
+
+    文件不在资料目录，或大小、SHA-256 与登记不同时返回 404，不给别的文件。
+    """
     require_permission(user, STANDARD_VIEW)
     f, p = standard_catalog.file_path(session, FsPath(get_settings().standards_dir), file_id)
     return FileResponse(

@@ -5805,7 +5805,7 @@
           "standards"
         ],
         "summary": "Get File Content",
-        "description": "原文文件内容（inline）。文件不在资料目录或大小与登记不同时返回 404，不给别的文件。",
+        "description": "原文文件内容（inline）。\n\n文件不在资料目录，或大小、SHA-256 与登记不同时返回 404，不给别的文件。",
         "operationId": "getStandardFileContent",
         "parameters": [
           {

@@ -178,8 +178,16 @@ def test_std10_open_original(api, lib):
     assert r.content == PDF_3633
     assert r.headers["content-type"] == "application/pdf"
     assert r.headers["content-disposition"].startswith("inline")
-    # 改动后不给出
+    # 改动后不给出：同大小替换（只有摘要看得出）与大小变化都拒绝，不给内容
     p = root / "originals/WS-T/WS-T-363.3_2023/WS-T 363.3-2023.pdf"
+    same_size = PDF_3633.replace(b"official", b"REPLACED")
+    assert len(same_size) == len(PDF_3633) and same_size != PDF_3633
+    p.write_bytes(same_size)
+    r = api.get(f"/api/standards/files/{f['id']}/content")
+    assert r.status_code == 404 and "内容摘要与登记时不同" in r.json()["message"]
+    assert PDF_3633 not in r.content and same_size not in r.content
+    p.write_bytes(PDF_3633)  # 改回原字节即可再读
+    assert api.get(f"/api/standards/files/{f['id']}/content").content == PDF_3633
     p.write_bytes(PDF_3633 + b"changed")
     r = api.get(f"/api/standards/files/{f['id']}/content")
     assert r.status_code == 404 and "已变动" in r.json()["message"]
@@ -235,6 +243,29 @@ def test_std13_catalog_keeps_history(api, lib, owner_engine):
     write_catalog(root, editions, files[1:])
     with pytest.raises(CatalogFailure, match="少了已登记的文件"):
         load(owner_engine, root)
+
+
+def test_catalog_file_metadata_cannot_change(api, lib, owner_engine):
+    """已登记文件只改备注（或身份核对）也整批拒绝，指出文件与字段；库里保持原样，不静默跳过。"""
+    root, editions, files = lib
+    changed = [dict(files[0], 备注="新增核对：此文件实际是合订本，正文只在第3至8页")] + files[1:]
+    write_catalog(root, editions, changed)
+    with pytest.raises(CatalogFailure) as e:
+        load(owner_engine, root)
+    [problem] = e.value.problems
+    assert "originals/WS-T/WS-T-363.3_2023/WS-T 363.3-2023.pdf" in problem
+    assert "备注（note）" in problem
+    changed[0]["身份核对"] = "Drive 已核对封面"
+    write_catalog(root, editions, changed)
+    with pytest.raises(CatalogFailure, match=r"身份核对（identity_check）、备注（note）"):
+        load(owner_engine, root)
+    d = api.get(f"/api/standards/editions/{_one(api, '363.3')['id']}").json()
+    [f] = d["files"]
+    assert (f["note"], f["identity_check"]) == (None, "与官网目录一致")
+    # 输入改回原样：重导不增行
+    write_catalog(root, editions, files)
+    res = load(owner_engine, root)
+    assert (res.editions_added, res.versions_added, res.files_added) == (0, 0, 0)
 
 
 def test_catalog_import_rejects_bad_rows(owner_engine, tmp_path):

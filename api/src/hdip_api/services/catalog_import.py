@@ -3,7 +3,8 @@
 读 HDIP_STANDARDS_DIR/catalog/ 下的 editions.csv（一条目录 / 版次记录）与 files.csv
 （一个归档文件），二者由 scripts/originals_build.py 生成。规则：
 - 新标准 → 身份 + 第 1 版；目录字段变了 → 追加一版并写明改了哪些字段；没变 → 不写。重复执行不增行。
-- CSV 里少了已登记的标准或文件 → 拒绝（库里不删）；已登记的文件信息变了 → 拒绝。
+- CSV 里少了已登记的标准或文件 → 拒绝（库里不删）；已登记文件的任何信息（含备注、文件名）
+  变了 → 拒绝。
 - 文件须在 originals/ 下、存在，大小与摘要和 CSV 一致；只算摘要，不解析、不执行。
 - 任何一行有问题就整体失败，报“文件:行号 列名：原因”，一次列出全部问题。
 """
@@ -52,7 +53,20 @@ FIELDS = {
     "file_identity": "文件内标识",
     "note": "备注",
 }
-FILE_FIELDS = ("edition_id", "role", "source", "identity_check", "page_image", "bytes", "sha256")
+# 已登记文件的全部持久化输入（路径是键，不在其内）→ 中文名。登记后整行不可改：
+# 任何一项与 CSV 不同都拒绝，不静默跳过，也不 UPDATE 旧行
+FILE_FIELDS = {
+    "edition_id": "所属标准",
+    "role": "角色",
+    "source": "来源",
+    "identity_check": "身份核对",
+    "page_image": "完整性",
+    "file_name": "文件名",
+    "media_type": "媒体类型",
+    "bytes": "字节",
+    "sha256": "sha256",
+    "note": "备注",
+}
 
 
 class CatalogFailure(Exception):
@@ -230,9 +244,11 @@ def import_catalog(
         old = {c: getattr(f, c) for c in FILE_FIELDS}
         old["edition_id"] = eid_key.get(f.edition_id)
         new = {c: (w["key"] if c == "edition_id" else w[c]) for c in FILE_FIELDS}
-        diff = [c for c in FILE_FIELDS if old[c] != new[c]]
+        diff = [f"{label}（{c}）" for c, label in FILE_FIELDS.items() if old[c] != new[c]]
         if diff:
-            problems.append(f"files.csv {stored}：已登记的文件信息不能改（{', '.join(diff)}）")
+            problems.append(
+                f"files.csv {stored}：已登记的文件信息不能改，与库里不同的是 {'、'.join(diff)}"
+            )
 
     if problems:
         raise CatalogFailure(problems)

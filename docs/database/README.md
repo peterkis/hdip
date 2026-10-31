@@ -504,15 +504,15 @@ erDiagram
 | 表 | 一行是 | 要点 |
 | --- | --- | --- |
 | `standard_edition` | 一项标准的一个版次 | `series`（GB / GB/T / WS / WS/T）+ `standard_no`（写法同 `source_document.standard_no`，以 `series` 开头）+ `standard_year`；同号同年唯一。只留身份，整行不可改 |
-| `standard_edition_version` | 一次目录登记 | 名称、官网写法与分类、`status`（`CURRENT` / `ABOLISHED`，空 = 待核实；官网“即将实施”登记为 `CURRENT`，读取时按实施日期推算）、发布 / 实施 / 废止日期（官网原样，不检查先后：官网有实施早于批准的记录）、`verified_on` 与 `basis_url` / `basis_note`（有状态时必填，`standard_edition_version_basis_check`）、差异类别、文件内标识、备注、`change_note`（“首次登记”“改：实施日期”）。最新 `seq` 为当前；没有业务有效期 |
-| `standard_file` | 原件层里挂在标准下的一个文件 | `stored_path` 相对 `HDIP_STANDARDS_DIR`、须在 `originals/` 下；`role`、`source`（取得渠道原样）、`identity_check`（身份核对结论原样）、`page_image`、`media_type`、`bytes`、`sha256`。路径唯一，同一标准同一摘要只登记一次 |
+| `standard_edition_version` | 一次目录登记 | 名称、官网写法与分类、`status`（`CURRENT` / `ABOLISHED`，空 = 待核实；官网“即将实施”登记为 `CURRENT`，读取时按实施日期推算）、发布 / 实施日期（官网原样，不检查先后：官网有实施早于批准的记录）、废止日期（列已预留，本批未接入、全部为空，不推算；见计划第 3.2 节）、`verified_on` 与 `basis_url` / `basis_note`（有状态时必填，`standard_edition_version_basis_check`）、差异类别、文件内标识、备注、`change_note`（“首次登记”“改：实施日期”）。最新 `seq` 为当前；没有业务有效期 |
+| `standard_file` | 原件层里挂在标准下的一个文件 | `stored_path` 相对 `HDIP_STANDARDS_DIR`、须在 `originals/` 下；`role`、`source`（取得渠道原样）、`identity_check`（身份核对结论原样）、`page_image`、`file_name`、`media_type`、`bytes`、`sha256`、`note`。路径唯一，同一标准同一摘要只登记一次 |
 
-- **写入**：`api/scripts/import_catalog.py [--check]`（迁移账号）读 `HDIP_STANDARDS_DIR/catalog/editions.csv`、`files.csv`——由 `api/scripts/originals_build.py` 从官网目录快照与 Drive 归档清单生成。新标准 → 身份 + 第 1 版；目录字段变了 → 追加一版；没变不写，重复运行不增行。CSV 少了已登记的标准或文件、已登记的文件信息变了 → 拒绝。文件须存在、大小与摘要一致。任何问题整体回滚，报“文件:行号 列名：原因”。没有标准号的“相关资料”不登记。
+- **写入**：`api/scripts/import_catalog.py [--check]`（迁移账号）读 `HDIP_STANDARDS_DIR/catalog/editions.csv`、`files.csv`——由 `api/scripts/originals_build.py` 从官网目录快照与 Drive 归档清单生成。新标准 → 身份 + 第 1 版；目录字段变了 → 追加一版；没变不写，重复运行不增行。CSV 少了已登记的标准或文件 → 拒绝；已登记文件的任何持久化信息（含备注、文件名、媒体类型）与 CSV 不同 → 拒绝并报出文件与字段，不静默跳过、不 UPDATE 旧行。文件须存在、大小与摘要一致。任何问题整体回滚，报“文件:行号 列名：原因”。没有标准号的“相关资料”不登记。
 - **挂接（读取时计算，不建表）**：处理修订 → 标准按 `standard_no + standard_year` 完全相同；处理修订 → 原文文件按 `source_sha256` 与该标准下文件的 `sha256` 相同。只按摘要认同一份文件，摘要对不上就不给文件、不按页码跳。
 - **读取接口**：
   - `GET /api/standards/editions?q=&series=&status=&has_text=&structured=&offset=&limit=`：先筛选再计数分页；`status` 为读取时推算的 `current` / `upcoming` / `abolished` / `unverified`；`q` 匹配名称、标准号（忽略空白，`—` 与 `-` 等价）与官网写法
   - `/editions/{id}`：目录登记历史、文件（不含路径）、全部处理修订（当前在前，各带 `file_id`）
-  - `/files/{id}/content`：路径解析后须仍在 `originals/` 下、大小与登记一致，否则 404（“不在资料目录 / 已变动”），`Content-Disposition: inline`
+  - `/files/{id}/content`：路径解析后须仍在 `originals/` 下，大小与登记一致，且对这一份流式重算的 SHA-256 与登记一致，否则 404（“不在资料目录 / 已变动”）、不给内容；只算当前请求的文件，不写回摘要。`Content-Disposition: inline`
   - `/documents/{id}` 与 `/entries/{id}` 增加 `edition`、`file_id`
 - **页面打开原文**：开发期身份在请求头里，前端取回文件生成 `blob:` 地址，在应用内原文页（`/standards/library/editions/:id/files/:fileId?page=N`）用内嵌框显示，PDF 跳到物理页；DOCX 只给下载。
 - 测试：`api/tests/test_std_catalog.py`（STD-07～13、导入反例、行不可改、应用账号只读），用临时目录里的小目录与文件，不依赖真实资料。
