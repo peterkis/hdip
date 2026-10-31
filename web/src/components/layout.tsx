@@ -331,21 +331,28 @@ function ExpandButton({ onExpand }: { onExpand: () => void }) {
 }
 
 // ================================================================== 顶栏
+// 与查看日期无关的页面（标准资料只读参考）不显示查看日期。按路由逐个列出，不按 /standards 前缀判断：
+// 编码映射台账 /standards/code-mapping 仍按查看日期取解释。
+const NO_VIEW_DATE = [
+  /^\/standards\/library(\/.*)?$/,
+  /^\/standards\/data-elements$/,
+  /^\/standards\/value-domains$/,
+]
+
 function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: () => void; frame: PageFrame }) {
   const { pathname } = useLocation()
   const crumb = useCurrentCrumb()
   const found = findNav(pathname)
   // 窄屏（侧栏浮在正文上）时展开按钮在顶栏行内；桌面收起时它在控制轨道里（见 Layout）
   const expand = collapsed && <ExpandButton onExpand={onExpand} />
+  const asOf = NO_VIEW_DATE.some((r) => r.test(pathname)) ? null : <AsOfPicker />
   if (frame !== 'legacy') {
     return (
       <header className="relative flex h-(--hd-topbar-height) shrink-0 items-center px-(--hd-layout-gutter-narrow) text-xs md:px-(--hd-layout-gutter)">
         <div className={cn('mx-auto flex w-full min-w-0 items-center gap-1', FRAME_MAX[frame])}>
           {expand}
           <Crumbs found={found} crumb={crumb} />
-          <div className="ml-auto shrink-0">
-            <AsOfPicker />
-          </div>
+          <div className="ml-auto shrink-0">{asOf}</div>
         </div>
       </header>
     )
@@ -354,9 +361,7 @@ function Topbar({ collapsed, onExpand, frame }: { collapsed: boolean; onExpand: 
     <header className="flex h-(--hd-topbar-height) shrink-0 items-center gap-1 px-3 text-xs">
       {expand}
       <Crumbs found={found} crumb={crumb} />
-      <div className="ml-auto shrink-0">
-        <AsOfPicker />
-      </div>
+      <div className="ml-auto shrink-0">{asOf}</div>
     </header>
   )
 }

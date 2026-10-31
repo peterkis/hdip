@@ -3,7 +3,7 @@
 条目类型由代码固定；每种类型一个正文结构，导入时校验，读取时原样给出。原记录另在 raw 里。
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -149,6 +149,12 @@ class StandardDocumentDetail(StandardDocumentRow):
     revisions: list[DocumentRef] = Field(
         description="同一来源文档的全部处理修订（含本份），按读取器版本从低到高"
     )
+    edition: "EditionRef | None" = Field(
+        None, description="所属标准：标准号与年份完全相同的目录记录；目录未登记为空"
+    )
+    file_id: int | None = Field(
+        None, description="所据原文：所属标准下摘要与 source_sha256 相同的文件；没有为空"
+    )
 
 
 class ParentRef(BaseModel):
@@ -244,6 +250,10 @@ class StandardEntryDetail(BaseModel):
     provenance: Provenance
     raw: dict
     imported_at: datetime
+    edition: "EditionRef | None" = Field(None, description="所属标准（按所在处理修订）")
+    file_id: int | None = Field(
+        None, description="所据原文文件（摘要与所在处理修订一致）；有它才可按物理页打开出处"
+    )
 
 
 class StandardCodeRow(BaseModel):
@@ -253,3 +263,101 @@ class StandardCodeRow(BaseModel):
     description: str
     hierarchy_level: int | None
     parent_code: str | None
+
+
+# ---------------------------------------------------------------- 标准目录与原文（迁移 0025）
+
+# 读取时推算：现行 / 即将实施（现行且实施日期晚于今天）/ 废止 / 待核实（没有官方状态）
+EditionStatus = Literal["current", "upcoming", "abolished", "unverified"]
+FileRole = Literal["TEXT", "BOUND", "ERRATA", "PAGE_IMAGE", "ORIGINAL_FORMAT"]
+
+
+class EditionRef(BaseModel):
+    id: int
+    standard_no: str
+    standard_year: str
+    title: str
+
+
+class StandardEditionRow(BaseModel):
+    id: int
+    series: str = Field(description="GB / GB/T / WS / WS/T")
+    standard_no: str
+    standard_year: str
+    title: str
+    status: EditionStatus
+    verified_on: date | None
+    issued_on: date | None
+    effective_on: date | None
+    catalog_category: str | None
+    difference: str | None = Field(description="官网目录与文件不一致的类别，原样")
+    text_files: int = Field(description="正文、合订、官方原格式文件数")
+    page_images: int
+    other_files: int = Field(description="修改单等其他文件数")
+    counts: dict[str, int] = Field(
+        description="当前处理修订的各条目类型数（多份处理修订相加）；没有结构化成果为空"
+    )
+
+
+class StandardEditionPage(BaseModel):
+    items: list[StandardEditionRow]
+    total: int = Field(description="符合筛选的标准总数（不是本页条数）")
+    offset: int
+    limit: int
+
+
+class EditionVersionOut(BaseModel):
+    seq: int
+    title: str
+    catalog_code: str | None
+    catalog_category: str | None
+    status: Literal["CURRENT", "ABOLISHED"] | None
+    issued_on: date | None
+    effective_on: date | None
+    abolished_on: date | None
+    verified_on: date | None
+    basis_url: str | None
+    basis_note: str | None
+    online_url: str | None
+    difference: str | None
+    file_identity: str | None
+    note: str | None
+    change_note: str
+    recorded_at: datetime
+
+
+class StandardFileOut(BaseModel):
+    id: int
+    role: FileRole
+    source: str
+    identity_check: str
+    page_image: bool
+    file_name: str
+    media_type: str
+    bytes: int
+    sha256: str
+    note: str | None
+    registered_at: datetime
+
+
+class EditionRevision(BaseModel):
+    """挂在本标准下的一份处理修订（标准号 + 年份相同）。"""
+
+    document: DocumentRef
+    package_file: str
+    total_records: int
+    covered_keys: int
+    counts: dict[str, int]
+    source_sha256: str | None
+    file_id: int | None = Field(description="摘要相同的原文文件；没有为空，不按页码跳转")
+
+
+class StandardEditionDetail(StandardEditionRow):
+    current: EditionVersionOut
+    versions: list[EditionVersionOut] = Field(description="目录信息的登记历史，按 seq 从早到晚")
+    files: list[StandardFileOut]
+    revisions: list[EditionRevision] = Field(description="全部处理修订，当前的排在前面")
+
+
+StandardDocumentDetail.model_rebuild()
+StandardEntryDetail.model_rebuild()

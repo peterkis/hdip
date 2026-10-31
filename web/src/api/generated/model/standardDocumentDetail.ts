@@ -5,6 +5,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { DocumentRef } from './documentRef';
+import type { EditionRef } from './editionRef';
 import type { PackageOut } from './packageOut';
 import type { StandardDocumentDetailCounts } from './standardDocumentDetailCounts';
 import type { StandardDocumentDetailMembersItem } from './standardDocumentDetailMembersItem';
@@ -36,4 +37,8 @@ export interface StandardDocumentDetail {
   source_url: string | null;
   /** 同一来源文档的全部处理修订（含本份），按读取器版本从低到高 */
   revisions: DocumentRef[];
+  /** 所属标准：标准号与年份完全相同的目录记录；目录未登记为空 */
+  edition?: EditionRef | null;
+  /** 所据原文：所属标准下摘要与 source_sha256 相同的文件；没有为空 */
+  file_id?: number | null;
 }

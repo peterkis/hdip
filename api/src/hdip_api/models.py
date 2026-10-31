@@ -655,3 +655,68 @@ class StandardReference(Base):
     target_year: Mapped[str | None] = mapped_column(Text)
     target_identifier: Mapped[str | None] = mapped_column(Text)
     target_label: Mapped[str | None] = mapped_column(Text)
+
+
+# ---------------------------------------------------------------- 标准目录与原文（迁移 0025）
+# 只由 scripts/import_catalog.py（hdip_owner）写入，应用账号只读；已有结构化成果在读取时挂上。
+
+
+class StandardEdition(Base):
+    """一项标准的一个版次（标准号 + 年份），只留身份。"""
+
+    __tablename__ = "standard_edition"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    series: Mapped[str] = mapped_column(Text)
+    standard_no: Mapped[str] = mapped_column(Text)
+    standard_year: Mapped[str] = mapped_column(Text)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardEditionVersion(Base):
+    """标准的目录信息，只追加，最新 seq 为当前。"""
+
+    __tablename__ = "standard_edition_version"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    edition_id: Mapped[int] = mapped_column(ForeignKey("standard_edition.id"))
+    seq: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(Text)
+    catalog_code: Mapped[str | None] = mapped_column(Text)
+    catalog_category: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str | None] = mapped_column(Text)
+    issued_on: Mapped[date | None]
+    effective_on: Mapped[date | None]
+    abolished_on: Mapped[date | None]
+    verified_on: Mapped[date | None]
+    basis_url: Mapped[str | None] = mapped_column(Text)
+    basis_note: Mapped[str | None] = mapped_column(Text)
+    online_url: Mapped[str | None] = mapped_column(Text)
+    difference: Mapped[str | None] = mapped_column(Text)
+    file_identity: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    change_note: Mapped[str] = mapped_column(Text)
+    recorded_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardFile(Base):
+    """原件层里挂在标准下的文件；页面只用 id，不暴露路径。"""
+
+    __tablename__ = "standard_file"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    edition_id: Mapped[int] = mapped_column(ForeignKey("standard_edition.id"))
+    role: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(Text)
+    identity_check: Mapped[str] = mapped_column(Text)
+    page_image: Mapped[bool] = mapped_column(server_default=text("false"))
+    stored_path: Mapped[str] = mapped_column(Text)
+    file_name: Mapped[str] = mapped_column(Text)
+    media_type: Mapped[str] = mapped_column(Text)
+    bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))

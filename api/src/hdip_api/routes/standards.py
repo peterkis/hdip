@@ -1,24 +1,31 @@
-"""标准资料库的只读查询（迁移 0023）。写入只经本地导入命令 scripts/import_standards.py，没有写接口。
+"""标准资料库的只读查询（迁移 0023、0025）。写入只经本地导入命令
+scripts/import_standards.py、scripts/import_catalog.py，没有写接口。
 
 需要“查看标准资料”权限（core/permissions.py）。
 """
 
+from pathlib import Path as FsPath
 from typing import Annotated
 
 from fastapi import APIRouter, Path, Query
+from fastapi.responses import FileResponse
 
 from hdip_api.core.auth import CurrentUser
+from hdip_api.core.config import get_settings
 from hdip_api.core.db import SessionDep
 from hdip_api.core.errors import ERROR_RESPONSES
 from hdip_api.core.permissions import STANDARD_VIEW, require_permission
 from hdip_api.schemas.standards import (
+    EditionStatus,
     EntryType,
     StandardDocumentDetail,
     StandardDocumentRow,
+    StandardEditionDetail,
+    StandardEditionPage,
     StandardEntryDetail,
     StandardEntryPage,
 )
-from hdip_api.services import standards
+from hdip_api.services import standard_catalog, standards
 
 router = APIRouter(prefix="/standards", tags=["standards"], responses=ERROR_RESPONSES)
 
@@ -90,3 +97,58 @@ def get_entry(session: SessionDep, user: CurrentUser, entry_id: Annotated[int, P
     """条目详情：类型化正文、值域代码、引用解析、被引用、出处与原记录。"""
     require_permission(user, STANDARD_VIEW)
     return standards.get_entry(session, entry_id)
+
+
+@router.get("/editions", response_model=StandardEditionPage, operation_id="searchStandardEditions")
+def search_editions(
+    session: SessionDep,
+    user: CurrentUser,
+    q: Annotated[str | None, Query(description="名称或标准号（如 363.3、WS/T 363.3—2023）")] = None,
+    series: Annotated[str | None, Query(description="GB / GB/T / WS / WS/T")] = None,
+    status: Annotated[EditionStatus | None, Query()] = None,
+    has_text: Annotated[bool | None, Query(description="有无正文文件")] = None,
+    structured: Annotated[bool | None, Query(description="有无结构化成果")] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+):
+    """标准目录：一行一项标准（标准号 + 年份），先筛选再计数分页，total 是匹配总数。"""
+    require_permission(user, STANDARD_VIEW)
+    return standard_catalog.search_editions(
+        session,
+        q=q,
+        series=series,
+        status=status,
+        has_text=has_text,
+        structured=structured,
+        offset=offset,
+        limit=limit,
+    )
+
+
+@router.get(
+    "/editions/{edition_id}",
+    response_model=StandardEditionDetail,
+    operation_id="getStandardEdition",
+)
+def get_edition(session: SessionDep, user: CurrentUser, edition_id: Annotated[int, Path()]):
+    """标准详情：目录信息与登记历史、原文文件、挂在本标准下的处理修订。"""
+    require_permission(user, STANDARD_VIEW)
+    return standard_catalog.get_edition(session, edition_id)
+
+
+@router.get(
+    "/files/{file_id}/content",
+    operation_id="getStandardFileContent",
+    response_class=FileResponse,
+    responses={200: {"content": {"application/pdf": {}}, "description": "原文文件"}},
+)
+def get_file_content(session: SessionDep, user: CurrentUser, file_id: Annotated[int, Path()]):
+    """原文文件内容（inline）。
+
+    文件不在资料目录，或大小、SHA-256 与登记不同时返回 404，不给别的文件。
+    """
+    require_permission(user, STANDARD_VIEW)
+    f, p = standard_catalog.file_path(session, FsPath(get_settings().standards_dir), file_id)
+    return FileResponse(
+        p, media_type=f.media_type, filename=f.file_name, content_disposition_type="inline"
+    )
