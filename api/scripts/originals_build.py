@@ -162,9 +162,10 @@ def cover_of(digest):
         )
         printed = (r.get("printed_identity") or {}).get("standard_id")
         k = parse(stated or printed or "") or parse(r["code"], r.get("year"))
-        if k and (
-            stated or printed or r.get("identity_verified") or "核对" in (r.get("identity") or "")
-        ):
+        # only affirmative evidence counts: a cover identity written in the record, or the
+        # archive's explicit identity_verified flag. The free-text note is not read for a
+        # keyword: "未核对封面" contains "核对" too (PR #6 review)
+        if k and (stated or printed or r.get("identity_verified") is True):
             title = (r.get("printed_identity") or {}).get("title") or r.get("title") or ""
             return k, title
     return None
@@ -437,11 +438,7 @@ for r in records:
         or parse(r.get("standard_id") or "", r.get("year"))
         or parse(r["drive_name"].replace("_", " ", 1), r.get("year"))
     )
-    ident = (
-        "Drive 已核对封面"
-        if r.get("identity_verified") or "核对" in (r.get("identity") or "")
-        else "待核"
-    )
+    ident = "Drive 已核对封面" if r.get("identity_verified") is True else "待核"
     remark = "；".join(r.get("issues") or [])[:300]
     prev = parse((r.get("previous_ledger_identity") or {}).get("standard_id") or "")
     if key and key not in editions and prev and prev in editions and not editions[prev]["_stub"]:

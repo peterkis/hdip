@@ -35,7 +35,7 @@ PREFIX_VARIANT = b"%PDF cover says WS 1-2020"
 BAD = b"%PDF bytes differ from uniData record"
 
 
-def build(tmp: Path) -> Path:
+def build(tmp: Path, extra_inventory: list[dict] | tuple = ()) -> Path:
     official = tmp / "official"
     write(official / "pdf" / "a.pdf", OFFICIAL_PDF)
     (official / "standards.json").write_text(
@@ -78,7 +78,8 @@ def build(tmp: Path) -> Path:
                         "folder_key": "05",
                         "title": "职业卫生技术服务信息报送卡",
                         "size": len(STAT_FORM),
-                    }
+                    },
+                    *extra_inventory,
                 ],
                 "nonpdf_records": [],
             },
@@ -155,3 +156,37 @@ def test_unidata_supplements_and_references(tmp_path):
         {"类别": "统计报表", "名称": "职业卫生技术服务信息报送卡", "年份": "2025",
          "备注": "卫健统52表；国统制[2025]53号"},
     ]  # fmt: skip
+
+
+def cover_claim(verified: bool) -> dict:
+    """同字节的 Drive 记录写着另一个标准号；identity 文字是否定说法。"""
+    return {
+        "sha256": sha(OFFICIAL_PDF),
+        "code": "WS/T 2",
+        "year": 2020,
+        "drive_name": "WS-T2_2020_乙标准.pdf",
+        "drive_url": "",
+        "folder_key": "04",
+        "title": "乙标准",
+        "identity": "未核对封面",
+        "identity_verified": verified,
+        "size": len(OFFICIAL_PDF),
+    }
+
+
+def test_unverified_cover_does_not_move_official_file(tmp_path):
+    """“未核对封面”也含“核对”二字：只认明确的 identity_verified，不按文字关键字（PR #6 审查）。"""
+    cat = build(tmp_path, [cover_claim(verified=False)])
+    eds = {r["编号"]: r for r in rows(cat / "editions.csv")}
+    assert "WS/T 2" not in eds and eds["WS/T 1"]["差异类别"] == ""
+    [f] = [r for r in rows(cat / "files.csv") if r["sha256"] == sha(OFFICIAL_PDF)]
+    assert (f["目录"], f["身份核对"]) == ("WS-T/WS-T-1_2020", "未逐份核对封面")
+
+
+def test_verified_cover_still_marks_wrong_link(tmp_path):
+    """对照：同一记录带明确的 identity_verified=True 时，仍按错链归到封面那项标准。"""
+    cat = build(tmp_path, [cover_claim(verified=True)])
+    eds = {r["编号"]: r for r in rows(cat / "editions.csv")}
+    assert eds["WS/T 1"]["差异类别"] == "错链"
+    [f] = [r for r in rows(cat / "files.csv") if r["sha256"] == sha(OFFICIAL_PDF)]
+    assert f["目录"] == "WS-T/WS-T-2_2020"
