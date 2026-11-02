@@ -88,6 +88,9 @@ CORR_FIELDS = {
     "备注": "note",
 }
 DATE_FIELDS = {"issued_on", "effective_on", "abolished_on"}
+# 目录版本里不能为空的字段（standard_edition_version.title NOT NULL）：不接受“（清空）”，
+# 否则 --check 通过、真正写入时才被数据库拒绝（PR #7 审查 P2）
+REQUIRED_FIELDS = {"title"}
 CLEAR = "（清空）"
 # 已登记更正的全部输入；登记后不可改
 CORR_COLS = (
@@ -321,6 +324,9 @@ def import_catalog(
             if not (row["basis_url"] or row["basis_sha256"]):
                 bad(csrc, line, "依据地址", "须写依据地址或依据文件摘要")
             row.update(edition=ek, field=col)
+            if value == CLEAR and col in REQUIRED_FIELDS:
+                bad(csrc, line, "新值", f"{r['字段']}是必填的目录信息，不能清空；要改请写新名称")
+                continue
             if value == CLEAR:
                 row["clears"] = True
             elif col in DATE_FIELDS and day(csrc, line, "新值", value) is None:
