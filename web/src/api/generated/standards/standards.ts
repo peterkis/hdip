@@ -22,9 +22,15 @@ import type {
 import type {
   ListStandardDocumentsParams,
   Problem,
+  ReferenceMaterialDetail,
+  ReferenceMaterialPage,
+  SearchReferenceMaterialsParams,
+  SearchStandardEditionsParams,
   SearchStandardEntriesParams,
   StandardDocumentDetail,
   StandardDocumentRow,
+  StandardEditionDetail,
+  StandardEditionPage,
   StandardEntryDetail,
   StandardEntryPage
 } from '../model';
@@ -458,6 +464,527 @@ export function useGetStandardEntry<TData = Awaited<ReturnType<typeof getStandar
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetStandardEntryQueryOptions(entryId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getSearchStandardEditionsUrl = (params?: SearchStandardEditionsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/standards/editions?${stringifiedParams}` : `/api/standards/editions`
+}
+
+/**
+ * 标准目录：一行一项标准（标准号 + 年份），先筛选再计数分页，total 是匹配总数。
+ * @summary Search Editions
+ */
+export const searchStandardEditions = async (params?: SearchStandardEditionsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<StandardEditionPage> => {
+
+  return hdipFetch<StandardEditionPage>(getSearchStandardEditionsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchStandardEditionsQueryKey = (params?: SearchStandardEditionsParams,) => {
+    return [
+    `/api/standards/editions`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchStandardEditionsQueryOptions = <TData = Awaited<ReturnType<typeof searchStandardEditions>>, TError = Problem>(params?: SearchStandardEditionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchStandardEditionsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchStandardEditions>>> = ({ signal }) => searchStandardEditions(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SearchStandardEditionsQueryResult = NonNullable<Awaited<ReturnType<typeof searchStandardEditions>>>
+export type SearchStandardEditionsQueryError = Problem
+
+
+export function useSearchStandardEditions<TData = Awaited<ReturnType<typeof searchStandardEditions>>, TError = Problem>(
+ params: undefined |  SearchStandardEditionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchStandardEditions>>,
+          TError,
+          Awaited<ReturnType<typeof searchStandardEditions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchStandardEditions<TData = Awaited<ReturnType<typeof searchStandardEditions>>, TError = Problem>(
+ params?: SearchStandardEditionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchStandardEditions>>,
+          TError,
+          Awaited<ReturnType<typeof searchStandardEditions>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchStandardEditions<TData = Awaited<ReturnType<typeof searchStandardEditions>>, TError = Problem>(
+ params?: SearchStandardEditionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Search Editions
+ */
+
+export function useSearchStandardEditions<TData = Awaited<ReturnType<typeof searchStandardEditions>>, TError = Problem>(
+ params?: SearchStandardEditionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchStandardEditions>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSearchStandardEditionsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetStandardEditionUrl = (editionId: number,) => {
+
+
+
+
+  return `/api/standards/editions/${editionId}`
+}
+
+/**
+ * 标准详情：目录信息与登记历史、原文文件、挂在本标准下的处理修订。
+ * @summary Get Edition
+ */
+export const getStandardEdition = async (editionId: number, options?: Parameters<typeof hdipFetch>[1]): Promise<StandardEditionDetail> => {
+
+  return hdipFetch<StandardEditionDetail>(getGetStandardEditionUrl(editionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStandardEditionQueryKey = (editionId: number,) => {
+    return [
+    `/api/standards/editions/${editionId}`
+    ] as const;
+    }
+
+
+export const getGetStandardEditionQueryOptions = <TData = Awaited<ReturnType<typeof getStandardEdition>>, TError = Problem>(editionId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStandardEditionQueryKey(editionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStandardEdition>>> = ({ signal }) => getStandardEdition(editionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: editionId !== null && editionId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStandardEditionQueryResult = NonNullable<Awaited<ReturnType<typeof getStandardEdition>>>
+export type GetStandardEditionQueryError = Problem
+
+
+export function useGetStandardEdition<TData = Awaited<ReturnType<typeof getStandardEdition>>, TError = Problem>(
+ editionId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStandardEdition>>,
+          TError,
+          Awaited<ReturnType<typeof getStandardEdition>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStandardEdition<TData = Awaited<ReturnType<typeof getStandardEdition>>, TError = Problem>(
+ editionId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStandardEdition>>,
+          TError,
+          Awaited<ReturnType<typeof getStandardEdition>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStandardEdition<TData = Awaited<ReturnType<typeof getStandardEdition>>, TError = Problem>(
+ editionId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Edition
+ */
+
+export function useGetStandardEdition<TData = Awaited<ReturnType<typeof getStandardEdition>>, TError = Problem>(
+ editionId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardEdition>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetStandardEditionQueryOptions(editionId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getSearchReferenceMaterialsUrl = (params?: SearchReferenceMaterialsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/standards/references?${stringifiedParams}` : `/api/standards/references`
+}
+
+/**
+ * 参考资料：没有标准号的官方资料（统计报表 / 官方参考资料 / 医保更新），先筛选再计数分页。
+ * @summary Search References
+ */
+export const searchReferenceMaterials = async (params?: SearchReferenceMaterialsParams, options?: Parameters<typeof hdipFetch>[1]): Promise<ReferenceMaterialPage> => {
+
+  return hdipFetch<ReferenceMaterialPage>(getSearchReferenceMaterialsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getSearchReferenceMaterialsQueryKey = (params?: SearchReferenceMaterialsParams,) => {
+    return [
+    `/api/standards/references`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getSearchReferenceMaterialsQueryOptions = <TData = Awaited<ReturnType<typeof searchReferenceMaterials>>, TError = Problem>(params?: SearchReferenceMaterialsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getSearchReferenceMaterialsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof searchReferenceMaterials>>> = ({ signal }) => searchReferenceMaterials(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type SearchReferenceMaterialsQueryResult = NonNullable<Awaited<ReturnType<typeof searchReferenceMaterials>>>
+export type SearchReferenceMaterialsQueryError = Problem
+
+
+export function useSearchReferenceMaterials<TData = Awaited<ReturnType<typeof searchReferenceMaterials>>, TError = Problem>(
+ params: undefined |  SearchReferenceMaterialsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchReferenceMaterials>>,
+          TError,
+          Awaited<ReturnType<typeof searchReferenceMaterials>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchReferenceMaterials<TData = Awaited<ReturnType<typeof searchReferenceMaterials>>, TError = Problem>(
+ params?: SearchReferenceMaterialsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof searchReferenceMaterials>>,
+          TError,
+          Awaited<ReturnType<typeof searchReferenceMaterials>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useSearchReferenceMaterials<TData = Awaited<ReturnType<typeof searchReferenceMaterials>>, TError = Problem>(
+ params?: SearchReferenceMaterialsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Search References
+ */
+
+export function useSearchReferenceMaterials<TData = Awaited<ReturnType<typeof searchReferenceMaterials>>, TError = Problem>(
+ params?: SearchReferenceMaterialsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof searchReferenceMaterials>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getSearchReferenceMaterialsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetReferenceMaterialUrl = (referenceId: number,) => {
+
+
+
+
+  return `/api/standards/references/${referenceId}`
+}
+
+/**
+ * 参考资料详情：身份与原文文件。
+ * @summary Get Reference
+ */
+export const getReferenceMaterial = async (referenceId: number, options?: Parameters<typeof hdipFetch>[1]): Promise<ReferenceMaterialDetail> => {
+
+  return hdipFetch<ReferenceMaterialDetail>(getGetReferenceMaterialUrl(referenceId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReferenceMaterialQueryKey = (referenceId: number,) => {
+    return [
+    `/api/standards/references/${referenceId}`
+    ] as const;
+    }
+
+
+export const getGetReferenceMaterialQueryOptions = <TData = Awaited<ReturnType<typeof getReferenceMaterial>>, TError = Problem>(referenceId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReferenceMaterialQueryKey(referenceId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReferenceMaterial>>> = ({ signal }) => getReferenceMaterial(referenceId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: referenceId !== null && referenceId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetReferenceMaterialQueryResult = NonNullable<Awaited<ReturnType<typeof getReferenceMaterial>>>
+export type GetReferenceMaterialQueryError = Problem
+
+
+export function useGetReferenceMaterial<TData = Awaited<ReturnType<typeof getReferenceMaterial>>, TError = Problem>(
+ referenceId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReferenceMaterial>>,
+          TError,
+          Awaited<ReturnType<typeof getReferenceMaterial>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetReferenceMaterial<TData = Awaited<ReturnType<typeof getReferenceMaterial>>, TError = Problem>(
+ referenceId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReferenceMaterial>>,
+          TError,
+          Awaited<ReturnType<typeof getReferenceMaterial>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetReferenceMaterial<TData = Awaited<ReturnType<typeof getReferenceMaterial>>, TError = Problem>(
+ referenceId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Reference
+ */
+
+export function useGetReferenceMaterial<TData = Awaited<ReturnType<typeof getReferenceMaterial>>, TError = Problem>(
+ referenceId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReferenceMaterial>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetReferenceMaterialQueryOptions(referenceId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getGetStandardFileContentUrl = (fileId: number,) => {
+
+
+
+
+  return `/api/standards/files/${fileId}/content`
+}
+
+/**
+ * 原文文件内容（inline）。
+ *
+ * 文件不在资料目录，或大小、SHA-256 与登记不同时返回 404，不给别的文件。
+ * @summary Get File Content
+ */
+export const getStandardFileContent = async (fileId: number, options?: Parameters<typeof hdipFetch>[1]): Promise<Blob> => {
+
+  return hdipFetch<Blob>(getGetStandardFileContentUrl(fileId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetStandardFileContentQueryKey = (fileId: number,) => {
+    return [
+    `/api/standards/files/${fileId}/content`
+    ] as const;
+    }
+
+
+export const getGetStandardFileContentQueryOptions = <TData = Awaited<ReturnType<typeof getStandardFileContent>>, TError = Problem>(fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetStandardFileContentQueryKey(fileId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getStandardFileContent>>> = ({ signal }) => getStandardFileContent(fileId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: fileId !== null && fileId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetStandardFileContentQueryResult = NonNullable<Awaited<ReturnType<typeof getStandardFileContent>>>
+export type GetStandardFileContentQueryError = Problem
+
+
+export function useGetStandardFileContent<TData = Awaited<ReturnType<typeof getStandardFileContent>>, TError = Problem>(
+ fileId: number, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStandardFileContent>>,
+          TError,
+          Awaited<ReturnType<typeof getStandardFileContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStandardFileContent<TData = Awaited<ReturnType<typeof getStandardFileContent>>, TError = Problem>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getStandardFileContent>>,
+          TError,
+          Awaited<ReturnType<typeof getStandardFileContent>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetStandardFileContent<TData = Awaited<ReturnType<typeof getStandardFileContent>>, TError = Problem>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get File Content
+ */
+
+export function useGetStandardFileContent<TData = Awaited<ReturnType<typeof getStandardFileContent>>, TError = Problem>(
+ fileId: number, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getStandardFileContent>>, TError, TData>>, request?: SecondParameter<typeof hdipFetch>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetStandardFileContentQueryOptions(fileId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

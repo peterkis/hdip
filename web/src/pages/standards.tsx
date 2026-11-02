@@ -1,5 +1,6 @@
 // 标准资料库（F0 / F1 / F2 第一批，docs/标准资料库-F0F1开发计划.md、标准资料库-F2开发计划.md）：外部标准原文的只读参考。
-// 标准资料（每行一份结构化文档修订）→ 条目（数据元、值域表、代码）→ 出处与原记录。
+// 标准目录（standard-catalog.tsx，一行一项标准）→ 处理修订（每行一份结构化文档修订）→ 条目（数据元、值域表、代码）
+// → 出处与原记录；处理修订与条目按标准号 + 年份挂到所属标准，按原文摘要挂到原文文件（可按物理页打开）。
 // 写入只经本地导入命令；页面没有编辑、采用、发布动作。引用按原文显示：原文未写年份时只说“按本库目录定位”，
 // 不写成原文指定了该年份；原文写明的年份本库没有收录时显示未解析，其他年份另列、不等价。
 // 读取器版本是本系统的“处理修订”，不是标准版本：列表默认只给当前处理修订，历史处理修订按链接仍可打开。
@@ -8,6 +9,7 @@ import { useDeferredValue, type ReactNode } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
 import type {
   DocumentRef,
+  EditionRef,
   Evidence,
   ProvenanceSourceIssuesItem,
   ReferenceOut,
@@ -28,14 +30,16 @@ import { DbCell, DbEmpty, DbFooter, DbRow, DbTable, DbToolbar, FilterPill, Searc
 import { DetailFallback } from '@/components/kit/missing'
 import { PropertyList } from '@/components/kit/property-list'
 import { isDenial, ReadError, ReadLoading, readStatus, StaleNotice, Unknown } from '@/components/kit/read-state'
-import { Section } from '@/components/kit/section'
+import { InlineLink, Section } from '@/components/kit/section'
 import { Segmented } from '@/components/kit/segmented'
 import { Tag, type Tone } from '@/components/kit/tag'
 import { PageHeader, usePageFrame } from '@/components/layout'
 import { useCrumb } from '@/components/shell/crumbs'
 import { Button } from '@/components/ui/button'
 import { stamp } from '@/lib/format'
+import { fileViewerPath } from '@/lib/standard-file'
 import { scrollBehavior } from '@/lib/utils'
+import { editionPath } from '@/pages/standard-catalog'
 import { isString, useListReturn, useReturnState } from '@/lib/scroll-memory'
 
 const TYPE_LABEL: Record<StandardEntryRow['entry_type'], string> = {
@@ -54,11 +58,11 @@ export function entryPath(id: number) {
 }
 
 /** 处理修订：读取器版本，不是标准版本 */
-function revisionLabel(d: { reader_version: string }) {
+export function revisionLabel(d: { reader_version: string }) {
   return `读取器 v${d.reader_version}`
 }
 
-function RevisionTag({ d }: { d: { is_current: boolean } }) {
+export function RevisionTag({ d }: { d: { is_current: boolean } }) {
   return d.is_current ? <Tag tone="gray">当前处理修订</Tag> : <Tag tone="yellow">历史处理修订</Tag>
 }
 
@@ -89,8 +93,8 @@ export function StandardDocumentsPage() {
   return (
     <>
       <PageHeader
-        title="标准资料"
-        description="已收录的卫生信息标准结构化资料，供查阅原文定义、值域与出处。只读参考：不表示医院已采用，也不判断院内数据是否合规。"
+        title="结构化处理修订"
+        description="每行一份结构化资料：某个资料包经某版读取器整理出的一项标准的数据元与值域。读取器版本是本库的处理修订，不是标准版本；标准的名称、状态与原文见“标准资料”。"
       />
       <DbToolbar>
         <ToggleChip
@@ -155,7 +159,7 @@ export function StandardDocumentsPage() {
   )
 }
 
-function Counts({ counts }: { counts: Record<string, number> }) {
+export function Counts({ counts }: { counts: Record<string, number> }) {
   const parts = (Object.keys(TYPE_LABEL) as StandardEntryRow['entry_type'][])
     .filter((t) => counts[t])
     .map((t) => `${TYPE_LABEL[t]} ${counts[t]}`)
@@ -183,7 +187,7 @@ export function StandardDocumentDetailPage() {
   const { data } = query
   useCrumb(data && !isDenial(query.error) ? standardLabel(data.standard_no, data.standard_year) : null)
   if (!data || isDenial(query.error))
-    return <DetailFallback what="标准资料" back={{ to: '/standards/library', label: '返回标准资料' }} query={query} invalid={!Number.isInteger(id)} />
+    return <DetailFallback what="标准资料" back={{ to: '/standards/library/revisions', label: '返回处理修订' }} query={query} invalid={!Number.isInteger(id)} />
   const p = data.package
   return (
     <>
@@ -199,7 +203,12 @@ export function StandardDocumentDetailPage() {
       <NewerRevision newer={data.newer_revision} what="结构化资料" />
       <PropertyList
         items={[
-          { label: '标准号', icon: Book02Icon, value: data.standard_no },
+          { label: '所属标准', icon: Book02Icon, value: <EditionLink edition={data.edition} /> },
+          {
+            label: '所据原文',
+            value: <SourceFile edition={data.edition} fileId={data.file_id} sha={data.source_sha256} />,
+          },
+          { label: '标准号', value: data.standard_no },
           { label: '原文年份', icon: Calendar03Icon, value: data.standard_year },
           { label: '已接入', value: <Counts counts={data.counts} /> },
           { label: '接入覆盖', value: <Coverage d={data} /> },
@@ -386,7 +395,7 @@ const isPaging = (v: unknown): v is Paging =>
  * 条目列表：检索词、标准 / 分册 / 原文年份筛选都交给服务端，在计数与分页之前生效；总数是匹配总数。
  * 筛选写在网址里（可分享），检索词与页码是本页状态（从详情返回时恢复）；集合条件一变就回到第一页。
  */
-function EntryBrowser({
+export function EntryBrowser({
   fixed,
   scopeKey,
   what,
@@ -587,10 +596,18 @@ export function StandardEntryDetailPage() {
         meta={
           <>
             {TYPE_LABEL[data.entry_type]} <span className="font-mono">{data.identifier}</span> ·{' '}
+            {data.edition ? (
+              <Link className="hover:underline" to={editionPath(data.edition.id)}>
+                {data.edition.title}（{standardLabel(data.edition.standard_no, data.edition.standard_year)}）
+              </Link>
+            ) : (
+              standardLabel(doc.standard_no, doc.standard_year)
+            )}{' '}
+            ·{' '}
             <Link className="hover:underline" to={`/standards/library/${doc.id}`}>
-              {standardLabel(doc.standard_no, doc.standard_year)}
+              {revisionLabel(doc)}
             </Link>{' '}
-            · {revisionLabel(doc)} · {doc.is_current ? '当前处理修订' : '历史处理修订'}
+            · {doc.is_current ? '当前处理修订' : '历史处理修订'}
           </>
         }
       />
@@ -923,7 +940,21 @@ function ProvenanceSection({ data }: { data: StandardEntryDetail }) {
           { label: '包内成员', value: <span className="font-mono text-caption break-all">{p.member}</span> },
           { label: '记录位置', value: <span className="font-mono text-caption">{p.json_pointer}</span> },
           { label: '源记录 ID', value: p.record_id && <span className="font-mono text-caption break-all">{p.record_id}</span> },
-          { label: 'PDF 物理页', value: pdfPages.length > 0 ? pdfPages.join('、') : null },
+          {
+            label: 'PDF 物理页',
+            value: pdfPages.length > 0 ? (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                {pdfPages.join('、')}
+                {data.file_id && data.edition && (
+                  <InlineLink to={fileViewerPath(data.edition.id, data.file_id, pdfPages[0])}>查看本条出处</InlineLink>
+                )}
+              </span>
+            ) : null,
+          },
+          {
+            label: '所据原文',
+            value: <SourceFile edition={data.edition} fileId={data.file_id} sha={p.source_sha256} />,
+          },
           { label: '印刷页码', value: printedPages.length > 0 ? printedPages.join('、') : null },
           { label: '表内位置', value: p.table_ref },
           { label: '资料复核状态', value: p.qa_status && <span className="font-mono text-caption">{p.qa_status}</span> },
@@ -969,5 +1000,36 @@ function ProvenanceSection({ data }: { data: StandardEntryDetail }) {
         复核状态与导入标记是资料包里记载的原值，只说明资料整理情况；不表示标准现行与否，也不表示医院已采用。资料记了图证路径不等于图随包提供。
       </p>
     </Section>
+  )
+}
+
+// ---------------------------------------------------------------- 挂到标准目录与原文（读取时计算）
+
+function EditionLink({ edition }: { edition?: EditionRef | null }) {
+  if (!edition) return <span className="text-fg-muted">目录未登记该标准</span>
+  return (
+    <Link className="text-fg-strong hover:underline" to={editionPath(edition.id)}>
+      {edition.title}（{standardLabel(edition.standard_no, edition.standard_year)}）
+    </Link>
+  )
+}
+
+/** 只按摘要认同一份文件：摘要对不上时不打开别的文件，也不按页码跳 */
+function SourceFile({ edition, fileId, sha }: { edition?: EditionRef | null; fileId?: number | null; sha?: string | null }) {
+  if (!edition) return <span className="text-fg-muted">目录未登记该标准</span>
+  if (fileId)
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        摘要一致的原文已登记
+        <InlineLink to={fileViewerPath(edition.id, fileId)}>打开原文</InlineLink>
+      </span>
+    )
+  return (
+    <span className="text-fg-muted">
+      未登记本条所据的原文{sha && <span className="font-mono">（摘要 {sha.slice(0, 12)}…）</span>}；该标准已登记的其他文件见
+      <Link className="text-fg-secondary ml-1 hover:underline" to={`${editionPath(edition.id)}?tab=files`}>
+        原文与附件
+      </Link>
+    </span>
   )
 }

@@ -41,6 +41,7 @@ from hdip_api.schemas.standards import (
     StandardEntryRow,
     ValueDomainBody,
 )
+from hdip_api.services.standard_catalog import link_documents
 from hdip_api.services.standards_import import _CV_FULL, CV_ID, search_text
 
 NOTE_OTHER_PART = "引用分册中未找到该值域；本库其他分册存在同编号表，仅供参考。"
@@ -185,6 +186,7 @@ def get_document(session: Session, doc_id: int) -> StandardDocumentDetail:
         raise NotFound("找不到这份标准资料")
     d, p = hit
     cat = _Catalog(session)
+    edition, file_id = link_documents(session, [d])[d.id]
     return StandardDocumentDetail(
         **_doc_row(cat, d, p, _counts(session).get(d.id, {})),
         package=PackageOut(
@@ -207,6 +209,8 @@ def get_document(session: Session, doc_id: int) -> StandardDocumentDetail:
         source_pdf=d.source_pdf,
         source_url=d.source_url,
         revisions=cat.revisions(d),
+        edition=edition,
+        file_id=file_id,
     )
 
 
@@ -520,4 +524,5 @@ def get_entry(session: Session, entry_id: int) -> StandardEntryDetail:
         )
     ]
     detail.referenced_by = _incoming(session, cat, e)
+    detail.edition, detail.file_id = link_documents(session, [d])[d.id]
     return detail
