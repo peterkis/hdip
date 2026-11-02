@@ -23,5 +23,7 @@ export interface EditionVersionOut {
   file_identity: string | null;
   note: string | null;
   change_note: string;
+  /** 这一版用到的人工更正编号 */
+  correction_keys?: string[];
   recorded_at: string;
 }

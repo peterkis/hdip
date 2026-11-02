@@ -698,6 +698,9 @@ class StandardEditionVersion(Base):
     file_identity: Mapped[str | None] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
     change_note: Mapped[str] = mapped_column(Text)
+    correction_keys: Mapped[list[str]] = mapped_column(
+        ARRAY(Text), server_default=text("'{}'::text[]")
+    )
     recorded_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
 
 
@@ -734,4 +737,53 @@ class StandardFile(Base):
     bytes: Mapped[int] = mapped_column(BigInteger)
     sha256: Mapped[str] = mapped_column(Text)
     note: Mapped[str | None] = mapped_column(Text)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardEditionClaim(Base):
+    """来源记录对一项标准的原样写法（迁移 0027）：冲突全部保留，不覆盖当前目录。"""
+
+    __tablename__ = "standard_edition_claim"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    source: Mapped[str] = mapped_column(Text)
+    source_file: Mapped[str] = mapped_column(Text)
+    source_sha256: Mapped[str] = mapped_column(Text)
+    record_key: Mapped[str] = mapped_column(Text)
+    recorded_at: Mapped[str | None] = mapped_column(Text)
+    standard_no: Mapped[str | None] = mapped_column(Text)
+    standard_year: Mapped[str | None] = mapped_column(Text)
+    code_as_written: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str | None] = mapped_column(Text)
+    issued: Mapped[str | None] = mapped_column(Text)
+    effective: Mapped[str | None] = mapped_column(Text)
+    abolished: Mapped[str | None] = mapped_column(Text)
+    url: Mapped[str | None] = mapped_column(Text)
+    file_sha256: Mapped[str | None] = mapped_column(Text)
+    raw: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
+class StandardCatalogCorrection(Base):
+    """人工更正表的一行（迁移 0027）：更正或撤销，登记后不可改。"""
+
+    __tablename__ = "standard_catalog_correction"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    correction_key: Mapped[str] = mapped_column(Text)
+    action: Mapped[str] = mapped_column(Text)
+    edition_id: Mapped[int | None] = mapped_column(ForeignKey("standard_edition.id"))
+    field: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)
+    clears: Mapped[bool] = mapped_column(server_default=text("false"))
+    withdraws_key: Mapped[str | None] = mapped_column(Text)
+    basis_url: Mapped[str | None] = mapped_column(Text)
+    basis_sha256: Mapped[str | None] = mapped_column(Text)
+    basis_pages: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    confirmed_by: Mapped[str] = mapped_column(Text)
+    confirmed_on: Mapped[date]
     registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))

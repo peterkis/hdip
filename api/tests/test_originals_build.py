@@ -35,9 +35,16 @@ PREFIX_VARIANT = b"%PDF cover says WS 1-2020"
 BAD = b"%PDF bytes differ from uniData record"
 
 
-def build(tmp: Path, extra_inventory: list[dict] | tuple = ()) -> Path:
+def build(
+    tmp: Path, extra_inventory: list[dict] | tuple = (), extra_official: list[tuple] | tuple = ()
+) -> Path:
+    """extra_official：[(官网目录行, 下载文件字节)]，追加在 WS/T 1-2020 那一行之后。"""
     official = tmp / "official"
     write(official / "pdf" / "a.pdf", OFFICIAL_PDF)
+    extra_rows = []
+    for i, (row, data) in enumerate(extra_official):
+        write(official / "pdf" / f"x{i}.pdf", data)
+        extra_rows.append(dict(row, pdfRelativePath=f"pdf/x{i}.pdf"))
     (official / "standards.json").write_text(
         json.dumps(
             {
@@ -54,7 +61,8 @@ def build(tmp: Path, extra_inventory: list[dict] | tuple = ()) -> Path:
                         "onlineUrl": "https://example.test/o",
                         "downloadUrl": "https://example.test/dl",
                         "pdfRelativePath": "pdf/a.pdf",
-                    }
+                    },
+                    *extra_rows,
                 ],
             },
             ensure_ascii=False,
@@ -112,6 +120,18 @@ def build(tmp: Path, extra_inventory: list[dict] | tuple = ()) -> Path:
     ]  # fmt: skip
     cat = uni / "catalog"
     cat.mkdir(parents=True)
+    historical = {
+        "claim_kind": "historical_catalog_claim", "source": "historical/standards.csv",
+        "source_pointer": "row:2", "as_written_code": "WS/T 1-2020", "as_written_title": "甲标准",
+        "source_sha256": None,
+        "raw": {"status": "现行", "edition": "2020", "issue_date": "2020-01-01",
+                "effective_date": "2020-06-01"},
+    }  # fmt: skip
+    official_kind = dict(historical, claim_kind="official_catalog_claim")  # 与快照重复，不收
+    (cat / "catalog_claims.jsonl").write_text(
+        "".join(json.dumps(x, ensure_ascii=False) + "\n" for x in (historical, official_kind)),
+        encoding="utf-8",
+    )
     for name, items in (("standard_editions.jsonl", editions), ("standard_files.jsonl", files)):
         (cat / name).write_text(
             "".join(json.dumps(x, ensure_ascii=False) + "\n" for x in items), encoding="utf-8"
@@ -190,3 +210,46 @@ def test_verified_cover_still_marks_wrong_link(tmp_path):
     assert eds["WS/T 1"]["差异类别"] == "错链"
     [f] = [r for r in rows(cat / "files.csv") if r["sha256"] == sha(OFFICIAL_PDF)]
     assert f["目录"] == "WS-T/WS-T-2_2020"
+
+
+WS438_TEXT = b"%PDF WS 438-2013 cover"
+WS439_TEXT = b"%PDF WS 439-2013 cover"
+
+
+def test_duplicate_catalog_rows_named_by_own_file(tmp_path):
+    """官网目录同号列两次（WS 439—2013）：目录字段取下载文件归属本条的那一行；
+    指向别的标准文件的那一行（裂头蚴病 = WS 438 的文件）只作来源声明与备注（G2）。"""
+    row = {"code": "WS 439-2013", "status": "现行", "issueDate": "2013-06-14",
+           "actDate": "2013-12-01", "category": "其他"}  # fmt: skip
+    cat = build(
+        tmp_path,
+        extra_inventory=[
+            {"sha256": sha(WS438_TEXT), "code": "WS 438", "year": 2013, "drive_name": "WS438.pdf",
+             "drive_url": "", "folder_key": "98", "title": "裂头蚴病的诊断",
+             "identity_verified": True, "size": len(WS438_TEXT)},
+        ],
+        extra_official=[
+            (dict(row, name="裂头蚴病的诊断", detailUrl="https://example.test/wrong"), WS438_TEXT),
+            (dict(row, name="钩虫病的诊断", detailUrl="https://example.test/right"), WS439_TEXT),
+        ],
+    )  # fmt: skip
+    eds = {(r["编号"], r["年份"]): r for r in rows(cat / "editions.csv")}
+    ws439 = eds[("WS 439", "2013")]
+    assert (ws439["名称"], ws439["官网详情"]) == ("钩虫病的诊断", "https://example.test/right")
+    assert "官网目录重复列出：WS 439-2013《裂头蚴病的诊断》" in ws439["备注"]
+    files = {r["sha256"]: r["目录"] for r in rows(cat / "files.csv")}
+    assert files[sha(WS438_TEXT)] == "WS/WS-438_2013"  # 错链文件归到封面那项标准
+    assert files[sha(WS439_TEXT)] == "WS/WS-439_2013"
+    # 两条官网记录都作为来源声明原样保留
+    with open(cat / "claims.jsonl", encoding="utf-8") as fh:
+        claims = [json.loads(line) for line in fh]
+    official = [
+        (c["名称"], c["文件sha256"]) for c in claims if c["来源"] == "官网目录快照"
+        and c["编号"] == "WS 439"
+    ]  # fmt: skip
+    assert official == [("裂头蚴病的诊断", sha(WS438_TEXT)), ("钩虫病的诊断", sha(WS439_TEXT))]
+    drive = [c for c in claims if c["来源"] == "Drive 归档清单" and c["编号"] == "WS 438"]
+    assert drive and drive[0]["记录位置"] == "$.files[1]"
+    # uniData 只收历史目录与补源记录；官网、Drive 两类与上面重复，不再收
+    uni = [(c["来源"], c["编号"], c["实施日期"]) for c in claims if c["来源"].startswith("uniData")]
+    assert uni == [("uniData 历史目录", "WS/T 1", "2020-06-01")]

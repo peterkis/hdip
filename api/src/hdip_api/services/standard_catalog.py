@@ -19,11 +19,15 @@ from hdip_api.models import (
     ReferenceMaterial,
     SourceDocument,
     SourcePackage,
+    StandardCatalogCorrection,
     StandardEdition,
+    StandardEditionClaim,
     StandardEditionVersion,
     StandardFile,
 )
 from hdip_api.schemas.standards import (
+    CatalogCorrectionOut,
+    EditionClaimOut,
     EditionRef,
     EditionRevision,
     EditionStatus,
@@ -258,7 +262,58 @@ def get_edition(session: Session, edition_id: int) -> StandardEditionDetail:
         versions=[_version_out(v) for v in versions],
         files=[_file_out(f) for f in files],
         revisions=revisions,
+        claims=_claims(session, e, by_sha),
+        corrections=_corrections(session, e),
     )
+
+
+def _claims(session: Session, e: StandardEdition, by_sha: dict[str, int]) -> list[EditionClaimOut]:
+    """按原样写的标准号 + 年份、按文件摘要两种关联取来源声明；两种都列出，不替人选定。"""
+    same_no = and_(
+        StandardEditionClaim.standard_no == e.standard_no,
+        StandardEditionClaim.standard_year == e.standard_year,
+    )
+    cond = or_(same_no, StandardEditionClaim.file_sha256.in_(list(by_sha))) if by_sha else same_no
+    out = []
+    for c in session.scalars(
+        select(StandardEditionClaim)
+        .where(cond)
+        .order_by(StandardEditionClaim.source, StandardEditionClaim.id)
+    ):
+        by_no = (c.standard_no, c.standard_year) == (e.standard_no, e.standard_year)
+        file_id = by_sha.get(c.file_sha256 or "")
+        linked = "both" if by_no and file_id else "standard_no" if by_no else "file"
+        out.append(
+            EditionClaimOut(
+                **{k: getattr(c, k) for k in EditionClaimOut.model_fields if hasattr(c, k)},
+                file_id=file_id,
+                linked_by=linked,
+            )
+        )
+    return out
+
+
+def _corrections(session: Session, e: StandardEdition) -> list[CatalogCorrectionOut]:
+    rows = list(
+        session.scalars(
+            select(StandardCatalogCorrection).where(StandardCatalogCorrection.edition_id == e.id)
+        )
+    )
+    keys = [c.correction_key for c in rows]
+    withdraws = list(
+        session.scalars(
+            select(StandardCatalogCorrection).where(
+                StandardCatalogCorrection.withdraws_key.in_(keys)
+            )
+        )
+    )
+    by = {w.withdraws_key: w.correction_key for w in withdraws}
+    return [
+        CatalogCorrectionOut.model_validate(c, from_attributes=True).model_copy(
+            update={"withdrawn_by": by.get(c.correction_key)}
+        )
+        for c in sorted(rows + withdraws, key=lambda c: c.correction_key)
+    ]
 
 
 def link_documents(

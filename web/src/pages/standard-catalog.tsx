@@ -567,6 +567,8 @@ function Overview({ data }: { data: StandardEditionDetail }) {
           <p className="text-fg-muted text-caption">官方目录条目是入口，文件封面是证据；两边写法都保留，不按封面改写目录。</p>
         </Section>
       )}
+      <ClaimsSection data={data} />
+      {(data.corrections ?? []).length > 0 && <CorrectionsSection data={data} />}
       <Section title={`登记历史（${data.versions.length}）`}>
         <ol className="grid gap-2">
           {[...data.versions].reverse().map((v) => (
@@ -580,6 +582,148 @@ function Overview({ data }: { data: StandardEditionDetail }) {
         <p className="text-fg-muted text-caption">目录信息每改一次追加一次登记，旧的保留；这是目录记录的修订，不是标准版本。</p>
       </Section>
     </>
+  )
+}
+
+// ---------------------------------------------------------------- 各来源写法与人工更正（G2）
+
+const CORR_FIELD: Record<string, string> = {
+  title: '名称',
+  issued_on: '发布日期',
+  effective_on: '实施日期',
+  abolished_on: '废止日期',
+  difference: '差异类别',
+  file_identity: '文件内标识',
+  note: '备注',
+}
+
+// 只为比较去掉排版差异（全角 / 半角冒号与空白）；显示仍是来源原样
+const norm = (v: string) => v.replace(/[:：\s]/g, '')
+
+/** 与当前目录值不同的格子标黄；来源没写（空）不算不同 */
+function Diff({ value, current }: { value?: string | null; current?: string | null }) {
+  if (!value) return <span className="text-fg-muted">—</span>
+  const differs = current != null && norm(value) !== norm(current)
+  return differs ? (
+    <span className="bg-tag-yellow-bg text-tag-yellow-text rounded-sm px-1" title={`当前目录：${current}`}>
+      {value}
+    </span>
+  ) : (
+    <>{value}</>
+  )
+}
+
+function ClaimsSection({ data }: { data: StandardEditionDetail }) {
+  const c = data.current
+  return (
+    <Section title={`各来源写法（${(data.claims ?? []).length}）`}>
+      {(data.claims ?? []).length === 0 ? (
+        <p className="text-fg-muted text-xs">没有登记来源声明。</p>
+      ) : (
+        <DbTable
+          columns={[
+            { label: '来源', className: 'min-w-40' },
+            { label: '标准号写法' },
+            { label: '名称', className: 'min-w-48' },
+            { label: '状态', className: 'min-w-32' },
+            { label: '实施日期', icon: Calendar03Icon },
+            { label: '原文' },
+          ]}
+        >
+          <DbRow>
+            <DbCell className="text-fg-strong font-medium">当前目录</DbCell>
+            <DbCell className="text-fg-secondary whitespace-nowrap">{c.catalog_code ?? standardLabel(data.standard_no, data.standard_year)}</DbCell>
+            <DbCell className="text-fg">{c.title}</DbCell>
+            <DbCell className="text-fg whitespace-nowrap">{STATUS[data.status].label}</DbCell>
+            <DbCell className="text-fg tabular-nums whitespace-nowrap">{c.effective_on ?? <span className="text-fg-muted">未登记</span>}</DbCell>
+            <DbCell />
+          </DbRow>
+          {(data.claims ?? []).map((cl) => (
+            <DbRow key={cl.id}>
+              <DbCell>
+                <div className="text-fg-secondary">{cl.source}</div>
+                <div className="text-fg-muted text-caption break-all">
+                  {cl.recorded_at ? `${cl.recorded_at.slice(0, 10)} · ` : ''}
+                  {cl.record_key}
+                </div>
+                <details className="text-caption">
+                  <summary className="text-fg-muted hover:text-fg cursor-pointer">原记录</summary>
+                  <pre className="bg-surface-subtle text-fg-secondary mt-1 max-w-md overflow-x-auto rounded-md p-2 whitespace-pre-wrap">
+                    {JSON.stringify(cl.raw, null, 2)}
+                  </pre>
+                </details>
+              </DbCell>
+              <DbCell className="whitespace-nowrap">
+                <div className="text-fg-secondary">{cl.code_as_written || '—'}</div>
+                {cl.linked_by === 'file' && <Tag tone="yellow">按文件关联</Tag>}
+              </DbCell>
+              <DbCell className="text-fg">
+                <Diff value={cl.title} current={c.title} />
+              </DbCell>
+              <DbCell className="text-fg-secondary">{cl.status || <span className="text-fg-muted">—</span>}</DbCell>
+              <DbCell className="text-fg tabular-nums whitespace-nowrap">
+                <Diff value={cl.effective} current={c.effective_on} />
+              </DbCell>
+              <DbCell className="whitespace-nowrap">
+                {cl.file_id ? (
+                  <InlineLink to={fileViewerPath(data.id, cl.file_id)}>{cl.file_sha256?.slice(0, 8)}…</InlineLink>
+                ) : cl.file_sha256 ? (
+                  <span className="text-fg-muted font-mono text-caption">{cl.file_sha256.slice(0, 8)}…</span>
+                ) : (
+                  <span className="text-fg-muted">—</span>
+                )}
+              </DbCell>
+            </DbRow>
+          ))}
+        </DbTable>
+      )}
+      <p className="text-fg-muted text-caption">
+        每行是一条来源记录的原样写法，只说明该来源当时这样记载，不改当前目录；冲突全部保留。标黄的是与当前目录不同的值。“按文件关联”表示这条记录写的标准号与本条不同，只因指向的文件在本条下而列出。
+      </p>
+    </Section>
+  )
+}
+
+function CorrectionsSection({ data }: { data: StandardEditionDetail }) {
+  return (
+    <Section title={`人工更正（${(data.corrections ?? []).length}）`}>
+      <ul className="grid gap-3">
+        {(data.corrections ?? []).map((k) => (
+          <li key={k.correction_key} className="grid gap-0.5 text-xs">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-fg-strong font-mono">{k.correction_key}</span>
+              {k.action === 'CORRECT' ? (
+                <>
+                  <span className="text-fg-strong">
+                    {CORR_FIELD[k.field ?? ''] ?? k.field} → {k.clears ? '（清空）' : k.new_value}
+                  </span>
+                  {k.withdrawn_by ? <Tag tone="gray">已由 {k.withdrawn_by} 撤销</Tag> : <Tag tone="green">生效</Tag>}
+                </>
+              ) : (
+                <span className="text-fg-strong">撤销 {k.withdraws_key}</span>
+              )}
+            </div>
+            {k.note && <div className="text-fg-secondary">{k.note}</div>}
+            <div className="text-fg-muted text-caption">
+              确认：{k.confirmed_by} · {k.confirmed_on}
+              {k.basis_url && (
+                <>
+                  {' · '}
+                  <a className="hover:text-fg underline" href={k.basis_url} target="_blank" rel="noreferrer">
+                    依据
+                  </a>
+                </>
+              )}
+              {k.basis_pages && <> · {k.basis_pages}</>}
+              {k.basis_sha256 && <> · 依据文件 {k.basis_sha256.slice(0, 12)}…</>}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="text-fg-muted text-caption">
+        人工更正只改目录描述，记在仓库的更正表里，逐行写明依据与确认人；撤销另起一行，旧的照样可查。这不表示医院已采用该标准。
+      </p>
+    </Section>
   )
 }
 

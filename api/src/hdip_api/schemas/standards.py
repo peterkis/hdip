@@ -323,6 +323,7 @@ class EditionVersionOut(BaseModel):
     file_identity: str | None
     note: str | None
     change_note: str
+    correction_keys: list[str] = Field(default=[], description="这一版用到的人工更正编号")
     recorded_at: datetime
 
 
@@ -352,11 +353,62 @@ class EditionRevision(BaseModel):
     file_id: int | None = Field(description="摘要相同的原文文件；没有为空，不按页码跳转")
 
 
+class EditionClaimOut(BaseModel):
+    """一条来源记录对这项标准的原样写法（迁移 0027）：该来源当时这样记载，不是当前目录。"""
+
+    id: int
+    source: str = Field(
+        description="官网目录快照 / Drive 归档清单 / uniData 历史目录 / uniData 补源记录"
+    )
+    source_file: str
+    source_sha256: str
+    record_key: str = Field(description="记录在来源文件里的位置")
+    recorded_at: str | None
+    code_as_written: str | None
+    standard_no: str | None
+    standard_year: str | None
+    title: str | None
+    status: str | None
+    issued: str | None
+    effective: str | None
+    abolished: str | None
+    url: str | None
+    file_sha256: str | None
+    file_id: int | None = Field(description="本标准下摘要相同的文件；没有为空")
+    linked_by: Literal["standard_no", "file", "both"] = Field(
+        description="怎样关联到本标准：原样写的标准号 + 年份相同 / 指向的文件在本标准下 / 两者都是"
+    )
+    raw: dict
+
+
+class CatalogCorrectionOut(BaseModel):
+    correction_key: str
+    action: Literal["CORRECT", "WITHDRAW"]
+    field: str | None
+    new_value: str | None
+    clears: bool
+    withdraws_key: str | None
+    withdrawn_by: str | None = Field(None, description="撤销这条更正的那一行编号")
+    basis_url: str | None
+    basis_sha256: str | None
+    basis_pages: str | None
+    note: str | None
+    confirmed_by: str
+    confirmed_on: date
+    registered_at: datetime
+
+
 class StandardEditionDetail(StandardEditionRow):
     current: EditionVersionOut
     versions: list[EditionVersionOut] = Field(description="目录信息的登记历史，按 seq 从早到晚")
     files: list[StandardFileOut]
     revisions: list[EditionRevision] = Field(description="全部处理修订，当前的排在前面")
+    claims: list[EditionClaimOut] = Field(
+        default=[], description="各来源的原样写法：按标准号 + 年份或按文件摘要关联，冲突全部保留"
+    )
+    corrections: list[CatalogCorrectionOut] = Field(
+        default=[], description="针对本标准的人工更正与撤销，按编号排序"
+    )
 
 
 StandardDocumentDetail.model_rebuild()

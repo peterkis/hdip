@@ -257,7 +257,32 @@ for r in csv.DictReader(open(official / "download_log.csv", encoding="utf-8-sig"
         log[r["filename"]] = r
 snapshot = json.load(open(official / "standards.json", encoding="utf-8"))
 std, collected = snapshot["standards"], snapshot["collectedAt"][:10]
-for s in std:
+
+_digests: dict = {}
+
+
+def wrong_link(s):
+    """The row's download is a file the archive verified as another standard number."""
+    p = official / (s.get("pdfRelativePath") or "")
+    if not (s.get("pdfRelativePath") and p.is_file()):
+        return False
+    if p not in _digests:
+        _digests[p] = sha(p)
+    cov, key = cover_of(_digests[p]), parse(s["code"])
+    return bool(cov and key and cov[0][1] != key[1])
+
+
+# The official catalog lists some standards more than once (WS 439—2013, WS/T 572—2017). The
+# catalog fields come from the first row whose own download is not a wrong link, so a row
+# that points at another standard's file (WS 439 "裂头蚴病的诊断" = WS 438's file) never names
+# the entry; the other rows stay as sources and notes (docs/标准资料库-uniData接入计划.md G2).
+preferred: dict = {}
+for i, s in enumerate(std):
+    key = parse(s["code"])
+    if key and (key not in preferred or (wrong_link(std[preferred[key]]) and not wrong_link(s))):
+        preferred[key] = i
+
+for i, s in enumerate(std):
     key = parse(s["code"])
     p = official / (s.get("pdfRelativePath") or "")
     has_pdf = bool(s.get("pdfRelativePath")) and p.is_file()
@@ -293,8 +318,10 @@ for s in std:
     e = edition(key, s["code"].strip(), s["name"], stub=False)
     if e["_stub"]:  # created earlier as the target of another row's wrong link
         e.update(标准号=s["code"].strip(), 名称=s["name"], _stub=False)
-    if not e["官网状态"]:
+    if preferred.get(key) == i:
         e.update(
+            标准号=s["code"].strip(),
+            名称=s["name"],
             官网状态=s["status"],
             批准日期=s.get("issueDate", ""),
             实施日期=s.get("actDate", ""),
@@ -304,7 +331,10 @@ for s in std:
             核实日期=collected,
             核实依据="全国标准信息公共服务平台“卫生健康委员会”分类目录快照",
         )
-    elif e["标准号"] != s["code"].strip() or e["名称"] != s["name"]:
+    elif (std[preferred[key]]["code"].strip(), std[preferred[key]]["name"]) != (
+        s["code"].strip(),
+        s["name"],
+    ):
         note(e, f"官网目录重复列出：{s['code'].strip()}《{s['name']}》（{s['status']}）")
     if not has_pdf:
         if not e["官网PDF"]:
@@ -654,6 +684,113 @@ write(
 )
 
 
+# Source claims (G2): every record that states something about a standard, kept as written,
+# conflicts included. The standard is named only by the record's own number + year; the file
+# digest is kept beside it. Nothing here decides which source is right.
+def claim(source, source_file, source_sha, pointer, recorded, code, year, **kw):
+    key = parse(code or "", year)
+    return dict(
+        {
+            "来源": source,
+            "来源文件": source_file,
+            "来源文件sha256": source_sha,
+            "记录位置": pointer,
+            "记录时间": recorded or "",
+            "编号": f"{key[0].replace('-', '/')} {key[1]}" if key else "",
+            "年份": key[2] if key else "",
+            "标准号写法": (code or "").strip(),
+            "名称": "",
+            "状态": "",
+            "发布日期": "",
+            "实施日期": "",
+            "废止日期": "",
+            "地址": "",
+            "文件sha256": "",
+        },
+        **kw,
+    )
+
+
+claims = []
+snap_sha = sha(official / "standards.json")
+for i, s in enumerate(std):
+    p = official / (s.get("pdfRelativePath") or "")
+    claims.append(
+        claim(
+            "官网目录快照",
+            "standards.json",
+            snap_sha,
+            f"$.standards[{i}]",
+            snapshot.get("collectedAt", ""),
+            s["code"],
+            None,
+            名称=s["name"],
+            状态=s.get("status", ""),
+            发布日期=s.get("issueDate", ""),
+            实施日期=s.get("actDate", ""),
+            地址=s.get("detailUrl", ""),
+            文件sha256=_digests.get(p)
+            or (sha(p) if s.get("pdfRelativePath") and p.is_file() else ""),
+            原记录=s,
+        )
+    )
+inv_sha = sha(args.inventory)
+for part in ("files", "nonpdf_records"):
+    for i, r in enumerate(inv.get(part, [])):
+        code = r.get("standard_id") or r.get("code") or ""
+        if part == "nonpdf_records":
+            code = code.split("/AM")[0]
+        claims.append(
+            claim(
+                "Drive 归档清单",
+                args.inventory.name,
+                inv_sha,
+                f"$.{part}[{i}]",
+                inv.get("generated_at_utc", ""),
+                code,
+                r.get("year"),
+                名称=r.get("title", "") or "",
+                状态=r.get("status", "") or "",
+                文件sha256=r.get("sha256", ""),
+                原记录=r,
+            )
+        )
+if args.unidata:
+    claims_path = args.unidata / "catalog" / "catalog_claims.jsonl"
+    u_sha = sha(claims_path)
+    kinds = {
+        "historical_catalog_claim": "uniData 历史目录",
+        "supplement_source_claim": "uniData 补源记录",
+    }
+    with open(claims_path, encoding="utf-8") as fh:
+        for line in fh:
+            c = json.loads(line)
+            if c["claim_kind"] not in kinds:  # official / archive kinds repeat the two above
+                continue
+            raw = c.get("raw") or {}
+            claims.append(
+                claim(
+                    kinds[c["claim_kind"]],
+                    "catalog/catalog_claims.jsonl",
+                    u_sha,
+                    f"{c['source']}#{c['source_pointer']}",
+                    "",
+                    c.get("as_written_code") or "",
+                    raw.get("edition"),
+                    名称=c.get("as_written_title") or "",
+                    状态=raw.get("status", "") or "",
+                    发布日期=raw.get("issue_date", "") or "",
+                    实施日期=raw.get("effective_date", "") or "",
+                    地址=raw.get("url", "") or "",
+                    文件sha256=c.get("source_sha256") or "",
+                    原记录=raw,
+                )
+            )
+with open(catalog / "claims.jsonl", "w", encoding="utf-8") as fh:
+    for c in claims:
+        fh.write(json.dumps(c, ensure_ascii=False, sort_keys=True) + "\n")
+
+
 def coverage(rs, e):
     if e["差异类别"] == "目录与文件标识不一致":
         return "身份冲突"
@@ -761,6 +898,7 @@ counts = [
     ("归档文件", len(files), "官网下载不同字节 + Drive 独有已归档"),
     ("目录·版次记录", len(editions), "不是已确认的标准数"),
     ("参考资料", len(references), "没有标准号，另立身份，不进标准统计"),
+    ("来源声明", len(claims), "每条来源记录原样一条，冲突全部保留"),
 ]
 for k, v in Counter(r["收录情况"] for r in erows).items():
     counts.append((f"目录·版次记录·{k}", v, ""))
