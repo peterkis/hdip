@@ -19,7 +19,13 @@ const OrganizationOverviewPage = lazy(() =>
 )
 import { ServiceUnitsPage } from '@/pages/service-unit-list'
 import { ServiceUnitDetailPage } from '@/pages/service-units'
-import { StandardCatalogPage, StandardEditionDetailPage, StandardFileViewerPage } from '@/pages/standard-catalog'
+import {
+  ReferenceFileViewerPage,
+  ReferenceMaterialDetailPage,
+  StandardCatalogPage,
+  StandardEditionDetailPage,
+  StandardFileViewerPage,
+} from '@/pages/standard-catalog'
 import { DataElementsPage, StandardDocumentDetailPage, StandardDocumentsPage, StandardEntryDetailPage, ValueDomainsPage } from '@/pages/standards'
 
 export function App() {
@@ -57,6 +63,8 @@ export function App() {
             <Route path="standards/library/revisions" element={<StandardDocumentsPage />} />
             <Route path="standards/library/editions/:id" element={<StandardEditionDetailPage />} />
             <Route path="standards/library/editions/:id/files/:fileId" element={<StandardFileViewerPage />} />
+            <Route path="standards/library/references/:id" element={<ReferenceMaterialDetailPage />} />
+            <Route path="standards/library/references/:id/files/:fileId" element={<ReferenceFileViewerPage />} />
             <Route path="standards/library/:id" element={<StandardDocumentDetailPage />} />
             <Route path="standards/library/entries/:id" element={<StandardEntryDetailPage />} />
             <Route path="standards/data-elements" element={<DataElementsPage />} />

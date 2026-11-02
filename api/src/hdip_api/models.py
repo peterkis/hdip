@@ -701,14 +701,29 @@ class StandardEditionVersion(Base):
     recorded_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
 
 
+class ReferenceMaterial(Base):
+    """没有标准号的官方资料（迁移 0026）：只留身份，不冒充标准。"""
+
+    __tablename__ = "reference_material"
+    __mapper_args__ = {"eager_defaults": True}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    category: Mapped[str] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(Text)
+    year: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str | None] = mapped_column(Text)
+    registered_at: Mapped[datetime] = mapped_column(server_default=text("LOCALTIMESTAMP"))
+
+
 class StandardFile(Base):
-    """原件层里挂在标准下的文件；页面只用 id，不暴露路径。"""
+    """原件层里的文件，属于一项标准或一份参考资料；页面只用 id，不暴露路径。"""
 
     __tablename__ = "standard_file"
     __mapper_args__ = {"eager_defaults": True}
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    edition_id: Mapped[int] = mapped_column(ForeignKey("standard_edition.id"))
+    edition_id: Mapped[int | None] = mapped_column(ForeignKey("standard_edition.id"))
+    reference_id: Mapped[int | None] = mapped_column(ForeignKey("reference_material.id"))
     role: Mapped[str] = mapped_column(Text)
     source: Mapped[str] = mapped_column(Text)
     identity_check: Mapped[str] = mapped_column(Text)

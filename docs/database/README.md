@@ -62,7 +62,7 @@ erDiagram
 | 部门组织变更 | `department_change_event`、`department_change_participant` | 整体拆分 / 分设 / 吸收合并 / 合并新设的事件与参与部门的身份结论；只追加（迁移 0012，见第 7 节） |
 | 人员 | `person` / `person_version`、`person_engagement`、`person_work_no`、`person_assignment`、`person_duty` | 人员身份 + 姓名版本；任用、业务工号、部门归属自带期间，结束日在到达前可改（迁移 0016，见第 8 节） |
 | 标准资料 | `source_package`、`source_document`、`standard_entry`、`standard_reference` | 外部标准原文的只读参考：来源包、结构化文档修订、类型化条目、来源中的引用。只由本地导入命令写入，不经变更申请，应用账号只读（迁移 0023，见第 9 节） |
-| 标准目录与原文 | `standard_edition`、`standard_edition_version`、`standard_file` | 一项标准（标准号 + 年份）的身份、只追加的目录信息（名称、官方状态与日期、核实依据），以及原件层里的原文文件。只由本地导入命令写入，应用账号只读；已有结构化成果在读取时按标准号 + 年份、原文摘要挂上（迁移 0025，见第 9.1 节） |
+| 标准目录与原文 | `standard_edition`、`standard_edition_version`、`standard_file`、`reference_material` | 一项标准（标准号 + 年份）的身份、只追加的目录信息（名称、官方状态与日期、核实依据），以及原件层里的原文文件。只由本地导入命令写入，应用账号只读；已有结构化成果在读取时按标准号 + 年份、原文摘要挂上（迁移 0025，见第 9.1 节） |
 
 院区版本自迁移 0010 起有“对外名称” `public_name`（对外叫法与名称不同时填写）；“节点角色” `node_role` 已停用，只保留历史取值。
 
@@ -98,7 +98,7 @@ erDiagram
    - 运营关系另外放开 `closed_change_id`、`closed_at`、`closed_by`，它们必须与结束日同一次写入。
    - 部门的赋值、归属、别名放开 `closed_change_id`，同样只能随结束日写入一次。
    - **配置字典例外**：`classification_scheme`、`classification_code` 放开名称、说明、排序、启用和维护记录列，供维护人直接维护；代码值与单选属性不可改。（迁移 0006 起，`department` 身份行整行不可更新，原先的过渡例外已收回。）
-3. **标准资料例外（迁移 0023、0025）**：标准资料七张表不是院内主数据，不经变更申请；`hdip_app` 只有 SELECT（迁移里 `REVOKE INSERT, UPDATE`），由本地导入命令用 `hdip_owner` 写入。来源包、条目、引用登记后整行不可改（`hdip_guard_update()`）；`source_document` 只允许导入命令更新接入覆盖（`covered_keys`、`imported_at`），其余列一律不可改（迁移 0024 起同样用 `hdip_guard_update('covered_keys', 'imported_at')`，取代 0023 手工列举身份字段的 `source_document_guard()`）。标准目录三张表（0025）登记后整行不可改，目录信息改动追加新的 `standard_edition_version` 行。见第 9 节。
+3. **标准资料例外（迁移 0023、0025、0026）**：标准资料八张表不是院内主数据，不经变更申请；`hdip_app` 只有 SELECT（迁移里 `REVOKE INSERT, UPDATE`），由本地导入命令用 `hdip_owner` 写入。来源包、条目、引用登记后整行不可改（`hdip_guard_update()`）；`source_document` 只允许导入命令更新接入覆盖（`covered_keys`、`imported_at`），其余列一律不可改（迁移 0024 起同样用 `hdip_guard_update('covered_keys', 'imported_at')`，取代 0023 手工列举身份字段的 `source_document_guard()`）。标准目录三张表（0025）登记后整行不可改，目录信息改动追加新的 `standard_edition_version` 行。见第 9 节。
 4. **变更申请终态**：`hdip_guard_change_request` 禁止修改已确认、已退回、已撤销的申请。
 5. **人员的期间（迁移 0016）**：任用、业务工号、部门归属用另一个触发器 `hdip_guard_open_end()`：只有 `valid_to`、`closed_change_id` 可改；**结束日在到达前可以改**（提前、推后、清空、撤销计划），改时必须同时记下本次申请；原结束日早于今天（`current_date`，会话时区）或原行是空期间时整行不可再改（约束名 `hdip_period_passed` / `hdip_history_immutable`）。组织各表仍用 `hdip_guard_update`（结束日只写一次），两者互不影响。
 
@@ -217,6 +217,7 @@ stateDiagram-v2
 | 0024 | 标准资料库：`source_document` 的更新保护改用允许列 `hdip_guard_update('covered_keys', 'imported_at')`（触发器名仍为 `source_document_guard`），移除 0023 的自定义函数 `source_document_guard()`（它漏了 `title`、`source_version`、`source_pdf`、`source_url` 等列）；已导入数据不动 |
 | 0023 | 标准资料库 F0：`source_package`（同字节只登记一次，与清单摘要不一致不登记）、`source_document`（标准号 + 原文年份 + 读取器版本的一份结构化修订，接入覆盖可更新）、`standard_entry`（`data_element` / `value_domain` / `code_row`，按“文档修订 + 类型 + 源记录键”唯一）、`standard_reference`（原文写明的标准号、年份文字、值域标识；解析在读取时计算）。`hdip_app` 只读 |
 | 0025 | 标准目录与原文：`standard_edition`（`series` + `standard_no` + `standard_year`，同号同年唯一，WS 与 WS/T 算两项）、`standard_edition_version`（目录信息只追加，`seq` 递增；`status` 只有 `CURRENT` / `ABOLISHED`，空 = 待核实，有状态须有核实日期与依据）、`standard_file`（`originals/` 下的文件，路径唯一，同一标准同一摘要只登记一次，角色 `TEXT` / `BOUND` / `ERRATA` / `PAGE_IMAGE` / `ORIGINAL_FORMAT`）。三表整行不可改，`hdip_app` 只读 |
+| 0026 | 参考资料：`reference_material`（没有标准号的官方资料，类别 `STAT_FORM` / `OFFICIAL_REFERENCE` / `PAYER_UPDATE` + 名称 + 年份唯一，只留身份、整行不可改）；`standard_file.edition_id` 改为可空、加 `reference_id`，`standard_file_owner_check` 保证二者恰有其一，`standard_file_reference_sha_uniq`。已登记文件行不动，`hdip_app` 只读 |
 
 ### 新增一类对象或变更的检查单
 
@@ -497,7 +498,7 @@ erDiagram
   - `/entries/{id}`
 - 测试：`api/tests/test_std.py`（STD-01～06）与 `test_std_f2.py`（读取器 v2、处理修订、引用解析规则、筛选与分页）。两者都用 `tests/std_helpers.py` 生成与主题 01 包同结构的小资料包，不依赖真实资料。
 
-### 9.1 标准目录与原文（迁移 0025）
+### 9.1 标准目录与原文（迁移 0025、0026）
 
 依据：`docs/标准资料库-目录与原文实施计划.md`。页面以标准为入口：目录 → 标准详情（概览 / 原文与附件 / 结构化内容 / 来源与处理记录）→ 原文页；处理修订列表移到 `/standards/library/revisions`。
 
@@ -515,5 +516,6 @@ erDiagram
   - `/files/{id}/content`：路径解析后须仍在 `originals/` 下，大小与登记一致，且对这一份流式重算的 SHA-256 与登记一致，否则 404（“不在资料目录 / 已变动”）、不给内容；只算当前请求的文件，不写回摘要。`Content-Disposition: inline`
   - `/documents/{id}` 与 `/entries/{id}` 增加 `edition`、`file_id`
 - **页面打开原文**：开发期身份在请求头里，前端取回文件生成 `blob:` 地址，在应用内原文页（`/standards/library/editions/:id/files/:fileId?page=N`）用内嵌框显示，PDF 跳到物理页；DOCX 只给下载。
-- 测试：`api/tests/test_std_catalog.py`（STD-07～13、导入反例、行不可改、应用账号只读），用临时目录里的小目录与文件，不依赖真实资料。
+- **参考资料（迁移 0026，`docs/标准资料库-uniData接入计划.md` U5）**：没有标准号的官方资料（统计报表、官方参考资料、医保更新）另立身份 `reference_material`（类别 + 名称 + 年份），不冒充标准：没有官方状态、没有目录版本，不进标准列表与计数；名称写错时按“不改旧行”另行处理。原件在 `originals/_相关官方资料/<年份>/`，`originals_build.py` 生成 `catalog/references.csv`，`files.csv` 用“资料类别 / 参考资料名称 / 资料年份”指向它；`import_catalog.py` 照标准的规则登记（少行、备注变化、文件指向不存在的资料都拒绝）。文件属于一项标准或一份参考资料，二者恰有其一。读取：`GET /api/standards/references?q=&category=&offset=&limit=`（先筛选再分页）与 `/references/{id}`（含文件）；原文读取接口不变。页面在“标准资料”用“标准 | 参考资料”切换。
+- 测试：`api/tests/test_std_catalog.py`（STD-07～13、参考资料、导入反例、行不可改、应用账号只读）与 `test_originals_build.py`（uniData 补源与参考资料的原件层合成），用临时目录里的小目录与文件，不依赖真实资料。
 

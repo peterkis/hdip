@@ -45,8 +45,7 @@ def main() -> int:
     verb = "将" if args.check else "已"
     print(
         f"{verb}新增标准 {res.editions_added}、目录版本 {res.versions_added}、"
-        f"文件 {res.files_added}；未变 {res.unchanged}；"
-        f"没有标准号的相关资料 {res.skipped_related} 份不登记"
+        f"参考资料 {res.references_added}、文件 {res.files_added}；未变 {res.unchanged}"
     )
     return 0
 

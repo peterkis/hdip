@@ -361,3 +361,30 @@ class StandardEditionDetail(StandardEditionRow):
 
 StandardDocumentDetail.model_rebuild()
 StandardEntryDetail.model_rebuild()
+
+
+# ---------------------------------------------------------------- 参考资料（迁移 0026）
+
+# 统计报表 / 官方参考资料 / 医保更新：没有标准号，不冒充标准
+ReferenceCategory = Literal["STAT_FORM", "OFFICIAL_REFERENCE", "PAYER_UPDATE"]
+
+
+class ReferenceMaterialRow(BaseModel):
+    id: int
+    category: ReferenceCategory
+    title: str
+    year: str | None = Field(description="资料年份文字，不是标准年份")
+    note: str | None
+    file_count: int
+
+
+class ReferenceMaterialPage(BaseModel):
+    items: list[ReferenceMaterialRow]
+    total: int = Field(description="符合筛选的参考资料总数（不是本页条数）")
+    offset: int
+    limit: int
+
+
+class ReferenceMaterialDetail(ReferenceMaterialRow):
+    files: list[StandardFileOut]
+    registered_at: datetime

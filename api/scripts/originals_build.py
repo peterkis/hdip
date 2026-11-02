@@ -3,7 +3,7 @@ one tree with catalogs.
 
 usage:
   python -I api/scripts/originals_build.py --official DIR --inventory JSON
-         --pool DIR [--pool DIR ...] [--structured TSV] --out ROOT
+         --pool DIR [--pool DIR ...] [--unidata DIR] [--structured TSV] --out ROOT
 
   --official    full copy of the 全国标准信息公共服务平台 download
                 (standards.json, download_log.csv, pdf/)
@@ -11,6 +11,11 @@ usage:
   --pool        folders holding files already fetched from Drive or handed over by the user
                 (an older originals tree, an inbox); a file is used only when its SHA-256
                 matches an inventory record
+  --unidata     uniData delivery root (docs/标准资料库-uniData接入计划.md G1); only its
+                supplement standards that are in neither the official catalog nor the Drive
+                inventory are taken, each file checked against uniData's own size and SHA-256.
+                Its editions that split a catalog row by the cover's WS / WS/T prefix are not
+                adopted (U1). Add its originals/ as a --pool to fill Drive records by digest.
   --structured  source_document export (see hdip-standards/README.md); links each processing
                 revision to the local file with its recorded source_sha256
   --out         a new, empty folder; gets originals/ and catalog/
@@ -43,6 +48,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--official", type=Path, required=True)
 ap.add_argument("--inventory", type=Path, required=True)
 ap.add_argument("--pool", type=Path, action="append", default=[])
+ap.add_argument("--unidata", type=Path)
 ap.add_argument("--structured", type=Path)
 ap.add_argument("--out", type=Path, required=True)
 args = ap.parse_args()
@@ -213,6 +219,21 @@ def put(dest, src, digest, row):
     )
     files[k] = row
     return row
+
+
+# Files without a standard number (统计报表, 官方参考资料, 医保更新) become reference materials:
+# their own identity (category + title + year), never a made-up standard number (U5).
+def reference_of(name):
+    stem = Path(name).stem
+    m = re.match(r"^(卫健统\d+表)-(.+?)_\d{4}_(.+)$", stem)
+    if m:
+        return "统计报表", m.group(3), f"{m.group(1)}；{m.group(2)}"
+    stem = re.sub(r"^官方参考资料_\d{4}_", "", stem)
+    stem = stem.replace("GB_T", "GB/T")  # file names cannot hold "/"
+    return ("医保更新" if "医保" in stem and "更新" in stem else "官方参考资料"), stem, ""
+
+
+references = {}  # (category, title, year) -> row
 
 
 def file_row(name, role, source, ident, complete="完整文件", remark=""):
@@ -452,7 +473,7 @@ for r in records:
     elif r["kind"] == "docx":
         role, complete = "原格式", "完整文件"
     else:
-        role, complete = ("正文" if key else "相关资料"), "完整文件"
+        role, complete = ("正文" if key else "参考资料"), "完整文件"
     dest = folder(key) if key else originals / "_相关官方资料" / str(r.get("year") or "无年份")
     if r["kind"] == "gif":
         dest = dest / "原页图"
@@ -464,12 +485,82 @@ for r in records:
     )
     placed[r["sha256"]] = row
     src_row["归档路径"] = f"{row['目录']}/{row['文件名']}"
+    if not key:
+        cat, title, extra = reference_of(name)
+        year = str(r.get("year") or "")
+        row.update(资料类别=cat, 参考资料名称=title, 资料年份=year)
+        ref = references.setdefault(
+            (cat, title, year), {"类别": cat, "名称": title, "年份": year, "备注": ""}
+        )
+        note(ref, extra)
     if key and key not in editions:
         edition(key, r["code"] or r.get("standard_id", ""), r.get("title", ""))["官网PDF"] = (
             "不在卫生健康委员会分类"
         )
     elif key and not editions[key]["名称"]:
         editions[key]["名称"] = r.get("title", "")
+
+# 2b uniData supplement standards (G1): in neither the official catalog nor the Drive inventory
+if args.unidata:
+
+    def jsonl(name):
+        with open(args.unidata / "catalog" / name, encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    u_editions = {e["edition_id"]: e for e in jsonl("standard_editions.jsonl")}
+    for f in jsonl("standard_files.jsonl"):
+        if f["sha256"] in placed:
+            continue
+        eds = [u_editions[i] for i in f.get("edition_ids") or [] if i in u_editions]
+        sup = [e for e in eds if e.get("metadata_basis") == "supplement_source_claim"]
+        src = args.unidata / f["stored_path"]
+        why = ""
+        if not sup:
+            why = (
+                "uniData 条目未采用：按封面写法另立的条目不引入（U1）"
+                if eds
+                else "uniData 资料不在 Drive 清单，未收"
+            )
+        elif not src.is_file() or os.path.getsize(src) != f["bytes"] or sha(src) != f["sha256"]:
+            why = "uniData 文件与其登记的大小或摘要不一致，未收"
+        if why:
+            unmatched.append(
+                {
+                    "来源": "uniData",
+                    "标识": f["original_name"],
+                    "原因": why,
+                    "字节": f.get("bytes", ""),
+                    "sha256": f["sha256"],
+                    "Drive文件ID": "",
+                }
+            )
+            continue
+        e = sup[0]
+        key = parse(e["standard_no"], e["standard_year"])
+        title = re.sub(r"^(GB|WS)[-_/]?T?[\d.]+_\d{4}_", "", Path(f["original_name"]).stem)
+        title = title.replace("_", " ")
+        row = put(
+            folder(key),
+            src,
+            f["sha256"],
+            file_row(f["original_name"], "正文", "uniData 补源", "uniData 记录，未逐份核对封面"),
+        )
+        placed[f["sha256"]] = row
+        sources.append(
+            {
+                "sha256": f["sha256"],
+                "归档路径": f"{row['目录']}/{row['文件名']}",
+                "来源": "uniData 补源",
+                "入口标识": f"{e['standard_no']}—{e['standard_year']}",
+                "入口名称": title,
+                "原文件名": f["original_name"],
+                "说明": f"uniData {e['edition_id']}；{f.get('identity_status', '')}",
+            }
+        )
+        ed = edition(key, f"{e['standard_no']}—{e['standard_year']}", title)
+        if not ed["官网PDF"]:
+            ed["官网PDF"] = "不在卫生健康委员会分类"
+        note(ed, "uniData 补源（用户提供的原件），状态与日期待核实")
 
 pages = Counter(r["目录"].removesuffix("/原页图") for r in files.values() if r["角色"] == "原页图")
 for r in records:  # page images: say how much of the set is here
@@ -553,8 +644,16 @@ write(
         "sha256",
         "结构化处理修订",
         "备注",
+        "资料类别",
+        "参考资料名称",
+        "资料年份",
     ],
     sorted(files.values(), key=lambda r: (r["目录"], r["角色"], r["文件名"])),
+)
+write(
+    "references.csv",
+    ["类别", "名称", "年份", "备注"],
+    sorted(references.values(), key=lambda r: (r["类别"], r["年份"], r["名称"])),
 )
 
 
@@ -664,6 +763,7 @@ counts = [
     ("Drive 记录·未取得", sum(1 for s in drv_src if not s.get("归档路径")), "见 unmatched.csv"),
     ("归档文件", len(files), "官网下载不同字节 + Drive 独有已归档"),
     ("目录·版次记录", len(editions), "不是已确认的标准数"),
+    ("参考资料", len(references), "没有标准号，另立身份，不进标准统计"),
 ]
 for k, v in Counter(r["收录情况"] for r in erows).items():
     counts.append((f"目录·版次记录·{k}", v, ""))

@@ -1,4 +1,5 @@
-"""标准目录与原文 STD-07～13（docs/标准资料库-目录与原文实施计划.md 第 7 节）。"""
+"""标准目录与原文 STD-07～13（docs/标准资料库-目录与原文实施计划.md 第 7 节）；
+参考资料（迁移 0026，docs/标准资料库-uniData接入计划.md G1）。"""
 
 import csv
 import hashlib
@@ -20,8 +21,18 @@ E_COLS = [
 ]  # fmt: skip
 F_COLS = [
     "目录", "文件名", "角色", "来源", "身份核对", "完整性", "字节", "sha256", "结构化处理修订",
-    "备注",
+    "备注", "资料类别", "参考资料名称", "资料年份",
 ]  # fmt: skip
+R_COLS = ["类别", "名称", "年份", "备注"]
+REFS = [
+    {
+        "类别": "统计报表",
+        "名称": "职业卫生技术服务信息报送卡",
+        "年份": "2025",
+        "备注": "卫健统52表",
+    },
+    {"类别": "医保更新", "名称": "医保药品分类与代码数据库更新", "年份": "2026", "备注": ""},
+]
 SNAP = "全国标准信息公共服务平台“卫生健康委员会”分类目录快照"
 DETAIL = "https://hbba.sacinfo.org.cn/stdDetail/"
 
@@ -49,10 +60,14 @@ def put_file(root: Path, folder: str, name: str, data: bytes, role="正文", **k
     } | kw  # fmt: skip
 
 
-def write_catalog(root: Path, editions: list[dict], files: list[dict]) -> None:
+def write_catalog(root: Path, editions: list[dict], files: list[dict], refs=REFS) -> None:
     cat = root / "catalog"
     cat.mkdir(parents=True, exist_ok=True)
-    for name, cols, rows in (("editions.csv", E_COLS, editions), ("files.csv", F_COLS, files)):
+    for name, cols, rows in (
+        ("editions.csv", E_COLS, editions),
+        ("files.csv", F_COLS, files),
+        ("references.csv", R_COLS, refs),
+    ):
         with open(cat / name, "w", encoding="utf-8-sig", newline="") as f:
             w = csv.DictWriter(f, cols)
             w.writeheader()
@@ -92,7 +107,16 @@ def lib(owner_engine, tmp_path, monkeypatch):
             来源="Drive 归档 03",
             身份核对="Drive 已核对封面",
         ),  # fmt: skip
-        put_file(tmp_path, "_相关官方资料/2016", "通告.pdf", b"%PDF notice", role="相关资料"),
+        put_file(
+            tmp_path,
+            "_相关官方资料/2025",
+            "卫健统52表.pdf",
+            b"%PDF stat form",
+            role="参考资料",
+            资料类别="统计报表",
+            参考资料名称="职业卫生技术服务信息报送卡",
+            资料年份="2025",
+        ),
     ]
     write_catalog(tmp_path, editions, files)
     load(owner_engine, tmp_path)
@@ -314,3 +338,77 @@ def test_catalog_app_account_is_read_only(app_engine, lib):
     with app_engine.connect() as c:
         with pytest.raises(DBAPIError):
             c.execute(text("UPDATE standard_file SET note = 'x'"))
+
+
+# ---------------------------------------------------------------- 参考资料（迁移 0026）
+
+
+def _refs(api, **params):
+    r = api.get("/api/standards/references", params=params)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_reference_materials_on_page(api, lib):
+    """没有标准号的资料登记为参考资料：能按类别筛选、检索、打开原文；不进标准目录与统计。"""
+    page = _refs(api)
+    assert page["total"] == 2
+    assert [(m["category"], m["title"], m["file_count"]) for m in page["items"]] == [
+        ("PAYER_UPDATE", "医保药品分类与代码数据库更新", 0),
+        ("STAT_FORM", "职业卫生技术服务信息报送卡", 1),
+    ]
+    [form] = _refs(api, category="STAT_FORM")["items"]
+    assert (form["year"], form["note"]) == ("2025", "卫健统52表")
+    assert [m["title"] for m in _refs(api, q="药品")["items"]] == ["医保药品分类与代码数据库更新"]
+    d = api.get(f"/api/standards/references/{form['id']}").json()
+    [f] = d["files"]
+    assert (f["role"], f["file_name"]) == ("TEXT", "卫健统52表.pdf")
+    assert api.get(f"/api/standards/files/{f['id']}/content").content == b"%PDF stat form"
+    # 标准目录不受影响
+    assert _search(api)["total"] == 6
+    assert not _search(api, q="报送卡")["items"]
+    assert api.get("/api/standards/references/999").status_code == 404
+
+
+def test_reference_material_rules(api, lib, owner_engine):
+    root, editions, files = lib
+    # CSV 少了已登记的参考资料
+    write_catalog(root, editions, files, REFS[:1])
+    with pytest.raises(
+        CatalogFailure, match="少了已登记的参考资料《医保药品分类与代码数据库更新》"
+    ):
+        load(owner_engine, root)
+    # 已登记的备注不能改
+    write_catalog(root, editions, files, [dict(REFS[0], 备注="改过"), REFS[1]])
+    with pytest.raises(CatalogFailure, match="备注不能改"):
+        load(owner_engine, root)
+    # 文件指向不存在的参考资料
+    stray = dict(files[-1], 参考资料名称="不存在的资料")
+    write_catalog(root, editions, files[:-1] + [stray])
+    with pytest.raises(CatalogFailure, match="references.csv 里没有“不存在的资料”"):
+        load(owner_engine, root)
+    # 不认识的类别
+    write_catalog(root, editions, files, REFS + [{"类别": "院内文件", "名称": "x", "年份": ""}])
+    with pytest.raises(CatalogFailure, match="类别：只认"):
+        load(owner_engine, root)
+    # 改回原样：重导不增行
+    write_catalog(root, editions, files)
+    res = load(owner_engine, root)
+    assert (res.references_added, res.files_added, res.versions_added) == (0, 0, 0)
+
+
+def test_file_belongs_to_exactly_one_owner(owner_engine, lib):
+    with owner_engine.begin() as c:
+        for owners in ("NULL, NULL", "(SELECT min(id) FROM standard_edition), "
+                       "(SELECT min(id) FROM reference_material)"):  # fmt: skip
+            with pytest.raises(DBAPIError), c.begin_nested():
+                c.execute(
+                    text(
+                        "INSERT INTO standard_file (edition_id, reference_id, role, source,"
+                        " identity_check, stored_path, file_name, media_type, bytes, sha256)"
+                        f" VALUES ({owners}, 'TEXT', 'x', 'x', 'originals/x/y.pdf', 'y.pdf',"
+                        " 'application/pdf', 1, repeat('b', 64))"
+                    )
+                )
+        with pytest.raises(DBAPIError), c.begin_nested():
+            c.execute(text("UPDATE reference_material SET title = 'x'"))

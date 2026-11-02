@@ -10,6 +10,10 @@ export function fileViewerPath(editionId: number, fileId: number, page?: number 
   return `/standards/library/editions/${editionId}/files/${fileId}${page ? `?page=${page}` : ''}`
 }
 
+export function referenceFileViewerPath(referenceId: number, fileId: number) {
+  return `/standards/library/references/${referenceId}/files/${fileId}`
+}
+
 type FileState = { status: 'loading' } | { status: 'ready'; url: string } | { status: 'error'; message: string }
 
 export function useStandardFileUrl(id: number): FileState {

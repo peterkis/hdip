@@ -1,7 +1,9 @@
 """把原件层生成的目录登记进标准目录（迁移 0025，docs/标准资料库-目录与原文实施计划.md 第 4 节）。
 
-读 HDIP_STANDARDS_DIR/catalog/ 下的 editions.csv（一条目录 / 版次记录）与 files.csv
-（一个归档文件），二者由 scripts/originals_build.py 生成。规则：
+读 HDIP_STANDARDS_DIR/catalog/ 下的 editions.csv（一条目录 / 版次记录）、references.csv
+（一份没有标准号的参考资料，迁移 0026）与 files.csv（一个归档文件），都由
+scripts/originals_build.py 生成。文件属于一项标准或一份参考资料（`_相关官方资料/` 下的）。规则：
+- 参考资料只有身份：新的登记，已登记的备注变了或 CSV 少了它 → 拒绝。
 - 新标准 → 身份 + 第 1 版；目录字段变了 → 追加一版并写明改了哪些字段；没变 → 不写。重复执行不增行。
 - CSV 里少了已登记的标准或文件 → 拒绝（库里不删）；已登记文件的任何信息（含备注、文件名）
   变了 → 拒绝。
@@ -19,7 +21,12 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from hdip_api.models import StandardEdition, StandardEditionVersion, StandardFile
+from hdip_api.models import (
+    ReferenceMaterial,
+    StandardEdition,
+    StandardEditionVersion,
+    StandardFile,
+)
 
 STATUS = {"现行": "CURRENT", "即将实施": "CURRENT", "废止": "ABOLISHED", "": None}
 ROLE = {
@@ -28,6 +35,12 @@ ROLE = {
     "修改单": "ERRATA",
     "原页图": "PAGE_IMAGE",
     "原格式": "ORIGINAL_FORMAT",
+    "参考资料": "TEXT",  # 参考资料的原文；文件挂在参考资料上
+}
+CATEGORY = {
+    "统计报表": "STAT_FORM",
+    "官方参考资料": "OFFICIAL_REFERENCE",
+    "医保更新": "PAYER_UPDATE",
 }
 MEDIA = {
     ".pdf": "application/pdf",
@@ -56,7 +69,7 @@ FIELDS = {
 # 已登记文件的全部持久化输入（路径是键，不在其内）→ 中文名。登记后整行不可改：
 # 任何一项与 CSV 不同都拒绝，不静默跳过，也不 UPDATE 旧行
 FILE_FIELDS = {
-    "edition_id": "所属标准",
+    "owner": "所属标准或参考资料",
     "role": "角色",
     "source": "来源",
     "identity_check": "身份核对",
@@ -81,7 +94,7 @@ class CatalogResult:
     versions_added: int = 0
     files_added: int = 0
     unchanged: int = 0
-    skipped_related: int = 0
+    references_added: int = 0
     changes: list[str] = field(default_factory=list)
 
 
@@ -177,18 +190,54 @@ def import_catalog(
     for k in existing.keys() - wanted.keys():
         problems.append(f"editions.csv 少了已登记的标准 {k[0]}—{k[1]}：库里不删，请恢复该行")
 
+    # ------------------------------------------------------------ 参考资料
+    refs_wanted: dict[tuple, str | None] = {}  # (category, title, year) -> note
+    ref_csv = cat / "references.csv"
+    for line, r in _rows(ref_csv) if ref_csv.exists() else []:
+        src = "references.csv"
+        code, title, year = CATEGORY.get(r.get("类别", "")), r.get("名称", ""), r.get("年份", "")
+        if code is None:
+            bad(src, line, "类别", f"只认 {' / '.join(CATEGORY)}，现为“{r.get('类别', '')}”")
+            continue
+        if not title:
+            bad(src, line, "名称", "不能为空")
+            continue
+        if year and not re.fullmatch(r"\d{4}", year):
+            bad(src, line, "年份", f"应为四位年份或空，现为“{year}”")
+            continue
+        k = (code, title, year or None)
+        if k in refs_wanted:
+            bad(src, line, "名称", f"{r['类别']}《{title}》{year} 重复")
+            continue
+        refs_wanted[k] = r.get("备注") or None
+    refs = {(m.category, m.title, m.year): m for m in session.scalars(select(ReferenceMaterial))}
+    for k, m in refs.items():
+        if k not in refs_wanted:
+            problems.append(f"references.csv 少了已登记的参考资料《{k[1]}》：库里不删，请恢复该行")
+        elif refs_wanted[k] != m.note:
+            problems.append(f"references.csv《{k[1]}》：已登记的参考资料备注不能改")
+
     # ------------------------------------------------------------ 文件
     files_wanted: dict[str, dict] = {}
     for line, r in _rows(cat / "files.csv"):
         src = "files.csv"
         d, name = r.get("目录", ""), r.get("文件名", "")
         if d.split("/", 1)[0] == RELATED:
-            res.skipped_related += 1
-            continue
-        key = folders.get(d.removesuffix("/原页图"))
-        if key is None:
-            bad(src, line, "目录", f"“{d}”没有对应的目录记录")
-            continue
+            rk = (
+                CATEGORY.get(r.get("资料类别", "")),
+                r.get("参考资料名称", ""),
+                r.get("资料年份") or None,
+            )
+            if rk not in refs_wanted:
+                bad(src, line, "参考资料名称", f"references.csv 里没有“{rk[1]}”（{d}）")
+                continue
+            key: tuple = ("R", rk)
+        else:
+            ek = folders.get(d.removesuffix("/原页图"))
+            if ek is None:
+                bad(src, line, "目录", f"“{d}”没有对应的目录记录")
+                continue
+            key = ("E", ek)
         if r.get("角色") not in ROLE:
             bad(src, line, "角色", f"不认识“{r.get('角色')}”")
             continue
@@ -231,19 +280,22 @@ def import_catalog(
     for stored, f in files_wanted.items():
         k = (f["key"], f["sha256"])
         if k in seen:
-            problems.append(f"files.csv {stored}：与 {seen[k]} 字节相同，同一标准下只登记一次")
+            problems.append(
+                f"files.csv {stored}：与 {seen[k]} 字节相同，同一标准或参考资料下只登记一次"
+            )
         seen[k] = stored
 
     have_files = {f.stored_path: f for f in session.scalars(select(StandardFile))}
-    eid_key = {e.id: k for k, e in existing.items()}
+    eid_key = {e.id: ("E", k) for k, e in existing.items()}
+    rid_key = {m.id: ("R", k) for k, m in refs.items()}
     for stored, f in have_files.items():
         w = files_wanted.get(stored)
         if w is None:
             problems.append(f"files.csv 少了已登记的文件 {stored}：库里不删，请恢复该行")
             continue
-        old = {c: getattr(f, c) for c in FILE_FIELDS}
-        old["edition_id"] = eid_key.get(f.edition_id)
-        new = {c: (w["key"] if c == "edition_id" else w[c]) for c in FILE_FIELDS}
+        owner = eid_key.get(f.edition_id) if f.edition_id else rid_key.get(f.reference_id)
+        old = {c: (owner if c == "owner" else getattr(f, c)) for c in FILE_FIELDS}
+        new = {c: (w["key"] if c == "owner" else w[c]) for c in FILE_FIELDS}
         diff = [f"{label}（{c}）" for c, label in FILE_FIELDS.items() if old[c] != new[c]]
         if diff:
             problems.append(
@@ -285,6 +337,14 @@ def import_catalog(
                     edition_id=e.id, seq=cur.seq + 1, change_note=f"改：{'、'.join(diff)}", **v
                 )
             )
+    for k, note in sorted(refs_wanted.items(), key=lambda x: (x[0][0], x[0][1], x[0][2] or "")):
+        if k in refs:
+            continue
+        res.references_added += 1
+        res.changes.append(f"新增参考资料《{k[1]}》")
+        if not dry_run:
+            refs[k] = ReferenceMaterial(category=k[0], title=k[1], year=k[2], note=note)
+            session.add(refs[k])
     if not dry_run:
         session.flush()
     for stored, f in sorted(files_wanted.items()):
@@ -293,9 +353,12 @@ def import_catalog(
         res.files_added += 1
         if dry_run:
             continue
-        e = existing[f["key"]]
-        cols = {k: f[k] for k in f if k != "key"}
-        session.add(StandardFile(edition_id=e.id, **cols))
+        kind, k = f["key"]
+        cols = {c: f[c] for c in f if c != "key"}
+        if kind == "E":
+            session.add(StandardFile(edition_id=existing[k].id, **cols))
+        else:
+            session.add(StandardFile(reference_id=refs[k].id, **cols))
     if not dry_run:
         session.flush()
     return res

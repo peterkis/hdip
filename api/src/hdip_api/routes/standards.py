@@ -18,6 +18,9 @@ from hdip_api.core.permissions import STANDARD_VIEW, require_permission
 from hdip_api.schemas.standards import (
     EditionStatus,
     EntryType,
+    ReferenceCategory,
+    ReferenceMaterialDetail,
+    ReferenceMaterialPage,
     StandardDocumentDetail,
     StandardDocumentRow,
     StandardEditionDetail,
@@ -134,6 +137,35 @@ def get_edition(session: SessionDep, user: CurrentUser, edition_id: Annotated[in
     """标准详情：目录信息与登记历史、原文文件、挂在本标准下的处理修订。"""
     require_permission(user, STANDARD_VIEW)
     return standard_catalog.get_edition(session, edition_id)
+
+
+@router.get(
+    "/references", response_model=ReferenceMaterialPage, operation_id="searchReferenceMaterials"
+)
+def search_references(
+    session: SessionDep,
+    user: CurrentUser,
+    q: Annotated[str | None, Query(description="名称或备注")] = None,
+    category: Annotated[ReferenceCategory | None, Query()] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+):
+    """参考资料：没有标准号的官方资料（统计报表 / 官方参考资料 / 医保更新），先筛选再计数分页。"""
+    require_permission(user, STANDARD_VIEW)
+    return standard_catalog.search_references(
+        session, q=q, category=category, offset=offset, limit=limit
+    )
+
+
+@router.get(
+    "/references/{reference_id}",
+    response_model=ReferenceMaterialDetail,
+    operation_id="getReferenceMaterial",
+)
+def get_reference(session: SessionDep, user: CurrentUser, reference_id: Annotated[int, Path()]):
+    """参考资料详情：身份与原文文件。"""
+    require_permission(user, STANDARD_VIEW)
+    return standard_catalog.get_reference(session, reference_id)
 
 
 @router.get(

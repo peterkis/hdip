@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from hdip_api.core.errors import NotFound
 from hdip_api.models import (
+    ReferenceMaterial,
     SourceDocument,
     SourcePackage,
     StandardEdition,
@@ -27,6 +28,10 @@ from hdip_api.schemas.standards import (
     EditionRevision,
     EditionStatus,
     EditionVersionOut,
+    ReferenceCategory,
+    ReferenceMaterialDetail,
+    ReferenceMaterialPage,
+    ReferenceMaterialRow,
     StandardEditionDetail,
     StandardEditionPage,
     StandardEditionRow,
@@ -297,6 +302,83 @@ def link_documents(
         )
         out[d.id] = (ref, files.get((e.id, d.source_sha256 or "")))
     return out
+
+
+# ---------------------------------------------------------------- 参考资料（迁移 0026）
+
+
+def _ref_files():
+    return (
+        select(StandardFile.reference_id, func.count().label("n"))
+        .where(StandardFile.reference_id.is_not(None))
+        .group_by(StandardFile.reference_id)
+        .subquery()
+    )
+
+
+def search_references(
+    session: Session,
+    *,
+    q: str | None = None,
+    category: ReferenceCategory | None = None,
+    offset: int = 0,
+    limit: int = 50,
+) -> ReferenceMaterialPage:
+    n = _ref_files()
+    stmt = select(ReferenceMaterial, func.coalesce(n.c.n, 0)).outerjoin(
+        n, n.c.reference_id == ReferenceMaterial.id
+    )
+    if q and q.strip():
+        term = q.strip()
+        stmt = stmt.where(
+            or_(
+                ReferenceMaterial.title.ilike(f"%{term}%"),
+                ReferenceMaterial.note.ilike(f"%{term}%"),
+            )
+        )
+    if category:
+        stmt = stmt.where(ReferenceMaterial.category == category)
+    total = session.scalar(select(func.count()).select_from(stmt.subquery()))
+    rows = session.execute(
+        stmt.order_by(
+            ReferenceMaterial.category,
+            ReferenceMaterial.year.desc().nulls_last(),
+            ReferenceMaterial.title,
+            ReferenceMaterial.id,
+        )
+        .offset(offset)
+        .limit(limit)
+    ).all()
+    items = [
+        ReferenceMaterialRow(
+            id=m.id, category=m.category, title=m.title, year=m.year, note=m.note, file_count=c
+        )
+        for m, c in rows
+    ]
+    return ReferenceMaterialPage(items=items, total=total or 0, offset=offset, limit=limit)
+
+
+def get_reference(session: Session, reference_id: int) -> ReferenceMaterialDetail:
+    m = session.get(ReferenceMaterial, reference_id)
+    if m is None:
+        raise NotFound("找不到这份参考资料")
+    files = list(
+        session.scalars(
+            select(StandardFile)
+            .where(StandardFile.reference_id == m.id)
+            .order_by(StandardFile.file_name)
+        )
+    )
+    return ReferenceMaterialDetail(
+        id=m.id,
+        category=m.category,
+        title=m.title,
+        year=m.year,
+        note=m.note,
+        file_count=len(files),
+        files=[_file_out(f) for f in files],
+        registered_at=m.registered_at,
+    )
 
 
 class FileUnavailable(NotFound):
