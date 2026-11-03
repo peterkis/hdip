@@ -80,11 +80,15 @@ def g2(owner_engine, tmp_path, monkeypatch):
         claim("Drive 归档清单", "$.files[7]", "WS/T 587—2017", "WS/T 587", "2017",
               "学校卫生标准研制和编写总则", "", F587),
     ]  # fmt: skip
-    with open(tmp_path / "catalog" / "claims.jsonl", "w", encoding="utf-8") as fh:
+    write_claims(tmp_path, claims)
+    path = tmp_path / "catalog-corrections.csv"
+    return tmp_path, path, editions, files, claims
+
+
+def write_claims(root: Path, claims: list[dict]) -> None:
+    with open(root / "catalog" / "claims.jsonl", "w", encoding="utf-8") as fh:
         for c in claims:
             fh.write(json.dumps(c, ensure_ascii=False) + "\n")
-    path = tmp_path / "catalog-corrections.csv"
-    return tmp_path, path, editions, files
 
 
 def load(engine, root, corrections, dry_run=False):
@@ -118,6 +122,69 @@ def test_claims_kept_as_written_and_linked(api, owner_engine, g2):
     assert (d["standard_year"], d["difference"]) == ("2018", "目录与文件标识不一致")
     # 重复导入不增行
     assert load(owner_engine, root, path).claims_added == 0
+
+
+def claim_count(engine) -> int:
+    with engine.connect() as c:
+        return c.execute(text("SELECT count(*) FROM standard_edition_claim")).scalar()
+
+
+def test_claim_identity_same_content_is_idempotent(owner_engine, g2):
+    """同一来源记录身份（来源 + 快照摘要 + 位置）内容相同：同批重复、再次导入都不增行。"""
+    root, path, _, _, claims = g2
+    # 原记录键顺序不同仍是同一内容
+    twin = claims[0] | {"原记录": {"x": 1} | claims[0]["原记录"]}
+    first = claims[0] | {"原记录": claims[0]["原记录"] | {"x": 1}}
+    write_claims(root, [first, *claims[1:], twin])
+    assert load(owner_engine, root, path).claims_added == 4
+    assert load(owner_engine, root, path, dry_run=True).claims_added == 0
+    assert load(owner_engine, root, path).claims_added == 0
+    assert claim_count(owner_engine) == 4
+
+
+def test_claim_identity_conflict_in_batch_rejected(owner_engine, g2):
+    """同批同身份不同内容：不按先后取舍，整批拒绝（含同批的人工更正），输入顺序不影响结果。"""
+    root, path, _, _, claims = g2
+    write_corrections(path, [corr("C0001")])
+    other = claims[0] | {"名称": "血清中碘的测定（另一写法）", "原记录": {"code": "x"}}
+    for rows in ([*claims, other], [other, *claims]):
+        write_claims(root, rows)
+        for dry in (True, False):
+            with pytest.raises(CatalogFailure, match=r"相同而内容不同（名称、原记录）") as e:
+                load(owner_engine, root, path, dry_run=dry)
+            assert "$.standards[1]" in str(e.value) and "aaaaaaaaaaaa" in str(e.value)
+    with owner_engine.connect() as c:
+        for t in ("standard_edition_claim", "standard_catalog_correction", "standard_edition"):
+            assert c.execute(text(f"SELECT count(*) FROM {t}")).scalar() == 0
+
+
+def test_claim_identity_conflict_with_registered_rejected(owner_engine, g2):
+    """已登记的声明遇同身份不同内容：预检与正式导入都拒绝，旧内容不变、不另造一行。"""
+    root, path, _, _, claims = g2
+    load(owner_engine, root, path)
+    changed = claims[0] | {"实施日期": "2018-03-01", "文件sha256": sha(B572)}
+    write_claims(root, [changed, *claims[1:]])
+    for dry in (True, False):
+        with pytest.raises(CatalogFailure, match=r"已登记，内容不同（实施日期、文件sha256）"):
+            load(owner_engine, root, path, dry_run=dry)
+    with owner_engine.connect() as c:
+        row = c.execute(
+            text("SELECT effective, file_sha256 FROM standard_edition_claim "
+                 "WHERE record_key = '$.standards[1]'")
+        ).one()  # fmt: skip
+    assert tuple(row) == ("2018-02-01", sha(A572))
+    assert claim_count(owner_engine) == 4
+
+
+def test_claims_from_other_snapshot_or_source_appended(owner_engine, g2):
+    """不同快照、不同来源的不同写法照常追加；旧快照不在本次输入里也不算删除。"""
+    root, path, _, _, claims = g2
+    load(owner_engine, root, path)
+    newer = claims[0] | {"来源文件sha256": "b" * 64, "实施日期": "2018-03-01"}
+    elsewhere = claims[0] | {"来源": "uniData 历史目录", "名称": "血清中碘的测定"}
+    write_claims(root, [newer, elsewhere])
+    assert load(owner_engine, root, path).claims_added == 2
+    assert claim_count(owner_engine) == 6
 
 
 def test_correction_appends_version(api, owner_engine, g2):

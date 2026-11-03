@@ -647,7 +647,19 @@ function ClaimsSection({ data }: { data: StandardEditionDetail }) {
                   {cl.record_key}
                 </div>
                 <details className="text-caption">
-                  <summary className="text-fg-muted hover:text-fg cursor-pointer">原记录</summary>
+                  <summary className="text-fg-muted hover:text-fg cursor-pointer">来源与原记录</summary>
+                  <dl className="text-fg-secondary mt-1 grid max-w-md grid-cols-[auto_1fr] gap-x-2 break-all">
+                    <dt className="text-fg-muted">来源文件</dt>
+                    <dd>
+                      {cl.source_file || '—'} · <span className="font-mono">{cl.source_sha256.slice(0, 12)}…</span>
+                    </dd>
+                    <dt className="text-fg-muted">发布日期</dt>
+                    <dd className="tabular-nums">{cl.issued || '—'}</dd>
+                    <dt className="text-fg-muted">废止日期</dt>
+                    <dd className="tabular-nums">{cl.abolished || '—'}</dd>
+                    <dt className="text-fg-muted">地址</dt>
+                    <dd>{cl.url || '来源未写'}</dd>
+                  </dl>
                   <pre className="bg-surface-subtle text-fg-secondary mt-1 max-w-md overflow-x-auto rounded-md p-2 whitespace-pre-wrap">
                     {JSON.stringify(cl.raw, null, 2)}
                   </pre>
@@ -678,7 +690,7 @@ function ClaimsSection({ data }: { data: StandardEditionDetail }) {
         </DbTable>
       )}
       <p className="text-fg-muted text-caption">
-        每行是一条来源记录的原样写法，只说明该来源当时这样记载，不改当前目录；冲突全部保留。标黄的是与当前目录不同的值。“按文件关联”表示这条记录写的标准号与本条不同，只因指向的文件在本条下而列出。
+        每行是一条来源记录的原样写法，只说明该来源当时这样记载，不改当前目录；冲突全部保留。名称、实施日期与当前目录不同时标黄；发布、废止日期与来源文件在“来源与原记录”里，不比较。“按文件关联”表示这条记录写的标准号与本条不同，只因指向的文件在本条下而列出。
       </p>
     </Section>
   )

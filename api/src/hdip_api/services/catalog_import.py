@@ -115,6 +115,20 @@ FILE_FIELDS = {
 }
 
 
+# 来源声明里参与比较的持久化字段 → claims.jsonl 的写法（不含库里生成的 id、registered_at；
+# 原记录按 JSON 结构比较，键顺序不同不算不同）
+CLAIM_FIELDS = {
+    "source_file": "来源文件", "recorded_at": "记录时间", "standard_no": "编号",
+    "standard_year": "年份", "code_as_written": "标准号写法", "title": "名称", "status": "状态",
+    "issued": "发布日期", "effective": "实施日期", "abolished": "废止日期", "url": "地址",
+    "file_sha256": "文件sha256", "raw": "原记录",
+}  # fmt: skip
+
+
+def _claim_id(k: tuple) -> str:
+    return f"来源“{k[0]}” 快照 {k[1][:12]}… 位置 {k[2]}"
+
+
 class CatalogFailure(Exception):
     def __init__(self, problems: list[str]) -> None:
         super().__init__("\n".join(problems))
@@ -378,6 +392,7 @@ def import_catalog(
 
     # ------------------------------------------------------------ 来源声明（迁移 0027）
     claims_wanted: dict[tuple, dict] = {}
+    claims_line: dict[tuple, int] = {}
     claims_path = cat / "claims.jsonl"
     if claims_path.exists():
         with open(claims_path, encoding="utf-8") as fh:
@@ -402,7 +417,7 @@ def import_catalog(
                 if not k[0] or not k[2]:
                     bad("claims.jsonl", n, "来源", "来源与记录位置不能为空")
                     continue
-                claims_wanted[k] = {
+                payload = {
                     "source": k[0],
                     "source_file": c.get("来源文件") or "",
                     "source_sha256": k[1],
@@ -420,15 +435,31 @@ def import_catalog(
                     "file_sha256": c.get("文件sha256") or None,
                     "raw": c.get("原记录") or {},
                 }
-    have_claims = set(
-        session.execute(
-            select(
-                StandardEditionClaim.source,
-                StandardEditionClaim.source_sha256,
-                StandardEditionClaim.record_key,
+                if k in claims_wanted:
+                    # 同一来源记录身份只能代表一条原记录：内容相同即重复，不同就整批拒绝
+                    first, prev = claims_line[k], claims_wanted[k]
+                    diff = [lb for f, lb in CLAIM_FIELDS.items() if prev[f] != payload[f]]
+                    if diff:
+                        problems.append(
+                            f"claims.jsonl:{first} 与 claims.jsonl:{n}：{_claim_id(k)} "
+                            f"相同而内容不同（{'、'.join(diff)}），不按先后取舍，请核对生成结果"
+                        )
+                    continue
+                claims_wanted[k] = payload
+                claims_line[k] = n
+    have_claims: set[tuple] = set()
+    for row in session.scalars(select(StandardEditionClaim)):
+        k = (row.source, row.source_sha256, row.record_key)
+        have_claims.add(k)
+        w = claims_wanted.get(k)
+        if w is None:  # 旧快照不出现在本次输入不等于删除
+            continue
+        diff = [lb for f, lb in CLAIM_FIELDS.items() if getattr(row, f) != w[f]]
+        if diff:
+            problems.append(
+                f"claims.jsonl:{claims_line[k]} {_claim_id(k)} 已登记，内容不同"
+                f"（{'、'.join(diff)}）：已登记的来源声明不能改，请核对生成结果"
             )
-        ).all()
-    )
 
     # ------------------------------------------------------------ 文件
     files_wanted: dict[str, dict] = {}
