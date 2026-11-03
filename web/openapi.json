@@ -6849,6 +6849,146 @@
         ],
         "title": "CampusVersionOut"
       },
+      "CatalogCorrectionOut": {
+        "properties": {
+          "correction_key": {
+            "type": "string",
+            "title": "Correction Key"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "CORRECT",
+              "WITHDRAW"
+            ],
+            "title": "Action"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "new_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Value"
+          },
+          "clears": {
+            "type": "boolean",
+            "title": "Clears"
+          },
+          "withdraws_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdraws Key"
+          },
+          "withdrawn_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Withdrawn By",
+            "description": "撤销这条更正的那一行编号"
+          },
+          "basis_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Url"
+          },
+          "basis_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Sha256"
+          },
+          "basis_pages": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Basis Pages"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "confirmed_by": {
+            "type": "string",
+            "title": "Confirmed By"
+          },
+          "confirmed_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Confirmed On"
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Registered At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "correction_key",
+          "action",
+          "field",
+          "new_value",
+          "clears",
+          "withdraws_key",
+          "basis_url",
+          "basis_sha256",
+          "basis_pages",
+          "note",
+          "confirmed_by",
+          "confirmed_on",
+          "registered_at"
+        ],
+        "title": "CatalogCorrectionOut"
+      },
       "ChangeHeadline": {
         "properties": {
           "object_kind": {
@@ -10378,6 +10518,204 @@
         "title": "DutyRegisterRow",
         "description": "部门任职台账的一行 = 一条职务（A1）。任职部门与此人的主部门可以不同（代管）。"
       },
+      "EditionClaimOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "官网目录快照 / Drive 归档清单 / uniData 历史目录 / uniData 补源记录"
+          },
+          "source_file": {
+            "type": "string",
+            "title": "Source File"
+          },
+          "source_sha256": {
+            "type": "string",
+            "title": "Source Sha256"
+          },
+          "record_key": {
+            "type": "string",
+            "title": "Record Key",
+            "description": "记录在来源文件里的位置"
+          },
+          "recorded_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recorded At"
+          },
+          "code_as_written": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Code As Written"
+          },
+          "standard_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard No"
+          },
+          "standard_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Standard Year"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "issued": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Issued"
+          },
+          "effective": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective"
+          },
+          "abolished": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Abolished"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "file_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Sha256"
+          },
+          "file_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Id",
+            "description": "本标准下摘要相同的文件；没有为空"
+          },
+          "linked_by": {
+            "type": "string",
+            "enum": [
+              "standard_no",
+              "file",
+              "both"
+            ],
+            "title": "Linked By",
+            "description": "怎样关联到本标准：原样写的标准号 + 年份相同 / 指向的文件在本标准下 / 两者都是"
+          },
+          "raw": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Raw"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "source_file",
+          "source_sha256",
+          "record_key",
+          "recorded_at",
+          "code_as_written",
+          "standard_no",
+          "standard_year",
+          "title",
+          "status",
+          "issued",
+          "effective",
+          "abolished",
+          "url",
+          "file_sha256",
+          "file_id",
+          "linked_by",
+          "raw"
+        ],
+        "title": "EditionClaimOut",
+        "description": "一条来源记录对这项标准的原样写法（迁移 0027）：该来源当时这样记载，不是当前目录。"
+      },
       "EditionRef": {
         "properties": {
           "id": {
@@ -10631,6 +10969,15 @@
           "change_note": {
             "type": "string",
             "title": "Change Note"
+          },
+          "correction_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Correction Keys",
+            "description": "这一版用到的人工更正编号",
+            "default": []
           },
           "recorded_at": {
             "type": "string",
@@ -16259,6 +16606,24 @@
             "type": "array",
             "title": "Revisions",
             "description": "全部处理修订，当前的排在前面"
+          },
+          "claims": {
+            "items": {
+              "$ref": "#/components/schemas/EditionClaimOut"
+            },
+            "type": "array",
+            "title": "Claims",
+            "description": "各来源的原样写法：按标准号 + 年份或按文件摘要关联，冲突全部保留",
+            "default": []
+          },
+          "corrections": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogCorrectionOut"
+            },
+            "type": "array",
+            "title": "Corrections",
+            "description": "针对本标准的人工更正与撤销，按编号排序",
+            "default": []
           }
         },
         "type": "object",

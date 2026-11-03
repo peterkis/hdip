@@ -4,6 +4,8 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { CatalogCorrectionOut } from './catalogCorrectionOut';
+import type { EditionClaimOut } from './editionClaimOut';
 import type { EditionRevision } from './editionRevision';
 import type { EditionVersionOut } from './editionVersionOut';
 import type { StandardEditionDetailCounts } from './standardEditionDetailCounts';
@@ -37,4 +39,8 @@ export interface StandardEditionDetail {
   files: StandardFileOut[];
   /** 全部处理修订，当前的排在前面 */
   revisions: EditionRevision[];
+  /** 各来源的原样写法：按标准号 + 年份或按文件摘要关联，冲突全部保留 */
+  claims?: EditionClaimOut[];
+  /** 针对本标准的人工更正与撤销，按编号排序 */
+  corrections?: CatalogCorrectionOut[];
 }

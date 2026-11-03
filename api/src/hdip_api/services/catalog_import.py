@@ -9,10 +9,18 @@ scripts/originals_build.py 生成。文件属于一项标准或一份参考资�
   变了 → 拒绝。
 - 文件须在 originals/ 下、存在，大小与摘要和 CSV 一致；只算摘要，不解析、不执行。
 - 任何一行有问题就整体失败，报“文件:行号 列名：原因”，一次列出全部问题。
+
+G2（迁移 0027，docs/标准资料库-uniData接入计划.md）：
+- catalog/claims.jsonl：每条来源记录的原样写法，按“来源 + 来源文件摘要 + 记录位置”只追加，
+  重复导入不增行；快照换了，旧声明照样保留（不是删除）。
+- 仓库 data/standards/catalog-corrections.csv：人工更正。顺序是 生成的目录 → 叠加生效的更正
+  → 与库里比较 → 有差异才追加一版（correction_keys 记用到的更正）。已登记的更正行删了或改了都拒绝；
+  撤销要另起一行“撤销”。只改目录描述字段；废止日期只能经更正填写。
 """
 
 import csv
 import hashlib
+import json
 import re
 from dataclasses import dataclass, field
 from datetime import date
@@ -23,7 +31,9 @@ from sqlalchemy.orm import Session
 
 from hdip_api.models import (
     ReferenceMaterial,
+    StandardCatalogCorrection,
     StandardEdition,
+    StandardEditionClaim,
     StandardEditionVersion,
     StandardFile,
 )
@@ -58,6 +68,7 @@ FIELDS = {
     "status": "状态",
     "issued_on": "发布日期",
     "effective_on": "实施日期",
+    "abolished_on": "废止日期",
     "verified_on": "核实日期",
     "basis_url": "核实依据地址",
     "basis_note": "核实依据",
@@ -66,6 +77,28 @@ FIELDS = {
     "file_identity": "文件内标识",
     "note": "备注",
 }
+# 人工更正可改的目录描述字段（中文列值 → 列）；标准号、年份、文件、处理修订不经此表
+CORR_FIELDS = {
+    "名称": "title",
+    "发布日期": "issued_on",
+    "实施日期": "effective_on",
+    "废止日期": "abolished_on",
+    "差异类别": "difference",
+    "文件内标识": "file_identity",
+    "备注": "note",
+}
+DATE_FIELDS = {"issued_on", "effective_on", "abolished_on"}
+# 目录版本里不能为空的字段（standard_edition_version.title NOT NULL）：不接受“（清空）”，
+# 否则 --check 通过、真正写入时才被数据库拒绝（PR #7 审查 P2）
+REQUIRED_FIELDS = {"title"}
+CLEAR = "（清空）"
+# 已登记更正的全部输入；登记后不可改
+CORR_COLS = (
+    "action", "edition", "field", "new_value", "clears", "withdraws_key", "basis_url",
+    "basis_sha256", "basis_pages", "note", "confirmed_by", "confirmed_on",
+)  # fmt: skip
+SHA = re.compile(r"[0-9a-f]{64}")
+
 # 已登记文件的全部持久化输入（路径是键，不在其内）→ 中文名。登记后整行不可改：
 # 任何一项与 CSV 不同都拒绝，不静默跳过，也不 UPDATE 旧行
 FILE_FIELDS = {
@@ -82,6 +115,20 @@ FILE_FIELDS = {
 }
 
 
+# 来源声明里参与比较的持久化字段 → claims.jsonl 的写法（不含库里生成的 id、registered_at；
+# 原记录按 JSON 结构比较，键顺序不同不算不同）
+CLAIM_FIELDS = {
+    "source_file": "来源文件", "recorded_at": "记录时间", "standard_no": "编号",
+    "standard_year": "年份", "code_as_written": "标准号写法", "title": "名称", "status": "状态",
+    "issued": "发布日期", "effective": "实施日期", "abolished": "废止日期", "url": "地址",
+    "file_sha256": "文件sha256", "raw": "原记录",
+}  # fmt: skip
+
+
+def _claim_id(k: tuple) -> str:
+    return f"来源“{k[0]}” 快照 {k[1][:12]}… 位置 {k[2]}"
+
+
 class CatalogFailure(Exception):
     def __init__(self, problems: list[str]) -> None:
         super().__init__("\n".join(problems))
@@ -95,6 +142,8 @@ class CatalogResult:
     files_added: int = 0
     unchanged: int = 0
     references_added: int = 0
+    claims_added: int = 0
+    corrections_added: int = 0
     changes: list[str] = field(default_factory=list)
 
 
@@ -121,7 +170,11 @@ def _folder(number: str, year: str) -> str:
 
 
 def import_catalog(
-    session: Session, standards_dir: Path, *, dry_run: bool = False
+    session: Session,
+    standards_dir: Path,
+    *,
+    corrections: Path | None = None,
+    dry_run: bool = False,
 ) -> CatalogResult:
     root = standards_dir.resolve()
     cat = root / "catalog"
@@ -169,6 +222,7 @@ def import_catalog(
             "status": status,
             "issued_on": day(src, line, "批准日期", r.get("批准日期", "")),
             "effective_on": day(src, line, "实施日期", r.get("实施日期", "")),
+            "abolished_on": None,  # 官方目录不给废止日期；只经人工更正填写
             "verified_on": day(src, line, "核实日期", r.get("核实日期", "")),
             "basis_url": r.get("官网详情") or None,
             "basis_note": r.get("核实依据") or None,
@@ -216,6 +270,196 @@ def import_catalog(
             problems.append(f"references.csv 少了已登记的参考资料《{k[1]}》：库里不删，请恢复该行")
         elif refs_wanted[k] != m.note:
             problems.append(f"references.csv《{k[1]}》：已登记的参考资料备注不能改")
+
+    # ------------------------------------------------------------ 人工更正（迁移 0027）
+    csrc = corrections.name if corrections is not None else "catalog-corrections.csv"
+    corr_rows: dict[str, dict] = {}
+    for line, r in _rows(corrections) if corrections is not None and corrections.exists() else []:
+        key = r.get("编号", "")
+        if not re.fullmatch(r"C\d{4}", key):
+            bad(csrc, line, "编号", f"应为 C + 4 位数字，现为“{key}”")
+            continue
+        if key in corr_rows:
+            bad(csrc, line, "编号", f"{key} 重复")
+            continue
+        action = {"更正": "CORRECT", "撤销": "WITHDRAW"}.get(r.get("动作", ""))
+        if action is None:
+            bad(csrc, line, "动作", f"只认 更正 / 撤销，现为“{r.get('动作', '')}”")
+            continue
+        if not r.get("确认人"):
+            bad(csrc, line, "确认人", "不能为空：只登记已确认的更正，候选不写进本表")
+        if not r.get("确认日期"):
+            bad(csrc, line, "确认日期", "不能为空")
+        row = {
+            "action": action,
+            "edition": None,
+            "field": None,
+            "new_value": None,
+            "clears": False,
+            "withdraws_key": None,
+            "basis_url": r.get("依据地址") or None,
+            "basis_sha256": r.get("依据文件sha256") or None,
+            "basis_pages": r.get("依据页码") or None,
+            "note": r.get("说明") or None,
+            "confirmed_by": r.get("确认人", ""),
+            "confirmed_on": day(csrc, line, "确认日期", r.get("确认日期", "")),
+        }
+        if row["basis_sha256"] and not SHA.fullmatch(row["basis_sha256"]):
+            bad(csrc, line, "依据文件sha256", "应为 64 位小写十六进制")
+        if action == "WITHDRAW":
+            target = r.get("撤销对象", "")
+            if corr_rows.get(target, {}).get("action") != "CORRECT":
+                bad(csrc, line, "撤销对象", f"“{target}”不是本表前面的一条更正")
+                continue
+            if any(c["withdraws_key"] == target for c in corr_rows.values()):
+                bad(csrc, line, "撤销对象", f"{target} 已经撤销过")
+                continue
+            if not row["note"]:
+                bad(csrc, line, "说明", "撤销须写明原因")
+            row["withdraws_key"] = target
+        else:
+            ek = (r.get("标准号", ""), r.get("年份", ""))
+            if ek not in wanted:
+                bad(csrc, line, "标准号", f"目录里没有 {ek[0]}—{ek[1]}")
+                continue
+            col = CORR_FIELDS.get(r.get("字段", ""))
+            if col is None:
+                bad(
+                    csrc,
+                    line,
+                    "字段",
+                    f"只能更正 {' / '.join(CORR_FIELDS)}；标准号、年份、文件与处理修订不经此表",
+                )
+                continue
+            value = r.get("新值", "")
+            if not value:
+                bad(csrc, line, "新值", f"未填写；要清空请写“{CLEAR}”")
+                continue
+            if not (row["basis_url"] or row["basis_sha256"]):
+                bad(csrc, line, "依据地址", "须写依据地址或依据文件摘要")
+            row.update(edition=ek, field=col)
+            if value == CLEAR and col in REQUIRED_FIELDS:
+                bad(csrc, line, "新值", f"{r['字段']}是必填的目录信息，不能清空；要改请写新名称")
+                continue
+            if value == CLEAR:
+                row["clears"] = True
+            elif col in DATE_FIELDS and day(csrc, line, "新值", value) is None:
+                continue
+            else:
+                row["new_value"] = value
+        corr_rows[key] = row
+
+    registered = {c.correction_key: c for c in session.scalars(select(StandardCatalogCorrection))}
+    ed_key = {e.id: k for k, e in existing.items()}
+    for key, c in registered.items():
+        w = corr_rows.get(key)
+        if w is None:
+            problems.append(
+                f"{csrc} 少了已登记的更正 {key}：用过的更正不能删，要撤销请另起一行“撤销”"
+            )
+            continue
+        old = {
+            k: (ed_key.get(c.edition_id) if k == "edition" else getattr(c, k)) for k in CORR_COLS
+        }
+        if any(old[k] != w[k] for k in CORR_COLS):
+            problems.append(f"{csrc} {key}：已登记的更正不能改；要改请先撤销，再另起一行")
+
+    withdrawn = {c["withdraws_key"] for c in corr_rows.values() if c["action"] == "WITHDRAW"}
+    applied: dict[tuple[str, str], list[str]] = {}
+    by_field: dict[tuple, str] = {}
+    for key, c in sorted(corr_rows.items()):
+        if c["action"] != "CORRECT" or key in withdrawn:
+            continue
+        fk = (c["edition"], c["field"])
+        if fk in by_field:
+            problems.append(
+                f"{csrc} {key}：与 {by_field[fk]} 同时更正 {fk[0][0]}—{fk[0][1]} 的同一字段，"
+                "先撤销其中一条"
+            )
+            continue
+        by_field[fk] = key
+        v = wanted[c["edition"]]
+        if c["clears"]:
+            v[c["field"]] = None
+        elif c["field"] in DATE_FIELDS:
+            v[c["field"]] = date.fromisoformat(c["new_value"])
+        else:
+            v[c["field"]] = c["new_value"]
+        applied.setdefault(c["edition"], []).append(key)
+    for (no, year), v in wanted.items():
+        if v["abolished_on"] and v["status"] != "ABOLISHED":
+            problems.append(f"{csrc}：{no}—{year} 不是废止状态，不能填废止日期")
+
+    # ------------------------------------------------------------ 来源声明（迁移 0027）
+    claims_wanted: dict[tuple, dict] = {}
+    claims_line: dict[tuple, int] = {}
+    claims_path = cat / "claims.jsonl"
+    if claims_path.exists():
+        with open(claims_path, encoding="utf-8") as fh:
+            for n, text in enumerate(fh, 1):
+                if not text.strip():
+                    continue
+                try:
+                    c = json.loads(text)
+                except ValueError:
+                    bad("claims.jsonl", n, "整行", "不是有效的 JSON")
+                    continue
+                if not SHA.fullmatch(c.get("来源文件sha256") or ""):
+                    bad("claims.jsonl", n, "来源文件sha256", "应为 64 位小写十六进制")
+                    continue
+                if c.get("文件sha256") and not SHA.fullmatch(c["文件sha256"]):
+                    bad("claims.jsonl", n, "文件sha256", "应为 64 位小写十六进制或空")
+                    continue
+                if c.get("年份") and not re.fullmatch(r"\d{4}", c["年份"]):
+                    bad("claims.jsonl", n, "年份", f"应为四位年份或空，现为“{c['年份']}”")
+                    continue
+                k = (c.get("来源") or "", c["来源文件sha256"], c.get("记录位置") or "")
+                if not k[0] or not k[2]:
+                    bad("claims.jsonl", n, "来源", "来源与记录位置不能为空")
+                    continue
+                payload = {
+                    "source": k[0],
+                    "source_file": c.get("来源文件") or "",
+                    "source_sha256": k[1],
+                    "record_key": k[2],
+                    "recorded_at": c.get("记录时间") or None,
+                    "standard_no": c.get("编号") or None,
+                    "standard_year": c.get("年份") or None,
+                    "code_as_written": c.get("标准号写法") or None,
+                    "title": c.get("名称") or None,
+                    "status": c.get("状态") or None,
+                    "issued": c.get("发布日期") or None,
+                    "effective": c.get("实施日期") or None,
+                    "abolished": c.get("废止日期") or None,
+                    "url": c.get("地址") or None,
+                    "file_sha256": c.get("文件sha256") or None,
+                    "raw": c.get("原记录") or {},
+                }
+                if k in claims_wanted:
+                    # 同一来源记录身份只能代表一条原记录：内容相同即重复，不同就整批拒绝
+                    first, prev = claims_line[k], claims_wanted[k]
+                    diff = [lb for f, lb in CLAIM_FIELDS.items() if prev[f] != payload[f]]
+                    if diff:
+                        problems.append(
+                            f"claims.jsonl:{first} 与 claims.jsonl:{n}：{_claim_id(k)} "
+                            f"相同而内容不同（{'、'.join(diff)}），不按先后取舍，请核对生成结果"
+                        )
+                    continue
+                claims_wanted[k] = payload
+                claims_line[k] = n
+    have_claims: set[tuple] = set()
+    for row in session.scalars(select(StandardEditionClaim)):
+        k = (row.source, row.source_sha256, row.record_key)
+        have_claims.add(k)
+        w = claims_wanted.get(k)
+        if w is None:  # 旧快照不出现在本次输入不等于删除
+            continue
+        diff = [lb for f, lb in CLAIM_FIELDS.items() if getattr(row, f) != w[f]]
+        if diff:
+            problems.append(
+                f"claims.jsonl:{claims_line[k]} {_claim_id(k)} 已登记，内容不同"
+                f"（{'、'.join(diff)}）：已登记的来源声明不能改，请核对生成结果"
+            )
 
     # ------------------------------------------------------------ 文件
     files_wanted: dict[str, dict] = {}
@@ -322,19 +566,37 @@ def import_catalog(
             session.add(e)
             session.flush()
             existing[(no, year)] = e
-            session.add(StandardEditionVersion(edition_id=e.id, seq=1, change_note="首次登记", **v))
+            keys = sorted(applied.get((no, year), []))
+            note = "首次登记" + (f"（含人工更正 {'、'.join(keys)}）" if keys else "")
+            session.add(
+                StandardEditionVersion(
+                    edition_id=e.id, seq=1, change_note=note, correction_keys=keys, **v
+                )
+            )
             continue
         cur = latest[e.id]
+        keys = sorted(applied.get((no, year), []))
         diff = [label for col, label in FIELDS.items() if getattr(cur, col) != v[col]]
-        if not diff:
+        added = [k for k in keys if k not in cur.correction_keys]
+        dropped = [k for k in cur.correction_keys if k not in keys]
+        if not diff and not added and not dropped:
             res.unchanged += 1
             continue
+        note = f"改：{'、'.join(diff)}" if diff else "目录值未变"
+        if added:
+            note += f"（人工更正 {'、'.join(added)}）"
+        if dropped:
+            note += f"（撤销人工更正 {'、'.join(dropped)}）"
         res.versions_added += 1
-        res.changes.append(f"{no}—{year} 改：{'、'.join(diff)}")
+        res.changes.append(f"{no}—{year} {note}")
         if not dry_run:
             session.add(
                 StandardEditionVersion(
-                    edition_id=e.id, seq=cur.seq + 1, change_note=f"改：{'、'.join(diff)}", **v
+                    edition_id=e.id,
+                    seq=cur.seq + 1,
+                    change_note=note,
+                    correction_keys=keys,
+                    **v,
                 )
             )
     for k, note in sorted(refs_wanted.items(), key=lambda x: (x[0][0], x[0][1], x[0][2] or "")):
@@ -359,6 +621,21 @@ def import_catalog(
             session.add(StandardFile(edition_id=existing[k].id, **cols))
         else:
             session.add(StandardFile(reference_id=refs[k].id, **cols))
+    for key, c in sorted(corr_rows.items()):
+        if key in registered:
+            continue
+        res.corrections_added += 1
+        res.changes.append(f"登记人工更正 {key}")
+        if not dry_run:
+            fields = {k: c[k] for k in CORR_COLS if k != "edition"}
+            eid = existing[c["edition"]].id if c["edition"] else None
+            session.add(StandardCatalogCorrection(correction_key=key, edition_id=eid, **fields))
+    for k, c in claims_wanted.items():
+        if k in have_claims:
+            continue
+        res.claims_added += 1
+        if not dry_run:
+            session.add(StandardEditionClaim(**c))
     if not dry_run:
         session.flush()
     return res

@@ -20,6 +20,9 @@ from hdip_api.core.config import get_settings
 from hdip_api.core.db import make_engine
 from hdip_api.services.catalog_import import CatalogFailure, import_catalog
 
+# 人工更正表在仓库里（不在资料目录）：Git 提交记录就是审计线索
+CORRECTIONS = Path(__file__).resolve().parents[2] / "data" / "standards" / "catalog-corrections.csv"
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="登记标准目录与原文文件")
@@ -30,7 +33,12 @@ def main() -> int:
     engine = make_engine(settings.migration_database_url)
     try:
         with Session(engine) as session, session.begin():
-            res = import_catalog(session, Path(settings.standards_dir), dry_run=args.check)
+            res = import_catalog(
+                session,
+                Path(settings.standards_dir),
+                corrections=CORRECTIONS,
+                dry_run=args.check,
+            )
             if args.check:
                 session.rollback()
     except CatalogFailure as e:
@@ -45,7 +53,8 @@ def main() -> int:
     verb = "将" if args.check else "已"
     print(
         f"{verb}新增标准 {res.editions_added}、目录版本 {res.versions_added}、"
-        f"参考资料 {res.references_added}、文件 {res.files_added}；未变 {res.unchanged}"
+        f"参考资料 {res.references_added}、文件 {res.files_added}、来源声明 {res.claims_added}、"
+        f"人工更正 {res.corrections_added}；未变 {res.unchanged}"
     )
     return 0
 

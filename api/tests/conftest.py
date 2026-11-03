@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 BUSINESS_TABLES = (
+    "standard_catalog_correction, standard_edition_claim, "
     "standard_file, reference_material, standard_edition_version, standard_edition, "
     "standard_reference, standard_entry, source_document, source_package, "
     "person_duty, person_assignment, person_work_no, person_engagement, person_version, person, "

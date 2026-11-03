@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0026**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0027**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -10,7 +10,7 @@
 - **主体与院区**：[`institution`](#institution)、[`institution_version`](#institution_version)、[`campus`](#campus)、[`campus_version`](#campus_version)、[`operator_relation`](#operator_relation)
 - **部门与服务单元**：[`department`](#department)、[`department_version`](#department_version)、[`department_alias`](#department_alias)、[`department_classification`](#department_classification)、[`department_institution`](#department_institution)、[`classification_scheme`](#classification_scheme)、[`classification_code`](#classification_code)、[`org_view`](#org_view)、[`department_hierarchy`](#department_hierarchy)、[`department_relation`](#department_relation)、[`service_unit`](#service_unit)、[`service_unit_version`](#service_unit_version)、[`service_unit_lineage`](#service_unit_lineage)、[`service_unit_classification`](#service_unit_classification)
 - **外部标识（编码映射台账）**：[`source_system`](#source_system)、[`code_namespace`](#code_namespace)、[`external_code`](#external_code)、[`external_code_assignment`](#external_code_assignment)
-- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)、[`reference_material`](#reference_material)、[`source_document`](#source_document)、[`source_package`](#source_package)、[`standard_edition`](#standard_edition)、[`standard_edition_version`](#standard_edition_version)、[`standard_entry`](#standard_entry)、[`standard_file`](#standard_file)、[`standard_reference`](#standard_reference)
+- **其他（未登记说明）**：[`change_request_write`](#change_request_write)、[`code_reservation`](#code_reservation)、[`department_change_event`](#department_change_event)、[`department_change_participant`](#department_change_participant)、[`person`](#person)、[`person_assignment`](#person_assignment)、[`person_duty`](#person_duty)、[`person_engagement`](#person_engagement)、[`person_version`](#person_version)、[`person_work_no`](#person_work_no)、[`reference_material`](#reference_material)、[`source_document`](#source_document)、[`source_package`](#source_package)、[`standard_catalog_correction`](#standard_catalog_correction)、[`standard_edition`](#standard_edition)、[`standard_edition_claim`](#standard_edition_claim)、[`standard_edition_version`](#standard_edition_version)、[`standard_entry`](#standard_entry)、[`standard_file`](#standard_file)、[`standard_reference`](#standard_reference)
 - [触发器函数](#触发器函数)、[应用账号权限](#应用账号权限)、[配置表种子](#配置表种子)
 
 ## 配置与用户
@@ -1203,6 +1203,41 @@
 
 - `source_package_guard`：`CREATE TRIGGER source_package_guard BEFORE UPDATE ON public.source_package FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
+### standard_catalog_correction
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `correction_key` | text | 是 |  |  |
+| `action` | text | 是 |  |  |
+| `edition_id` | bigint |  |  | → `standard_edition` |
+| `field` | text |  |  |  |
+| `new_value` | text |  |  |  |
+| `clears` | boolean | 是 | false |  |
+| `withdraws_key` | text |  |  |  |
+| `basis_url` | text |  |  |  |
+| `basis_sha256` | text |  |  |  |
+| `basis_pages` | text |  |  |  |
+| `note` | text |  |  |  |
+| `confirmed_by` | text | 是 |  |  |
+| `confirmed_on` | date | 是 |  |  |
+| `registered_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_catalog_correction_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_catalog_correction_key_uniq`（唯一）：`UNIQUE (correction_key)`
+- `standard_catalog_correction_action_check`（检查）：`CHECK ((action = ANY (ARRAY['CORRECT'::text, 'WITHDRAW'::text])))`
+- `standard_catalog_correction_basis_sha_check`（检查）：`CHECK ((basis_sha256 ~ '^[0-9a-f]{64}$'::text))`
+- `standard_catalog_correction_confirmed_check`（检查）：`CHECK ((btrim(confirmed_by) <> ''::text))`
+- `standard_catalog_correction_field_check`（检查）：`CHECK ((field = ANY (ARRAY['title'::text, 'issued_on'::text, 'effective_on'::text, 'abolished_on'::text, 'difference'::text, 'file_identity'::text, 'note'::text])))`
+- `standard_catalog_correction_key_check`（检查）：`CHECK ((correction_key ~ '^C[0-9]{4}$'::text))`
+- `standard_catalog_correction_shape_check`（检查）：`CHECK ((((action = 'CORRECT'::text) AND (edition_id IS NOT NULL) AND (field IS NOT NULL) AND (withdraws_key IS NULL) AND (clears OR (new_value IS NOT NULL)) AND (NOT (clears AND (new_value IS NOT NULL))) AND ((basis_url IS NOT NULL) OR (basis_sha256 IS NOT NULL))) OR ((action = 'WITHDRAW'::text) AND (withdraws_key IS NOT NULL) AND (field IS NULL) AND (new_value IS NULL) AND (NOT clears))))`
+
+触发器：
+
+- `standard_catalog_correction_guard`：`CREATE TRIGGER standard_catalog_correction_guard BEFORE UPDATE ON public.standard_catalog_correction FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
 ### standard_edition
 
 | 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
@@ -1224,6 +1259,47 @@
 触发器：
 
 - `standard_edition_guard`：`CREATE TRIGGER standard_edition_guard BEFORE UPDATE ON public.standard_edition FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
+
+### standard_edition_claim
+
+| 列 | 类型 | 非空 | 默认 / 生成 | 引用 |
+| --- | --- | --- | --- | --- |
+| `id` | bigint | 是 | IDENTITY |  |
+| `source` | text | 是 |  |  |
+| `source_file` | text | 是 |  |  |
+| `source_sha256` | text | 是 |  |  |
+| `record_key` | text | 是 |  |  |
+| `recorded_at` | text |  |  |  |
+| `standard_no` | text |  |  |  |
+| `standard_year` | text |  |  |  |
+| `code_as_written` | text |  |  |  |
+| `title` | text |  |  |  |
+| `status` | text |  |  |  |
+| `issued` | text |  |  |  |
+| `effective` | text |  |  |  |
+| `abolished` | text |  |  |  |
+| `url` | text |  |  |  |
+| `file_sha256` | text |  |  |  |
+| `raw` | jsonb | 是 |  |  |
+| `registered_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+
+约束：
+
+- `standard_edition_claim_pkey`（主键）：`PRIMARY KEY (id)`
+- `standard_edition_claim_uniq`（唯一）：`UNIQUE (source, source_sha256, record_key)`
+- `standard_edition_claim_file_sha_check`（检查）：`CHECK ((file_sha256 ~ '^[0-9a-f]{64}$'::text))`
+- `standard_edition_claim_source_check`（检查）：`CHECK ((btrim(source) <> ''::text))`
+- `standard_edition_claim_source_sha_check`（检查）：`CHECK ((source_sha256 ~ '^[0-9a-f]{64}$'::text))`
+- `standard_edition_claim_year_check`（检查）：`CHECK ((standard_year ~ '^[0-9]{4}$'::text))`
+
+索引：
+
+- `standard_edition_claim_file_idx`：`CREATE INDEX standard_edition_claim_file_idx ON public.standard_edition_claim USING btree (file_sha256)`
+- `standard_edition_claim_std_idx`：`CREATE INDEX standard_edition_claim_std_idx ON public.standard_edition_claim USING btree (standard_no, standard_year)`
+
+触发器：
+
+- `standard_edition_claim_guard`：`CREATE TRIGGER standard_edition_claim_guard BEFORE UPDATE ON public.standard_edition_claim FOR EACH ROW EXECUTE FUNCTION hdip_guard_update()`
 
 ### standard_edition_version
 
@@ -1248,6 +1324,7 @@
 | `note` | text |  |  |  |
 | `change_note` | text | 是 |  |  |
 | `recorded_at` | timestamp without time zone | 是 | LOCALTIMESTAMP |  |
+| `correction_keys` | text[] | 是 | '{}'::text[] |  |
 
 约束：
 
@@ -1501,7 +1578,9 @@ $function$
 | `source_document` | SELECT |
 | `source_package` | SELECT |
 | `source_system` | INSERT、SELECT、UPDATE |
+| `standard_catalog_correction` | SELECT |
 | `standard_edition` | SELECT |
+| `standard_edition_claim` | SELECT |
 | `standard_edition_version` | SELECT |
 | `standard_entry` | SELECT |
 | `standard_file` | SELECT |
