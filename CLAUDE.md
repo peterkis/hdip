@@ -188,6 +188,8 @@ make test      # 后端测试
 make check     # ruff + 前端类型检查
 ```
 
+CI（`.github/workflows/ci.yml`，GitHub Actions）在每个 PR 与 main 上跑与 `make check`、`make test` 相同的检查（PostgreSQL 18 服务容器），并核对 `make gen` 后 `web/openapi.json` 与 `src/api/generated/` 没有差异——改了接口忘了 `make gen` 会在这里失败。
+
 首次：`cp .env.example .env` 并改密码，`make db && make db-init`，`cd api && uv sync`（uv 按 `.python-version` 自动装 Python 3.13），`cd web && npm install`。拉取新迁移后执行 `make migrate`。
 
 ## 待确认
