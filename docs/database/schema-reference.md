@@ -1,6 +1,6 @@
 # 数据库表结构参考
 
-> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0027**。
+> 由 `api/scripts/export_schema_doc.py` 从数据库生成，迁移版本 **0028**。
 > 不要手改；改迁移后执行 `make db-doc`。设计说明见 [README.md](README.md)。
 
 ## 目录
@@ -1230,9 +1230,10 @@
 - `standard_catalog_correction_action_check`（检查）：`CHECK ((action = ANY (ARRAY['CORRECT'::text, 'WITHDRAW'::text])))`
 - `standard_catalog_correction_basis_sha_check`（检查）：`CHECK ((basis_sha256 ~ '^[0-9a-f]{64}$'::text))`
 - `standard_catalog_correction_confirmed_check`（检查）：`CHECK ((btrim(confirmed_by) <> ''::text))`
-- `standard_catalog_correction_field_check`（检查）：`CHECK ((field = ANY (ARRAY['title'::text, 'issued_on'::text, 'effective_on'::text, 'abolished_on'::text, 'difference'::text, 'file_identity'::text, 'note'::text])))`
+- `standard_catalog_correction_field_check`（检查）：`CHECK ((field = ANY (ARRAY['title'::text, 'issued_on'::text, 'effective_on'::text, 'abolished_on'::text, 'difference'::text, 'file_identity'::text, 'note'::text, 'status'::text])))`
 - `standard_catalog_correction_key_check`（检查）：`CHECK ((correction_key ~ '^C[0-9]{4}$'::text))`
 - `standard_catalog_correction_shape_check`（检查）：`CHECK ((((action = 'CORRECT'::text) AND (edition_id IS NOT NULL) AND (field IS NOT NULL) AND (withdraws_key IS NULL) AND (clears OR (new_value IS NOT NULL)) AND (NOT (clears AND (new_value IS NOT NULL))) AND ((basis_url IS NOT NULL) OR (basis_sha256 IS NOT NULL))) OR ((action = 'WITHDRAW'::text) AND (withdraws_key IS NOT NULL) AND (field IS NULL) AND (new_value IS NULL) AND (NOT clears))))`
+- `standard_catalog_correction_status_check`（检查）：`CHECK (((field IS DISTINCT FROM 'status'::text) OR ((new_value = ANY (ARRAY['现行'::text, '废止'::text])) AND (NOT clears))))`
 
 触发器：
 

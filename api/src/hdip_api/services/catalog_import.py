@@ -16,6 +16,9 @@ G2（迁移 0027，docs/标准资料库-uniData接入计划.md）：
 - 仓库 data/standards/catalog-corrections.csv：人工更正。顺序是 生成的目录 → 叠加生效的更正
   → 与库里比较 → 有差异才追加一版（correction_keys 记用到的更正）。已登记的更正行删了或改了都拒绝；
   撤销要另起一行“撤销”。只改目录描述字段；废止日期只能经更正填写。
+- 更正“状态”（现行 / 废止，2026-11-04）：官方来源核实到的状态，目录生成时没有的经此登记。
+  生效时核实日期 = 确认日期，核实依据 = 本行依据地址与“人工更正 编号”；不能清空，回到待核实
+  请撤销该行。
 
 封面日期（docs/标准资料库-封面日期补全.md）：
 - 仓库 data/standards/cover-dates.csv：从原文封面自动识别的发布 / 实施日期，由
@@ -86,6 +89,7 @@ FIELDS = {
 # 人工更正可改的目录描述字段（中文列值 → 列）；标准号、年份、文件、处理修订不经此表
 CORR_FIELDS = {
     "名称": "title",
+    "状态": "status",
     "发布日期": "issued_on",
     "实施日期": "effective_on",
     "废止日期": "abolished_on",
@@ -94,6 +98,8 @@ CORR_FIELDS = {
     "备注": "note",
 }
 DATE_FIELDS = {"issued_on", "effective_on", "abolished_on"}
+# 更正“状态”只认官方来源核实到的两种；“即将实施”由实施日期推算，不登记
+CORR_STATUS = {"现行": "CURRENT", "废止": "ABOLISHED"}
 # 目录版本里不能为空的字段（standard_edition_version.title NOT NULL）：不接受“（清空）”，
 # 否则 --check 通过、真正写入时才被数据库拒绝（PR #7 审查 P2）
 REQUIRED_FIELDS = {"title"}
@@ -347,8 +353,14 @@ def import_catalog(
             if not (row["basis_url"] or row["basis_sha256"]):
                 bad(csrc, line, "依据地址", "须写依据地址或依据文件摘要")
             row.update(edition=ek, field=col)
+            if value == CLEAR and col == "status":
+                bad(csrc, line, "新值", "状态不能清空；要回到待核实，请撤销登记状态的那一行")
+                continue
             if value == CLEAR and col in REQUIRED_FIELDS:
                 bad(csrc, line, "新值", f"{r['字段']}是必填的目录信息，不能清空；要改请写新名称")
+                continue
+            if col == "status" and value not in CORR_STATUS:
+                bad(csrc, line, "新值", f"状态只认 {' / '.join(CORR_STATUS)}，现为“{value}”")
                 continue
             if value == CLEAR:
                 row["clears"] = True
@@ -392,6 +404,12 @@ def import_catalog(
             v[c["field"]] = None
         elif c["field"] in DATE_FIELDS:
             v[c["field"]] = date.fromisoformat(c["new_value"])
+        elif c["field"] == "status":
+            # 有状态必须有核实日期与依据（standard_edition_version_basis_check）：取自本行更正
+            v["status"] = CORR_STATUS[c["new_value"]]
+            v["verified_on"] = c["confirmed_on"]
+            v["basis_url"] = c["basis_url"]
+            v["basis_note"] = f"人工更正 {key}（{c['confirmed_by']} {c['confirmed_on']} 核实）"
         else:
             v[c["field"]] = c["new_value"]
         applied.setdefault(c["edition"], []).append(key)

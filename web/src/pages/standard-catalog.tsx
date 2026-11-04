@@ -578,6 +578,7 @@ function ReadOriginal({ data, onMany, inline }: { data: StandardEditionDetail; o
 
 const CORR_FIELD: Record<string, string> = {
   title: '名称',
+  status: '标准状态',
   issued_on: '发布日期',
   effective_on: '实施日期',
   abolished_on: '废止日期',
@@ -677,6 +678,8 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
   const covers = claims.filter((x) => x.source === COVER_CLAIM)
   const archiveDiffs = archive.filter((x) => differs(x.title, c.title) || differs(x.effective, c.effective_on) || x.linked_by === 'file').length
   const corrections = activeCorrections(data)
+  // 状态由人工更正登记时，依据地址是更正行写的网站，不是官方目录的详情页
+  const statusByCorrection = corrections.some((k) => k.field === 'status')
   const channels = [...new Set(data.files.map((f) => fileChannel(f.source)))]
   const structured = Object.keys(data.counts).length > 0
   return (
@@ -711,7 +714,7 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
                   {c.basis_note && <span>{c.basis_note}</span>}
                   {c.basis_url && (
                     <a className="text-fg-secondary break-all hover:underline" href={c.basis_url} target="_blank" rel="noreferrer">
-                      官方详情页
+                      {statusByCorrection ? '核实所用网站' : '官方详情页'}
                     </a>
                   )}
                   {!c.basis_note && !c.basis_url && <span className="text-fg-muted">核实依据未登记</span>}

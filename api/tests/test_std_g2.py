@@ -304,3 +304,42 @@ def test_claims_and_corrections_rows_cannot_change(owner_engine, app_engine, g2)
                 c.execute(text(sql))
     with app_engine.connect() as c, pytest.raises(DBAPIError):
         c.execute(text("UPDATE standard_edition_claim SET title = 'x'"))
+
+
+def test_status_correction_sets_basis_and_can_be_withdrawn(
+    api, owner_engine, tmp_path, monkeypatch
+):
+    """更正“状态”：待核实 → 现行；核实日期 = 确认日期，依据 = 本行；撤销后回到待核实。"""
+    monkeypatch.setattr(get_settings(), "standards_dir", str(tmp_path))
+    write_catalog(
+        tmp_path, [ed("GB/T 2312", "1980", "信息交换用汉字编码字符集 基本集", status="")], []
+    )
+    path = tmp_path / "catalog-corrections.csv"
+    std = {"std": "GB/T 2312", "year": "1980", "field": "状态"}
+    site = {"依据地址": "https://openstd.samr.gov.cn/", "确认日期": "2026-11-04"}
+    write_corrections(path, [corr("C0001", value="现行", **std, **site)])
+    load(owner_engine, root := tmp_path, path)
+    d = detail(api, "2312")
+    assert (d["status"], d["verified_on"]) == ("current", "2026-11-04")
+    assert d["current"]["basis_url"] == "https://openstd.samr.gov.cn/"
+    assert d["current"]["basis_note"] == "人工更正 C0001（Peter 2026-11-04 核实）"
+    withdraw = {"编号": "C0002", "动作": "撤销", "撤销对象": "C0001", "说明": "核实有误"}
+    write_corrections(
+        path,
+        [
+            corr("C0001", value="现行", **std, **site),
+            withdraw | {"确认人": "Peter", "确认日期": "2026-11-05"},
+        ],
+    )
+    load(owner_engine, root, path)
+    d = detail(api, "2312")
+    assert (d["status"], d["verified_on"], d["current"]["basis_note"]) == ("unverified", None, None)
+    for value, msg in (("即将实施", "状态只认 现行 / 废止"), ("（清空）", "状态不能清空")):
+        rows = [
+            corr("C0001", value="现行", **std, **site),
+            withdraw | {"确认人": "Peter", "确认日期": "2026-11-05"},
+            corr("C0003", value=value, **std, **site),
+        ]
+        write_corrections(path, rows)
+        with pytest.raises(CatalogFailure, match=msg):
+            load(owner_engine, root, path)
