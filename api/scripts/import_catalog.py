@@ -4,7 +4,8 @@
   uv run python scripts/import_catalog.py [--check]
 
 - 读 HDIP_STANDARDS_DIR（默认仓库根目录的 hdip-standards/）下 catalog/editions.csv 与 files.csv，
-  它们由 scripts/originals_build.py 生成（见 hdip-standards/README.md）。
+  它们由 scripts/originals_build.py 生成（见 hdip-standards/README.md）；再叠加仓库
+  data/standards/ 下的人工更正与原文封面识别的日期。
 - 标准目录是只读参考，不经变更申请：本命令用迁移账号（HDIP_MIGRATION_DATABASE_URL）写入。
 - --check 只列出将要新增的标准、追加的目录版本、登记的文件与全部问题，不写库。
 - 不带参数时在一个事务里写入；任何一行有问题就整体回滚。重复运行不增行。
@@ -21,7 +22,10 @@ from hdip_api.core.db import make_engine
 from hdip_api.services.catalog_import import CatalogFailure, import_catalog
 
 # 人工更正表在仓库里（不在资料目录）：Git 提交记录就是审计线索
-CORRECTIONS = Path(__file__).resolve().parents[2] / "data" / "standards" / "catalog-corrections.csv"
+DATA = Path(__file__).resolve().parents[2] / "data" / "standards"
+CORRECTIONS = DATA / "catalog-corrections.csv"
+# 原文封面识别的发布 / 实施日期（scripts/cover_dates_build.py 生成），只填目录里仍为空的日期
+COVER_DATES = DATA / "cover-dates.csv"
 
 
 def main() -> int:
@@ -37,6 +41,7 @@ def main() -> int:
                 session,
                 Path(settings.standards_dir),
                 corrections=CORRECTIONS,
+                cover_dates=COVER_DATES,
                 dry_run=args.check,
             )
             if args.check:

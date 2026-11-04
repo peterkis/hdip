@@ -5539,6 +5539,28 @@
             "description": "GB / GB/T / WS / WS/T"
           },
           {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "national",
+                    "industry"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "资料类别：national 国家标准（GB、GB/T）/ industry 行业标准（WS、WS/T）",
+              "title": "Category"
+            },
+            "description": "资料类别：national 国家标准（GB、GB/T）/ industry 行业标准（WS、WS/T）"
+          },
+          {
             "name": "status",
             "in": "query",
             "required": false,
