@@ -9,6 +9,7 @@
 import hashlib
 from datetime import date
 from pathlib import Path
+from typing import Literal
 
 from sqlalchemy import Integer, and_, case, cast, exists, func, literal, or_, select
 from sqlalchemy.dialects.postgresql import ARRAY
@@ -132,6 +133,11 @@ def _row(e: StandardEdition, v, files: dict[str, int], counts: dict[str, int], t
     )
 
 
+# 资料类别（页面导航用）：国家标准 = GB、GB/T，行业标准 = WS、WS/T；与强制 / 推荐性质分开
+CATEGORY_SERIES = {"national": ("GB", "GB/T"), "industry": ("WS", "WS/T")}
+EditionCategory = Literal["national", "industry"]
+
+
 def _today(session: Session) -> date:
     return session.scalar(select(func.current_date()))
 
@@ -141,6 +147,7 @@ def search_editions(
     *,
     q: str | None = None,
     series: str | None = None,
+    category: EditionCategory | None = None,
     status: EditionStatus | None = None,
     has_text: bool | None = None,
     structured: bool | None = None,
@@ -166,6 +173,8 @@ def search_editions(
         )
     if series:
         stmt = stmt.where(StandardEdition.series == series)
+    if category:
+        stmt = stmt.where(StandardEdition.series.in_(CATEGORY_SERIES[category]))
     if status:
         stmt = stmt.where(_status_expr(v) == status)
     if has_text is not None:

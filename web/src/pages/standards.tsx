@@ -602,12 +602,16 @@ export function StandardEntryDetailPage() {
               </Link>
             ) : (
               standardLabel(doc.standard_no, doc.standard_year)
-            )}{' '}
-            ·{' '}
-            <Link className="hover:underline" to={`/standards/library/${doc.id}`}>
-              {revisionLabel(doc)}
-            </Link>{' '}
-            · {doc.is_current ? '当前处理修订' : '历史处理修订'}
+            )}
+            {!doc.is_current && (
+              <>
+                {' '}
+                ·{' '}
+                <Link className="hover:underline" to={`/standards/library/${doc.id}`}>
+                  历史处理修订（{revisionLabel(doc)}）
+                </Link>
+              </>
+            )}
           </>
         }
       />
@@ -638,18 +642,7 @@ export function StandardEntryDetailPage() {
           </Section>
         )}
         <ProvenanceSection data={data} />
-        <IndexEvidence raw={data.raw} />
-        <Section title="原记录">
-          <details className="border-line-subtle rounded-md border">
-            <summary className="text-fg-secondary cursor-pointer px-3 py-2 text-xs">
-              展开资料中的原始记录（{data.provenance.member}
-              {data.provenance.json_pointer}）
-            </summary>
-            <pre className="bg-surface-subtle text-fg-secondary max-h-[32rem] overflow-auto px-3 py-2 font-mono text-caption whitespace-pre-wrap break-all">
-              {JSON.stringify(data.raw, null, 2)}
-            </pre>
-          </details>
-        </Section>
+        <CurationRecord data={data} />
       </div>
     </>
   )
@@ -716,19 +709,6 @@ function CodeRowBodyView({ data }: { data: StandardEntryDetail }) {
           ),
         },
         { label: '层级', value: b.hierarchy_level != null ? `第 ${b.hierarchy_level} 层${b.parent_code ? `，上级 ${b.parent_code}` : ''}` : null },
-        {
-          label: '原单元格',
-          value: b.raw_cells.length > 0 && (
-            <span className="font-mono text-caption">
-              {b.raw_cells.map((c, i) => (
-                <span key={i}>
-                  {i > 0 && ' | '}
-                  {c ?? <span className="text-fg-muted">（未提供）</span>}
-                </span>
-              ))}
-            </span>
-          ),
-        },
       ]}
     />
   )
@@ -898,7 +878,8 @@ function IndexEvidence({ raw }: { raw: Record<string, unknown> }) {
   const pages = [...ints(q.index_pdf_pages), ...ints(q.index_pdf_page)]
   if (paths.length === 0 && pages.length === 0) return null
   return (
-    <Section title="原记录补充：索引出处">
+    <div className="grid gap-1">
+      <div className="text-fg-strong text-xs font-medium">原记录补充：索引出处</div>
       <PropertyList
         items={[
           ...(pages.length > 0 ? [{ label: '索引页（PDF 物理页）', value: pages.join('、') }] : []),
@@ -921,44 +902,39 @@ function IndexEvidence({ raw }: { raw: Record<string, unknown> }) {
         ]}
       />
       <p className="text-fg-muted text-caption">
-        以下为原记录保存的索引页和路径；仅有路径记录，不代表图像文件已收录或已核验可访问。这些不是本处理修订提取的出处，正文页码见上方“出处”。
+        以下为原记录保存的索引页和路径；仅有路径记录，不代表图像文件已收录或已核验可访问。这些不是本处理修订提取的出处，正文页码见“出处”。
       </p>
-    </Section>
+    </div>
   )
 }
 
+/** 出处：使用人员要看的原文位置与原资料记载的问题；加工路径与原值在“整理记录” */
 function ProvenanceSection({ data }: { data: StandardEntryDetail }) {
   const p = data.provenance
   const pdfPages = p.pdf_pages ?? []
   const printedPages = p.printed_pages ?? []
   const issues = p.source_issues ?? []
-  const evidence = p.evidence ?? []
   return (
     <Section title="出处">
       <PropertyList
         items={[
-          { label: '包内成员', value: <span className="font-mono text-caption break-all">{p.member}</span> },
-          { label: '记录位置', value: <span className="font-mono text-caption">{p.json_pointer}</span> },
-          { label: '源记录 ID', value: p.record_id && <span className="font-mono text-caption break-all">{p.record_id}</span> },
           {
             label: 'PDF 物理页',
             value: pdfPages.length > 0 ? (
               <span className="inline-flex flex-wrap items-center gap-1">
                 {pdfPages.join('、')}
                 {data.file_id && data.edition && (
-                  <InlineLink to={fileViewerPath(data.edition.id, data.file_id, pdfPages[0])}>查看本条出处</InlineLink>
+                  <InlineLink to={fileViewerPath(data.edition.id, data.file_id, pdfPages[0])}>查看原文第 {pdfPages[0]} 页</InlineLink>
                 )}
               </span>
             ) : null,
           },
+          { label: '印刷页码', value: printedPages.length > 0 ? printedPages.join('、') : null },
+          { label: '表内位置', value: p.table_ref },
           {
             label: '所据原文',
             value: <SourceFile edition={data.edition} fileId={data.file_id} sha={p.source_sha256} />,
           },
-          { label: '印刷页码', value: printedPages.length > 0 ? printedPages.join('、') : null },
-          { label: '表内位置', value: p.table_ref },
-          { label: '资料复核状态', value: p.qa_status && <span className="font-mono text-caption">{p.qa_status}</span> },
-          { label: '资料导入标记', value: p.import_gate && <span className="font-mono text-caption">{p.import_gate}</span> },
           {
             label: '资料记载的问题',
             value:
@@ -971,34 +947,94 @@ function ProvenanceSection({ data }: { data: StandardEntryDetail }) {
                   ))}
                 </ul>
               ) : (
-                <span className="text-fg-muted">无</span>
-              ),
-          },
-          {
-            label: '原件与图证',
-            value:
-              evidence.length === 0 ? null : (
-                <ul className="grid gap-1.5">
-                  {evidence.map((e, i) => (
-                    <li key={i} className="flex flex-wrap items-center gap-1.5">
-                      <Tag tone={AVAILABILITY[e.availability].tone}>{AVAILABILITY[e.availability].label}</Tag>
-                      {e.url ? (
-                        <a className="text-fg-secondary break-all hover:underline" href={e.url} target="_blank" rel="noreferrer">
-                          {e.label}
-                        </a>
-                      ) : (
-                        <span className="text-fg-secondary font-mono text-caption break-all">{e.path}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <span className="text-fg-muted">原资料未登记问题</span>
               ),
           },
         ]}
       />
       <p className="text-fg-muted text-caption">
-        复核状态与导入标记是资料包里记载的原值，只说明资料整理情况；不表示标准现行与否，也不表示医院已采用。资料记了图证路径不等于图随包提供。
+        PDF 物理页是文件里的第几页，印刷页码是纸面上印的页码，两者分开记。
+        {issues.length === 0 && '“原资料未登记问题”只说明整理资料里没有记，不表示已经复核无误。'}
       </p>
+    </Section>
+  )
+}
+
+/** 整理记录：处理修订、资料包内位置、原资料的复核状态与导入标记（原值照录）、图证路径、原单元格与原始记录 */
+function CurationRecord({ data }: { data: StandardEntryDetail }) {
+  const p = data.provenance
+  const doc = data.document
+  const evidence = p.evidence ?? []
+  const cells = data.code_row?.raw_cells ?? []
+  return (
+    <Section title="整理记录">
+      <details className="border-line-subtle rounded-md border">
+        <summary className="text-fg-secondary cursor-pointer px-3 py-2 text-xs">展开整理记录：处理修订、资料位置、原值与原始记录</summary>
+        <div className="grid gap-4 px-3 py-3">
+          <PropertyList
+            items={[
+              {
+                label: '处理修订',
+                value: (
+                  <span className="inline-flex flex-wrap items-center gap-1.5">
+                    <Link className="hover:underline" to={`/standards/library/${doc.id}`}>
+                      {revisionLabel(doc)}
+                    </Link>
+                    <RevisionTag d={doc} />
+                  </span>
+                ),
+              },
+              { label: '包内成员', value: <span className="font-mono text-caption break-all">{p.member}</span> },
+              { label: '记录位置', value: <span className="font-mono text-caption">{p.json_pointer}</span> },
+              { label: '源记录 ID', value: p.record_id && <span className="font-mono text-caption break-all">{p.record_id}</span> },
+              { label: '资料复核状态', value: p.qa_status && <span className="font-mono text-caption">{p.qa_status}</span> },
+              { label: '资料导入标记', value: p.import_gate && <span className="font-mono text-caption">{p.import_gate}</span> },
+              cells.length > 0 && {
+                label: '原单元格',
+                value: (
+                  <span className="font-mono text-caption">
+                    {cells.map((c, i) => (
+                      <span key={i}>
+                        {i > 0 && ' | '}
+                        {c ?? <span className="text-fg-muted">（未提供）</span>}
+                      </span>
+                    ))}
+                  </span>
+                ),
+              },
+              evidence.length > 0 && {
+                label: '原件与图证',
+                value: (
+                  <ul className="grid gap-1.5">
+                    {evidence.map((e, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-1.5">
+                        <Tag tone={AVAILABILITY[e.availability].tone}>{AVAILABILITY[e.availability].label}</Tag>
+                        {e.url ? (
+                          <a className="text-fg-secondary break-all hover:underline" href={e.url} target="_blank" rel="noreferrer">
+                            {e.label}
+                          </a>
+                        ) : (
+                          <span className="text-fg-secondary font-mono text-caption break-all">{e.path}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ),
+              },
+            ].filter((x) => !!x)}
+          />
+          <p className="text-fg-muted text-caption">
+            复核状态与导入标记是资料包里记载的原值，只说明资料整理情况；不表示标准现行与否，也不表示医院已采用。资料记了图证路径不等于图随包提供。读取器版本是本库的处理修订，不是标准版本。
+          </p>
+          <IndexEvidence raw={data.raw} />
+          <div className="grid gap-1">
+            <div className="text-fg-strong text-xs font-medium">原始记录</div>
+            <pre className="bg-surface-subtle text-fg-secondary max-h-[32rem] overflow-auto rounded-md px-3 py-2 font-mono text-caption whitespace-pre-wrap break-all">
+              {JSON.stringify(data.raw, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </details>
     </Section>
   )
 }

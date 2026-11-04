@@ -240,6 +240,7 @@ export * from './reserveOut';
 export * from './returnBody';
 export * from './searchReferenceMaterialsCategory';
 export * from './searchReferenceMaterialsParams';
+export * from './searchStandardEditionsCategory';
 export * from './searchStandardEditionsParams';
 export * from './searchStandardEditionsStatus';
 export * from './searchStandardEntriesEntryType';

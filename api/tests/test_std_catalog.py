@@ -412,3 +412,14 @@ def test_file_belongs_to_exactly_one_owner(owner_engine, lib):
                 )
         with pytest.raises(DBAPIError), c.begin_nested():
             c.execute(text("UPDATE reference_material SET title = 'x'"))
+
+
+def test_catalog_filter_by_category(api, lib):
+    """资料类别在计数分页前筛选：国家标准 = GB、GB/T，行业标准 = WS、WS/T；系列筛选照常。"""
+    national = _search(api, category="national")
+    assert national["total"] == 1
+    assert [e["standard_no"] for e in national["items"]] == ["GB/T 16751.1"]
+    industry = _search(api, category="industry", limit=2)
+    assert (industry["total"], len(industry["items"])) == (5, 2)
+    assert _search(api, category="industry", series="WS")["total"] == 1
+    assert api.get("/api/standards/editions", params={"category": "intl"}).status_code == 422

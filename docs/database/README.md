@@ -512,7 +512,7 @@ erDiagram
 - **写入**：`api/scripts/import_catalog.py [--check]`（迁移账号）读 `HDIP_STANDARDS_DIR/catalog/editions.csv`、`files.csv`——由 `api/scripts/originals_build.py` 从官网目录快照与 Drive 归档清单生成。新标准 → 身份 + 第 1 版；目录字段变了 → 追加一版；没变不写，重复运行不增行。CSV 少了已登记的标准或文件 → 拒绝；已登记文件的任何持久化信息（含备注、文件名、媒体类型）与 CSV 不同 → 拒绝并报出文件与字段，不静默跳过、不 UPDATE 旧行。文件须存在、大小与摘要一致。任何问题整体回滚，报“文件:行号 列名：原因”。没有标准号的“相关资料”不登记。
 - **挂接（读取时计算，不建表）**：处理修订 → 标准按 `standard_no + standard_year` 完全相同；处理修订 → 原文文件按 `source_sha256` 与该标准下文件的 `sha256` 相同。只按摘要认同一份文件，摘要对不上就不给文件、不按页码跳。
 - **读取接口**：
-  - `GET /api/standards/editions?q=&series=&status=&has_text=&structured=&offset=&limit=`：先筛选再计数分页；`status` 为读取时推算的 `current` / `upcoming` / `abolished` / `unverified`；`q` 匹配名称、标准号（忽略空白，`—` 与 `-` 等价）与官网写法
+  - `GET /api/standards/editions?q=&category=&series=&status=&has_text=&structured=&offset=&limit=`：先筛选再计数分页；`category` 为资料类别 `national`（GB、GB/T）/ `industry`（WS、WS/T），与 `series` 可同时给；`status` 为读取时推算的 `current` / `upcoming` / `abolished` / `unverified`；`q` 匹配名称、标准号（忽略空白，`—` 与 `-` 等价）与官网写法
   - `/editions/{id}`：目录登记历史、文件（不含路径）、全部处理修订（当前在前，各带 `file_id`）
   - `/files/{id}/content`：路径解析后须仍在 `originals/` 下，大小与登记一致，且对这一份流式重算的 SHA-256 与登记一致，否则 404（“不在资料目录 / 已变动”）、不给内容；只算当前请求的文件，不写回摘要。`Content-Disposition: inline`
   - `/documents/{id}` 与 `/entries/{id}` 增加 `edition`、`file_id`

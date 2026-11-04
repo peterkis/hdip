@@ -4,6 +4,7 @@
  * HDIP API
  * OpenAPI spec version: 0.1.0
  */
+import type { SearchStandardEditionsCategory } from './searchStandardEditionsCategory';
 import type { SearchStandardEditionsStatus } from './searchStandardEditionsStatus';
 
 export type SearchStandardEditionsParams = {
@@ -15,6 +16,10 @@ q?: string | null;
  * GB / GB/T / WS / WS/T
  */
 series?: string | null;
+/**
+ * 资料类别：national 国家标准（GB、GB/T）/ industry 行业标准（WS、WS/T）
+ */
+category?: SearchStandardEditionsCategory;
 status?: SearchStandardEditionsStatus;
 /**
  * 有无正文文件

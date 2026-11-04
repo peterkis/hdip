@@ -108,6 +108,10 @@ def search_editions(
     user: CurrentUser,
     q: Annotated[str | None, Query(description="名称或标准号（如 363.3、WS/T 363.3—2023）")] = None,
     series: Annotated[str | None, Query(description="GB / GB/T / WS / WS/T")] = None,
+    category: Annotated[
+        standard_catalog.EditionCategory | None,
+        Query(description="资料类别：national 国家标准（GB、GB/T）/ industry 行业标准（WS、WS/T）"),
+    ] = None,
     status: Annotated[EditionStatus | None, Query()] = None,
     has_text: Annotated[bool | None, Query(description="有无正文文件")] = None,
     structured: Annotated[bool | None, Query(description="有无结构化成果")] = None,
@@ -120,6 +124,7 @@ def search_editions(
         session,
         q=q,
         series=series,
+        category=category,
         status=status,
         has_text=has_text,
         structured=structured,
