@@ -478,11 +478,13 @@ type TabKey = 'overview' | 'files' | 'content' | 'records'
 /** 取得渠道的展示名：官网是权威入口，其余（Drive、uniData 等）统称本院归档资料；原来源名在整理记录里照录 */
 const OFFICIAL_CLAIM = '官网目录快照'
 const OFFICIAL_FILE = '官网下载'
+// 原文封面识别（data/standards/cover-dates.csv）：程序从本库原文的封面读出的发布 / 实施日期
+const COVER_CLAIM = '原文封面识别'
 export function fileChannel(source: string) {
   return source === OFFICIAL_FILE ? '官网下载' : '本院归档资料'
 }
 function claimChannel(source: string) {
-  return source === OFFICIAL_CLAIM ? '官方目录' : '本院归档资料'
+  return source === OFFICIAL_CLAIM ? '官方目录' : source === COVER_CLAIM ? '原文封面' : '本院归档资料'
 }
 
 export function StandardEditionDetailPage() {
@@ -671,7 +673,8 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
   const c = data.current
   const claims = data.claims ?? []
   const official = claims.some((x) => x.source === OFFICIAL_CLAIM)
-  const archive = claims.filter((x) => x.source !== OFFICIAL_CLAIM)
+  const archive = claims.filter((x) => x.source !== OFFICIAL_CLAIM && x.source !== COVER_CLAIM)
+  const covers = claims.filter((x) => x.source === COVER_CLAIM)
   const archiveDiffs = archive.filter((x) => differs(x.title, c.title) || differs(x.effective, c.effective_on) || x.linked_by === 'file').length
   const corrections = activeCorrections(data)
   const channels = [...new Set(data.files.map((f) => fileChannel(f.source)))]
@@ -685,7 +688,9 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
             value: (
               <span className="grid gap-0.5">
                 <span>自动化整理</span>
-                <span className="text-fg-muted text-caption">由程序从{official ? '官方目录与' : ''}本院归档资料收录、比对目录信息，结果只读</span>
+                <span className="text-fg-muted text-caption">
+                  由程序从{official ? '官方目录与' : ''}本院归档资料收录、比对目录信息{covers.length > 0 && '，并识别原文封面上的日期'}，结果只读
+                </span>
               </span>
             ),
           },
@@ -712,6 +717,11 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
                   {!c.basis_note && !c.basis_url && <span className="text-fg-muted">核实依据未登记</span>}
                 </span>
               ),
+          },
+          coverDates(data, covers) && {
+            label: '日期依据',
+            icon: Calendar03Icon,
+            value: coverDates(data, covers),
           },
           {
             label: '原文',
@@ -772,6 +782,32 @@ function CollectionSummary({ data, show }: { data: StandardEditionDetail; show: 
         <InlineAction onClick={() => show('records')}>整理记录</InlineAction>。只读参考，不表示医院已采用。
       </p>
     </Section>
+  )
+}
+
+/** 当前目录里与原文封面识别相同的日期：写明取自哪份原文的哪一页，可直接打开那一页 */
+function coverDates(data: StandardEditionDetail, covers: StandardEditionDetail['claims']) {
+  const c = data.current
+  const hits = (covers ?? []).flatMap((cl) => {
+    const fields = [cl.issued && cl.issued === c.issued_on && '发布日期', cl.effective && cl.effective === c.effective_on && '实施日期'].filter(
+      (x): x is string => !!x,
+    )
+    return fields.length ? [{ cl, fields }] : []
+  })
+  if (hits.length === 0) return null
+  return (
+    <span className="grid gap-0.5">
+      {hits.map(({ cl, fields }) => {
+        const page = Number(/第 (\d+) 页/.exec(cl.record_key)?.[1]) || undefined
+        return (
+          <span key={cl.id} className="inline-flex flex-wrap items-center gap-1.5">
+            {fields.join('、')}取自原文封面（程序识别，{cl.record_key}）
+            {cl.file_id && <InlineLink to={fileViewerPath(data.id, cl.file_id, page)}>查看封面</InlineLink>}
+          </span>
+        )
+      })}
+      <span className="text-fg-muted text-caption">程序识别封面文字并与转写成果比对；不等于官方目录核实，标准状态仍按官方依据判断</span>
+    </span>
   )
 }
 

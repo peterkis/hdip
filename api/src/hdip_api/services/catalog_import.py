@@ -16,6 +16,12 @@ G2（迁移 0027，docs/标准资料库-uniData接入计划.md）：
 - 仓库 data/standards/catalog-corrections.csv：人工更正。顺序是 生成的目录 → 叠加生效的更正
   → 与库里比较 → 有差异才追加一版（correction_keys 记用到的更正）。已登记的更正行删了或改了都拒绝；
   撤销要另起一行“撤销”。只改目录描述字段；废止日期只能经更正填写。
+
+封面日期（docs/标准资料库-封面日期补全.md）：
+- 仓库 data/standards/cover-dates.csv：从原文封面自动识别的发布 / 实施日期，由
+  scripts/cover_dates_build.py 生成。只填生成目录与人工更正之后仍为空的日期，不覆盖已有值；
+  依据文件须是这项标准已登记的文件。每份封面另记一条来源声明（来源“原文封面识别”，
+  来源文件摘要 = 封面所在文件的摘要，记录位置 = 页码），与其他来源声明同样只追加。
 """
 
 import csv
@@ -98,6 +104,8 @@ CORR_COLS = (
     "basis_sha256", "basis_pages", "note", "confirmed_by", "confirmed_on",
 )  # fmt: skip
 SHA = re.compile(r"[0-9a-f]{64}")
+COVER_SOURCE = "原文封面识别"
+COVER_FIELDS = {"发布日期": "issued_on", "实施日期": "effective_on"}
 
 # 已登记文件的全部持久化输入（路径是键，不在其内）→ 中文名。登记后整行不可改：
 # 任何一项与 CSV 不同都拒绝，不静默跳过，也不 UPDATE 旧行
@@ -174,6 +182,7 @@ def import_catalog(
     standards_dir: Path,
     *,
     corrections: Path | None = None,
+    cover_dates: Path | None = None,
     dry_run: bool = False,
 ) -> CatalogResult:
     root = standards_dir.resolve()
@@ -447,19 +456,6 @@ def import_catalog(
                     continue
                 claims_wanted[k] = payload
                 claims_line[k] = n
-    have_claims: set[tuple] = set()
-    for row in session.scalars(select(StandardEditionClaim)):
-        k = (row.source, row.source_sha256, row.record_key)
-        have_claims.add(k)
-        w = claims_wanted.get(k)
-        if w is None:  # 旧快照不出现在本次输入不等于删除
-            continue
-        diff = [lb for f, lb in CLAIM_FIELDS.items() if getattr(row, f) != w[f]]
-        if diff:
-            problems.append(
-                f"claims.jsonl:{claims_line[k]} {_claim_id(k)} 已登记，内容不同"
-                f"（{'、'.join(diff)}）：已登记的来源声明不能改，请核对生成结果"
-            )
 
     # ------------------------------------------------------------ 文件
     files_wanted: dict[str, dict] = {}
@@ -546,6 +542,90 @@ def import_catalog(
                 f"files.csv {stored}：已登记的文件信息不能改，与库里不同的是 {'、'.join(diff)}"
             )
 
+    # ------------------------------------------------------------ 封面日期
+    vsrc = cover_dates.name if cover_dates is not None else "cover-dates.csv"
+    cover_seen: dict[tuple, int] = {}
+    cover_claims: dict[tuple, dict] = {}  # (标准, 文件摘要, 页码) -> 声明
+    covered: dict[tuple[str, str], list[str]] = {}
+    sha_owner = {(f["key"], f["sha256"]): f for f in files_wanted.values()}
+    for line, r in _rows(cover_dates) if cover_dates is not None and cover_dates.exists() else []:
+        ek = (r.get("标准号", ""), r.get("年份", ""))
+        if ek not in wanted:
+            bad(vsrc, line, "标准号", f"目录里没有 {ek[0]}—{ek[1]}")
+            continue
+        col = COVER_FIELDS.get(r.get("字段", ""))
+        if col is None:
+            bad(vsrc, line, "字段", f"只认 {' / '.join(COVER_FIELDS)}，现为“{r.get('字段', '')}”")
+            continue
+        if not r.get("日期"):
+            bad(vsrc, line, "日期", "不能为空：封面上没有的日期不写进本表")
+            continue
+        value = day(vsrc, line, "日期", r["日期"])
+        if value is None:
+            continue
+        f = sha_owner.get((("E", ek), r.get("依据文件sha256", "")))
+        if f is None:
+            bad(vsrc, line, "依据文件sha256", f"不是 {ek[0]}—{ek[1]} 已登记的文件")
+            continue
+        if not r.get("依据页码"):
+            bad(vsrc, line, "依据页码", "不能为空")
+            continue
+        if (ek, col) in cover_seen:
+            bad(vsrc, line, "字段", f"与第 {cover_seen[(ek, col)]} 行重复")
+            continue
+        cover_seen[(ek, col)] = line
+        ck = (ek, f["sha256"], r["依据页码"])
+        c = cover_claims.setdefault(
+            ck,
+            {
+                "source": COVER_SOURCE,
+                "source_file": f["file_name"],
+                "source_sha256": f["sha256"],
+                "record_key": r["依据页码"],
+                "recorded_at": None,
+                "standard_no": ek[0],
+                "standard_year": ek[1],
+                "code_as_written": None,
+                "title": None,
+                "status": None,
+                "issued": None,
+                "effective": None,
+                "abolished": None,
+                "url": None,
+                "file_sha256": f["sha256"],
+                "raw": {},
+            },
+        )
+        c["issued" if col == "issued_on" else "effective"] = r["日期"]
+        c["raw"][r["字段"]] = {
+            k: r.get(k, "") for k in ("日期", "识别方式", "转写成果比对", "说明")
+        }
+        # 只填仍为空的日期：官方目录与人工更正在前，封面识别不覆盖
+        if wanted[ek][col] is None:
+            wanted[ek][col] = value
+            covered.setdefault(ek, []).append(r["字段"])
+    for c in cover_claims.values():
+        k = (c["source"], c["source_sha256"], c["record_key"])
+        if k in claims_wanted:
+            problems.append(f"{vsrc}：{_claim_id(k)} 与 claims.jsonl 里的来源声明重复")
+            continue
+        claims_wanted[k] = c
+
+    have_claims: set[tuple] = set()
+    for row in session.scalars(select(StandardEditionClaim)):
+        k = (row.source, row.source_sha256, row.record_key)
+        have_claims.add(k)
+        w = claims_wanted.get(k)
+        if w is None:  # 旧快照不出现在本次输入不等于删除
+            continue
+        diff = [lb for f, lb in CLAIM_FIELDS.items() if getattr(row, f) != w[f]]
+        if diff:
+            where = vsrc if k[0] == COVER_SOURCE else f"claims.jsonl:{claims_line[k]}"
+            problems.append(
+                f"{where} {_claim_id(k)} 已登记，内容不同"
+                f"（{'、'.join(diff)}）：已登记的来源声明不能改，请核对生成结果"
+            )
+
     if problems:
         raise CatalogFailure(problems)
 
@@ -568,6 +648,8 @@ def import_catalog(
             existing[(no, year)] = e
             keys = sorted(applied.get((no, year), []))
             note = "首次登记" + (f"（含人工更正 {'、'.join(keys)}）" if keys else "")
+            if (no, year) in covered:
+                note += f"（{'、'.join(covered[(no, year)])}取自原文封面识别）"
             session.add(
                 StandardEditionVersion(
                     edition_id=e.id, seq=1, change_note=note, correction_keys=keys, **v
@@ -582,9 +664,15 @@ def import_catalog(
         if not diff and not added and not dropped:
             res.unchanged += 1
             continue
-        note = f"改：{'、'.join(diff)}" if diff else "目录值未变"
-        if added:
-            note += f"（人工更正 {'、'.join(added)}）"
+        from_cover = [x for x in covered.get((no, year), []) if x in diff]
+        if diff and from_cover == diff and not added:
+            note = f"补：{'、'.join(diff)}（原文封面识别）"
+        else:
+            note = f"改：{'、'.join(diff)}" if diff else "目录值未变"
+            if added:
+                note += f"（人工更正 {'、'.join(added)}）"
+            if from_cover:
+                note += f"（其中{'、'.join(from_cover)}取自原文封面识别）"
         if dropped:
             note += f"（撤销人工更正 {'、'.join(dropped)}）"
         res.versions_added += 1
